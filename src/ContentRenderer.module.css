@@ -1,0 +1,109 @@
+.description {
+  color: #666;
+  font-size: 1.1rem;
+  margin: 0;
+  padding: 0 2rem 2rem 2rem;
+}
+
+.subEventDetails {
+  background-color: #f5f5f5;
+  border-left: 4px solid #646cff;
+  border-radius: 4px;
+  padding: 1.5rem 2rem;
+  margin: 0 2rem 2rem 2rem;
+}
+
+.detailRow {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  align-items: center;
+}
+
+.detailRow:last-child {
+  margin-bottom: 0;
+}
+
+.label {
+  font-weight: 600;
+  color: #333;
+  min-width: 100px;
+  font-size: 0.95rem;
+}
+
+.value {
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.tag {
+  display: inline-block;
+  background-color: #646cff;
+  color: white;
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.placeholder {
+  background-color: #f9f9f9;
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  margin: 0;
+  padding: 3rem 2rem;
+  text-align: center;
+  color: #999;
+}
+
+@media (max-width: 749px) {
+  .description {
+    padding: 0 1.5rem 1.5rem 1.5rem;
+  }
+
+  .subEventDetails {
+    margin: 0 1.5rem 1.5rem 1.5rem;
+    padding: 1rem 1.5rem;
+  }
+
+  .detailRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .label {
+    min-width: auto;
+  }
+
+  .placeholder {
+    padding: 1.5rem;
+  }
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  .description {
+    color: #aaa;
+  }
+
+  .subEventDetails {
+    background-color: #1e2a3a;
+  }
+
+  .label {
+    color: #e0e0e0;
+  }
+
+  .value {
+    color: #bbb;
+  }
+
+  .placeholder {
+    background-color: #1e1e2e;
+    border-color: #444;
+    color: #777;
+  }
+}
+
+

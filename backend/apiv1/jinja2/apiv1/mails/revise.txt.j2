@@ -1,0 +1,13 @@
+Dear {{object.owner.username | safe}},
+
+Your proposal titled "{{object.title | safe}}" has been marked for revision.
+Please review the feedback provided and resubmit your proposal when ready.
+
+See the internal comments for details on what needs to be revised:
+
+================================
+{% filter indent(4, True) %}{% filter textwrap(50) %}{{ object.internal_notes | safe }}{% endfilter %}{% endfilter %}
+================================
+
+Best regards,
+The ZAM Program Review Team

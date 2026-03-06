@@ -1,0 +1,352 @@
+.navbar {
+  background-color: #2c3e50;
+  color: white;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 100;
+}
+
+.container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 100%;
+  padding: 1rem 2rem;
+  gap: 2rem;
+}
+
+.logo {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: white;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.logo:hover {
+  opacity: 0.8;
+}
+
+.logo h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: white;
+}
+
+.menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.menuButton {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.menuButton:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.menuButton:focus {
+  outline: 2px solid #646cff;
+  outline-offset: 2px;
+}
+
+.userIcon {
+  font-size: 1.2rem;
+}
+
+.username {
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chevron {
+  font-size: 0.75rem;
+  transition: transform 0.2s ease;
+}
+
+.menuButton[aria-expanded="true"] .chevron {
+  transform: rotate(180deg);
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 280px;
+  padding: 0.75rem;
+  z-index: 1000;
+}
+
+.userInfo {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.infoLabel {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.infoValue {
+  font-size: 1rem;
+  color: #333;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid #e0e0e0;
+  margin: 0.5rem 0;
+}
+
+.logoutButton {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background-color: #d32f2f;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.logoutButton:hover {
+  background-color: #b71c1c;
+}
+
+.logoutButton:focus {
+  outline: 2px solid #333;
+  outline-offset: 2px;
+}
+
+.loginForm {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.errorMessage {
+  background-color: #ffebee;
+  color: #d32f2f;
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  border-left: 4px solid #d32f2f;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.label {
+  font-size: 0.9rem;
+  color: #333;
+  font-weight: 500;
+}
+
+.input {
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #646cff;
+  box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.1);
+}
+
+.loginButton {
+  padding: 0.75rem 1rem;
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.loginButton:hover:not(:disabled) {
+  background-color: #1976d2;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(33, 150, 243, 0.4);
+}
+
+.loginButton:focus {
+  outline: 2px solid #333;
+  outline-offset: 2px;
+}
+
+.loginButton:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.loginButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.ssoButton {
+  padding: 0.75rem 1rem;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.ssoButton:hover {
+  background-color: #3f9142;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(76, 175, 80, 0.35);
+}
+
+.ssoButton:focus {
+  outline: 2px solid #333;
+  outline-offset: 2px;
+}
+
+.ssoHint {
+  font-size: 0.85rem;
+  color: #666;
+  text-align: center;
+  margin-top: -0.25rem;
+}
+
+.navLinks {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.navLink,
+.activeNavLink {
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.95rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+.navLink:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.activeNavLink {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .logo h1 {
+    font-size: 1.2rem;
+  }
+
+  .navLinks {
+    display: none;
+  }
+
+  .dropdown {
+    min-width: 250px;
+  }
+
+  .username {
+    display: none;
+  }
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  .dropdown {
+    background-color: #2a2a3e;
+    border-color: #555;
+  }
+
+  .infoLabel {
+    color: #aaa;
+  }
+
+  .infoValue {
+    color: #e0e0e0;
+  }
+
+  .divider {
+    border-top-color: #444;
+  }
+
+  .errorMessage {
+    background-color: #2a1515;
+    color: #ef9a9a;
+    border-left-color: #ef9a9a;
+  }
+
+  .label {
+    color: #e0e0e0;
+  }
+
+  .input {
+    background-color: #1e1e2e;
+    border-color: #555;
+    color: #e0e0e0;
+  }
+
+  .input:focus {
+    border-color: #646cff;
+  }
+
+  .ssoHint {
+    color: #aaa;
+  }
+}
+

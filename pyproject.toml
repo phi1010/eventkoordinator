@@ -1,0 +1,28 @@
+[project]
+name = "htmlplayground1"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "django>=6.0.3",
+    "django-ninja>=1.5.3",
+    "django-cors-headers>=4.3.1",
+    "requests>=2.31.0",
+    "pydantic>=2.0.0",
+    "ruff>=0.15.5",
+    "mozilla-django-oidc>=5.0.2",
+    "python-dotenv>=1.2.2",
+    "dynaconf>=3.2.12",
+    "icecream>=2.1.10",
+    "django-viewflow>=2.2.15",
+    "django-simple-history>=3.11.0",
+    "pydot>=4.0.1",
+    "jinja2>=3.1.6",
+    "django-solo>=2.5.1",
+    "gunicorn>=25.1.0",
+    "django-prometheus>=2.4.0",
+    "icalendar>=7.0.3",
+    "recurring-ical-events>=3.8.1",
+    "pillow>=12.1.1",
+]

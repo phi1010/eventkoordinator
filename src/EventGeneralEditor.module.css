@@ -1,0 +1,380 @@
+.container {
+  padding: 2rem;
+  background: #f5f5f5;
+  border-radius: 8px;
+  margin-top: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.changedIndicator {
+  color: #ff9800;
+  font-size: 0.8rem;
+}
+
+.input,
+.textarea {
+  padding: 0.75rem;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: all 200ms ease;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.input:focus,
+.textarea:focus {
+  outline: none;
+  border-color: #2196f3;
+  background-color: #f0f7ff;
+}
+
+.input.changed,
+.textarea.changed {
+  border-color: #ff9800;
+  background-color: #fff9f0;
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.1);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 4rem;
+}
+
+.input:disabled,
+.textarea:disabled {
+  background-color: #f0f0f0;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.error {
+  padding: 0.75rem;
+  background-color: #ffebee;
+  color: #c62828;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  border-left: 4px solid #c62828;
+}
+
+.buttonGroup {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.saveButton {
+  padding: 0.75rem 1.5rem;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 200ms ease;
+  font-size: 0.95rem;
+}
+
+.saveButton:hover:not(:disabled) {
+  background-color: #45a049;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.saveButton:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cancelButton {
+  padding: 0.75rem 1.5rem;
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 200ms ease;
+  font-size: 0.95rem;
+}
+
+.cancelButton:hover:not(:disabled) {
+  background-color: #da190b;
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+}
+
+.cancelButton:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  .container {
+    background: #1e1e2e;
+  }
+
+  .label {
+    color: #e0e0e0;
+  }
+
+  .input,
+  .textarea {
+    background-color: #2a2a3e;
+    border-color: #555;
+    color: #e0e0e0;
+  }
+
+  .input:focus,
+  .textarea:focus {
+    background-color: #2a3a50;
+    border-color: #2196f3;
+  }
+
+  .input.changed,
+  .textarea.changed {
+    background-color: #2e2516;
+    border-color: #ff9800;
+  }
+
+  .input:disabled,
+  .textarea:disabled {
+    background-color: #1a1a28;
+  }
+
+  .error {
+    background-color: #2a1515;
+    color: #ef9a9a;
+    border-left-color: #ef9a9a;
+  }
+
+  .saveButton:disabled,
+  .cancelButton:disabled {
+    background-color: #444;
+  }
+}
+
+/* Shared utility classes used by ProposalEditor and others */
+.fieldHint {
+  display: block;
+  color: #666;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.ownerDisplay {
+  padding: 0.5rem 0.75rem;
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  color: #666;
+}
+
+@media (prefers-color-scheme: dark) {
+  .fieldHint {
+    color: #aaa;
+  }
+
+  .ownerDisplay {
+    background-color: #2a2a3e;
+    border-color: #555;
+    color: #aaa;
+  }
+}
+
+/* ── Checklist ──────────────────────────────────────────────────────────── */
+.checklistBox {
+  margin-top: 2rem;
+  padding: 1rem;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+}
+
+.checklistBox h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+}
+
+.checklistMuted {
+  margin: 0;
+  color: #666;
+}
+
+.checklistItemText--ok {
+  color: #333;
+}
+
+.checklistItemText--warn {
+  color: #666;
+}
+
+/* ── History ─────────────────────────────────────────────────────────────── */
+.fieldset {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin: 0;
+}
+
+.legend {
+  font-weight: 600;
+  padding: 0 0.5rem;
+  font-size: 1rem;
+}
+
+.historyBadge {
+  background-color: #e8eefc;
+  color: #274690;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.historyMuted {
+  margin: 0;
+  color: #666;
+}
+
+.historyEntry {
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.historyEntrySummary {
+  font-weight: 500;
+  color: #333;
+}
+
+.historyEntryMeta {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.historyValueLabel--old {
+  font-size: 0.75rem;
+  color: #555;
+  font-weight: 600;
+}
+
+.historyValueLabel--new {
+  font-size: 0.75rem;
+  color: #355f35;
+  font-weight: 600;
+}
+
+.historyValueBox--old {
+  background: #fff;
+  border: 1px solid #e3e3e3;
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.historyValueBox--new {
+  background: #fff;
+  border: 1px solid #d9e7d9;
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Dark mode for checklist and history */
+@media (prefers-color-scheme: dark) {
+  .checklistBox {
+    background-color: #1e1e2e;
+  }
+
+  .checklistBox h3 {
+    color: #e0e0e0;
+  }
+
+  .checklistMuted {
+    color: #aaa;
+  }
+
+  .checklistItemText--ok {
+    color: #e0e0e0;
+  }
+
+  .checklistItemText--warn {
+    color: #aaa;
+  }
+
+  .fieldset {
+    border-color: #444;
+    background-color: #1e1e2e;
+  }
+
+  .legend {
+    color: #e0e0e0;
+  }
+
+  .historyBadge {
+    background-color: #1e2a4a;
+    color: #90b0f0;
+  }
+
+  .historyMuted {
+    color: #aaa;
+  }
+
+  .historyEntry {
+    border-bottom-color: #444;
+  }
+
+  .historyEntrySummary {
+    color: #e0e0e0;
+  }
+
+  .historyEntryMeta {
+    color: #aaa;
+  }
+
+  .historyValueLabel--old {
+    color: #bbb;
+  }
+
+  .historyValueLabel--new {
+    color: #81c995;
+  }
+
+  .historyValueBox--old {
+    background: #2a2a3e;
+    border-color: #444;
+    color: #ccc;
+  }
+
+  .historyValueBox--new {
+    background: #1e2e1e;
+    border-color: #3a5a3a;
+    color: #ccc;
+  }
+}
+

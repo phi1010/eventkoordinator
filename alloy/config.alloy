@@ -1,0 +1,81 @@
+// This component is responsible for disovering new containers within the docker environment
+discovery.docker "django_application_framework" {
+	host = "unix:///var/run/docker.sock"
+	refresh_interval = "5s"
+}
+
+// This component is responsible for relabeling the discovered containers
+discovery.relabel "django_application_framework" {
+	targets = []
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container"
+	}
+}
+
+// This component is responsible for collecting logs from the discovered containers
+loki.source.docker "django_application_framework" {
+	host             = "unix:///var/run/docker.sock"
+	targets          = discovery.docker.django_application_framework.targets
+	forward_to       = [loki.process.django_application_framework.receiver]
+	relabel_rules    = discovery.relabel.django_application_framework.rules
+	refresh_interval = "5s"
+}
+
+// This component is responsible for processing the logs (In this case adding static labels)
+loki.process "django_application_framework" {
+    stage.static_labels {
+    values = {
+      env = "production",
+    }
+}
+    forward_to = [loki.write.django_application_framework.receiver]
+}
+
+// This component is responsible for writing the logs to Loki
+loki.write "django_application_framework" {
+	endpoint {
+		url  = "http://loki:3100/loki/api/v1/push"
+	}
+}
+
+// Enables the ability to view logs in the Alloy UI in realtime
+livedebugging {
+  enabled = true
+}
+
+prometheus.remote_write "django_application_framework" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+prometheus.scrape "scraper" {
+  targets    = prometheus.exporter.cadvisor.django_application_framework.targets
+  forward_to = [ prometheus.relabel.cadvisor.receiver ]
+
+  scrape_interval = "10s"
+}
+
+prometheus.exporter.cadvisor "django_application_framework" {
+  docker_host = "unix:///var/run/docker.sock"
+
+  storage_duration = "5m"
+}
+
+prometheus.relabel "cadvisor" {
+  forward_to = [prometheus.remote_write.django_application_framework.receiver]
+
+  rule {
+    regex   = "^(container_label_com_docker_compose_.+|id|container_label_maintainer|container_label_org_opencontainers_.+)"
+    action  = "labeldrop"
+  }
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "^(container_cpu_usage_seconds_total|container_fs_inodes_free|container_fs_inodes_total|container_fs_limit_bytes|container_fs_usage_bytes|container_last_seen|container_memory_usage_bytes|container_network_receive_bytes_total|container_network_tcp_usage_total|container_network_transmit_bytes_total|container_spec_memory_reservation_limit_bytes|machine_memory_bytes|machine_scrape_error)$"
+    action        = "keep"
+  }
+}

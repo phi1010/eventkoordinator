@@ -1,0 +1,483 @@
+import { useState, useEffect, useRef } from 'react'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { SelectionPanel, type SelectionItem } from './SelectionPanel'
+import { ContentRenderer } from './ContentRenderer'
+import { Tooltip } from './Tooltip'
+import { loadSeriesFromAPI, fetchSeriesById, createSeries, createEvent, type Event, type Series, type Event as ApiEvent, type Series as ApiSeries } from './api'
+import { usePermissions } from './usePermissions'
+import styles from './MainView.module.css'
+
+export interface EventItem extends SelectionItem {
+  id: string
+  name: string
+  startTime?: Date
+  endTime?: Date
+  tag?: string
+  useFullDays?: boolean
+}
+
+export interface SeriesItem extends SelectionItem {
+  id: string
+  name: string
+  description?: string
+  events: EventItem[]
+  eventsLoaded?: boolean
+}
+
+function toEventItem(event: ApiEvent): EventItem {
+  return {
+    id: event.id,
+    name: event.name,
+    startTime: event.startTime,
+    endTime: event.endTime,
+    tag: event.tag,
+    useFullDays: event.useFullDays,
+  }
+}
+
+function toSeriesItem(series: ApiSeries): SeriesItem {
+  return {
+    id: series.id,
+    name: series.name,
+    description: series.description,
+    eventsLoaded: true,
+    events: series.events.map((event) => toEventItem(event)),
+  }
+}
+
+export function MainView() {
+  const [series, setSeries] = useState<SeriesItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { canBrowse, canAdd, canChange, loading: permissionsLoading } = usePermissions()
+
+  const navigate = useNavigate()
+  const { seriesId: urlSeriesId, eventId: urlEventId } = useParams<{ seriesId?: string; eventId?: string }>()
+
+  useEffect(() => {
+    const fetchSeries = async () => {
+      try {
+        setLoading(true)
+        const apiSeries = await loadSeriesFromAPI()
+        const convertedSeries: SeriesItem[] = apiSeries.map((s) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          events: [],
+          eventsLoaded: false,
+        }))
+        setSeries(convertedSeries)
+        setError(null)
+      } catch (err) {
+        console.error('Failed to load series from API:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load series')
+        setSeries([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchSeries()
+  }, [])
+
+  useEffect(() => {
+    const loadSelectedSeriesEvents = async () => {
+      const targetSeriesId = (urlSeriesId && series.some((s) => s.id === urlSeriesId))
+        ? urlSeriesId
+        : series[0]?.id
+
+      if (!targetSeriesId) {
+        return
+      }
+
+      const targetSeries = series.find((s) => s.id === targetSeriesId)
+      if (!targetSeries || targetSeries.eventsLoaded) {
+        return
+      }
+
+      try {
+        const detailedSeries = await fetchSeriesById(targetSeriesId)
+        setSeries((prev) => prev.map((s) => {
+          if (s.id !== targetSeriesId) return s
+          return {
+            ...s,
+            events: detailedSeries.events.map((event) => ({
+              id: event.id,
+              name: event.name,
+              startTime: event.startTime,
+              endTime: event.endTime,
+              tag: event.tag,
+              useFullDays: event.useFullDays,
+            })),
+            eventsLoaded: true,
+          }
+        }))
+      } catch (err) {
+        console.error('Failed to load series events:', err)
+      }
+    }
+
+    void loadSelectedSeriesEvents()
+  }, [series, urlSeriesId])
+
+  if (loading || permissionsLoading) {
+    return (
+      <div className={styles.loadingContainer}>
+        <div className={styles.loadingContent}>
+          <div className={styles.loadingText}>Loading series...</div>
+          <div className={styles.loadingSubtext}>Fetching calendar data from server</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Check browse permission for series
+  if (!canBrowse('series')) {
+    return (
+      <div className={styles.errorContainer}>
+        <div className={styles.errorContent}>
+          <div className={styles.errorTitle}>Access Denied</div>
+          <div className={styles.errorMessage}>You don't have permission to browse series</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className={styles.errorContainer}>
+        <div className={styles.errorContent}>
+          <div className={styles.errorTitle}>Error loading series</div>
+          <div className={styles.errorMessage}>{error}</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Determine effective selection from URL, falling back to first series / general
+  const selectedSeriesId = (urlSeriesId && series.some((s) => s.id === urlSeriesId))
+    ? urlSeriesId
+    : series[0]?.id ?? ''
+
+  const selectedEventId = urlEventId ?? 'general'
+
+  // If the URL seriesId is absent or invalid and we have series, redirect to the first one
+  if (series.length > 0 && selectedSeriesId !== urlSeriesId) {
+    return <Navigate to={`/coordinator/${selectedSeriesId}`} replace />
+  }
+
+  const handleSeriesChange = (newSeriesId: string) => {
+    navigate(`/coordinator/${newSeriesId}`)
+  }
+
+  const handleEventChange = (newEventId: string) => {
+    if (newEventId === 'general' || !newEventId) {
+      navigate(`/coordinator/${selectedSeriesId}`)
+    } else {
+      navigate(`/coordinator/${selectedSeriesId}/${newEventId}`)
+    }
+  }
+
+  const handleCreateSeries = async () => {
+    try {
+      const newSeries = await createSeries()
+      setSeries((prev) => [...prev, toSeriesItem(newSeries)])
+      const firstEvent = newSeries.events[0]
+      if (firstEvent) {
+        navigate(`/coordinator/${newSeries.id}/${firstEvent.id}`)
+      } else {
+        navigate(`/coordinator/${newSeries.id}`)
+      }
+    } catch (err) {
+      console.error('Failed to create series:', err)
+    }
+  }
+
+  const handleCreateEvent = async () => {
+    if (!selectedSeriesId) return
+    try {
+      const newEvent = await createEvent({ seriesId: selectedSeriesId })
+      setSeries((prev) => prev.map((s) => {
+        if (s.id !== selectedSeriesId) return s
+        const updatedEvents = [...s.events, toEventItem(newEvent)]
+          .sort((a, b) => (a.startTime?.getTime() ?? 0) - (b.startTime?.getTime() ?? 0))
+        return { ...s, events: updatedEvents }
+      }))
+      navigate(`/coordinator/${selectedSeriesId}/${newEvent.id}`)
+    } catch (err) {
+      console.error('Failed to create event:', err)
+    }
+  }
+
+  const handleSeriesUpdate = (updated: ApiSeries) => {
+    setSeries((prev) => prev.map((s) => {
+      if (s.id !== updated.id) return s
+      return { id: updated.id, name: updated.name, description: updated.description, events: s.events, eventsLoaded: s.eventsLoaded }
+    }))
+  }
+
+  const handleEventUpdate = (seriesId: string, updated: ApiEvent) => {
+    setSeries((prev) => prev.map((s) => {
+      if (s.id !== seriesId) return s
+      return {
+        ...s,
+        events: s.events.map((e) => {
+          if (e.id !== updated.id) return e
+          return {
+            id: updated.id,
+            name: updated.name,
+            startTime: updated.startTime,
+            endTime: updated.endTime,
+            tag: updated.tag,
+            useFullDays: updated.useFullDays,
+          }
+        }),
+      }
+    }))
+  }
+
+  return (
+    <CoordinatorInnerView
+      series={series}
+      selectedSeriesId={selectedSeriesId}
+      selectedEventId={selectedEventId}
+      onSeriesChange={handleSeriesChange}
+      onEventChange={handleEventChange}
+      onCreateSeries={handleCreateSeries}
+      onCreateEvent={handleCreateEvent}
+      onSeriesUpdate={handleSeriesUpdate}
+      onEventUpdate={handleEventUpdate}
+      canAddSeries={canAdd('series')}
+      canAddEvent={canAdd('event')}
+      canChangeSeries={canChange('series')}
+      canChangeEvent={canChange('event')}
+    />
+  )
+}
+
+interface CoordinatorInnerViewProps {
+  series: SeriesItem[]
+  selectedSeriesId: string
+  selectedEventId: string
+  onSeriesChange: (seriesId: string) => void
+  onEventChange: (eventId: string) => void
+  onCreateSeries: () => Promise<void>
+  onCreateEvent: () => Promise<void>
+  onSeriesUpdate: (updated: Series) => void
+  onEventUpdate: (seriesId: string, updated: Event) => void
+  canAddSeries: boolean
+  canAddEvent: boolean
+  canChangeSeries: boolean
+  canChangeEvent: boolean
+}
+
+function CoordinatorInnerView({
+  series,
+  selectedSeriesId,
+  selectedEventId,
+  onSeriesChange,
+  onEventChange,
+  onCreateSeries,
+  onCreateEvent,
+  onSeriesUpdate,
+  onEventUpdate,
+  canAddSeries,
+  canAddEvent,
+  canChangeSeries,
+  canChangeEvent,
+}: CoordinatorInnerViewProps) {
+  const selectedSeries = series.find((s) => s.id === selectedSeriesId)
+  const confirmNavigationRef = useRef<(() => Promise<boolean>) | null>(null)
+
+  const handleBeforeSeriesChange = async (newSeriesId: string): Promise<boolean> => {
+    void newSeriesId
+    if (confirmNavigationRef.current) {
+      return await confirmNavigationRef.current()
+    }
+    return true
+  }
+
+  const handleBeforeEventChange = async (newEventId: string): Promise<boolean> => {
+    void newEventId
+    if (confirmNavigationRef.current) {
+      return await confirmNavigationRef.current()
+    }
+    return true
+  }
+
+  const handleRequestNavigation = (confirmFn: () => Promise<boolean>) => {
+    confirmNavigationRef.current = confirmFn
+  }
+
+  const eventsSidebarAction = canAddEvent ? (
+    <button
+      type="button"
+      onClick={() => void onCreateEvent()}
+      className={styles.sidebarActionButton}
+    >
+      Create new event
+    </button>
+  ) : undefined
+
+  const seriesSidebarAction = canAddSeries ? (
+    <button
+      type="button"
+      onClick={() => void onCreateSeries()}
+      className={styles.sidebarActionButton}
+    >
+      Create new series
+    </button>
+  ) : undefined
+
+  // Use a placeholder series item when there are no series
+  const displaySeries = series.length === 0
+    ? [{ id: 'empty', name: 'No series yet', description: 'Click "Create new series" to get started', events: [] as EventItem[], eventsLoaded: true }]
+    : series
+
+  const effectiveSelectedSeriesId = series.length === 0 ? 'empty' : selectedSeriesId
+
+  const eventItems: Array<EventItem | { id: string; name: string }> = selectedSeries && selectedSeries.id !== 'empty'
+    ? [{ id: 'general', name: 'General Information' }, ...selectedSeries.events]
+    : []
+
+  const renderSeriesLabel = (s: SeriesItem) => {
+    const labelContent = (
+      <div>
+        <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{s.name}</div>
+        {s.description && (
+          <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>
+            {s.description.length > 50
+              ? `${s.description.substring(0, 50)}...`
+              : s.description}
+          </div>
+        )}
+      </div>
+    )
+
+    // Only wrap in tooltip if there's a description
+    if (s.description) {
+      return (
+        <Tooltip content={s.description}>
+          {labelContent}
+        </Tooltip>
+      )
+    }
+
+    return labelContent
+  }
+
+  const renderEventLabel = (event: EventItem) => {
+    const formatDate = (date?: Date): string => {
+      if (!date) return ''
+      return date.toLocaleDateString('de-DE', {
+        day: 'numeric',
+        month: 'short',
+        year: '2-digit',
+      })
+    }
+
+    const formatTime = (date?: Date): string => {
+      if (!date) return ''
+      return date.toLocaleTimeString('de-DE', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ fontWeight: 500 }}>{event.name}</div>
+        <div style={{ fontSize: '0.8rem', opacity: 0.7, display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {event.startTime && (
+            <>
+              <span>{formatDate(event.startTime)}</span>
+              <span>{formatTime(event.startTime)}</span>
+            </>
+          )}
+          {event.tag && (
+            <span className={styles.tagBadge}>
+              {event.tag}
+            </span>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderMainContent = (s: SeriesItem) => {
+    if (s.id === 'empty') {
+      return (
+        <div className={styles.placeholderText}>
+          <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>No series yet</p>
+          <p>Click the "Create new series" button to get started</p>
+        </div>
+      )
+    }
+
+    if (!s.eventsLoaded) {
+      return (
+        <div className={styles.placeholderText}>
+          <p>Loading events...</p>
+        </div>
+      )
+    }
+
+    if (s.events.length === 0) {
+      return (
+        <div className={styles.placeholderText}>
+          <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>No events yet</p>
+          <p>Click the "Create new event" button to get started</p>
+        </div>
+      )
+    }
+
+    return (
+      <SelectionPanel<EventItem>
+        items={eventItems}
+        selectedItemId={selectedEventId}
+        onSelectionChange={onEventChange}
+        onBeforeSelectionChange={handleBeforeEventChange}
+        renderItemLabel={renderEventLabel}
+        renderContent={(event) => {
+          const apiSeries: Series = {
+            id: s.id,
+            name: s.name,
+            description: s.description,
+            events: s.events as Event[],
+          }
+          return (
+            <ContentRenderer
+              series={apiSeries}
+              selectedEventId={event.id}
+              onSeriesUpdate={onSeriesUpdate}
+              onEventUpdate={(updated) => onEventUpdate(s.id, updated)}
+              onRequestNavigation={handleRequestNavigation}
+              canEditSeries={canChangeSeries}
+              canEditEvent={canChangeEvent}
+            />
+          )
+        }}
+        sidebarTitle="Events"
+        belowTitleElement={eventsSidebarAction}
+        isNested={true}
+      />
+    )
+  }
+
+  return (
+    <SelectionPanel<SeriesItem>
+      items={displaySeries}
+      selectedItemId={effectiveSelectedSeriesId}
+      onSelectionChange={async (id) => {
+        if (id !== 'empty') {
+          onSeriesChange(id)
+        }
+      }}
+      onBeforeSelectionChange={handleBeforeSeriesChange}
+      renderItemLabel={renderSeriesLabel}
+      renderContent={renderMainContent}
+      sidebarTitle="Series"
+      belowTitleElement={seriesSidebarAction}
+    />
+  )
+}
+

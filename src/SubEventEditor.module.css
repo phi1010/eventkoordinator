@@ -1,0 +1,628 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.header {
+  margin-bottom: 20px;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 15px;
+}
+
+.header h2 {
+  margin: 0 0 10px 0;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+.eventName {
+  margin: 0;
+  font-size: 1rem;
+  color: #666;
+  font-style: italic;
+}
+
+.eventDetails {
+  background-color: #f5f5f5;
+  border-left: 4px solid #2196f3;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+}
+
+.detail {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.detail:last-child {
+  margin-bottom: 0;
+}
+
+.label {
+  font-weight: 600;
+  min-width: 80px;
+  color: #555;
+}
+
+.value {
+  color: #333;
+  flex: 1;
+}
+
+.syncSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.syncSection h3 {
+  margin: 0 0 15px 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.syncGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 15px;
+  flex: 1;
+}
+
+.syncCard {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  background-color: #fafafa;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+}
+
+.syncCard:hover {
+  border-color: #bbb;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  gap: 10px;
+}
+
+.cardHeader h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #333;
+  flex: 1;
+}
+
+.statusBadge {
+  padding: 4px 10px;
+  border-radius: 4px;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-align: center;
+  min-width: 90px;
+}
+
+.cardBody {
+  flex: 1;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+}
+
+.info,
+.error {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+}
+
+.info:last-child,
+.error:last-child {
+  margin-bottom: 0;
+}
+
+.infoLabel {
+  font-weight: 600;
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.infoValue {
+  color: #333;
+  margin-top: 2px;
+}
+
+.error {
+  color: #d32f2f;
+}
+
+.error .infoLabel {
+  color: #d32f2f;
+}
+
+.error .infoValue {
+  color: #d32f2f;
+}
+
+.pushButton {
+  padding: 8px 12px;
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: all 0.3s ease;
+  margin-bottom: 8px;
+}
+
+.pushButton:hover:not(:disabled) {
+  background-color: #1976d2;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(33, 150, 243, 0.4);
+}
+
+.pushButton:focus {
+  outline: 2px solid #333;
+  outline-offset: 2px;
+}
+
+.pushButton:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.pushButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.diffButton {
+  padding: 8px 12px;
+  background-color: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: all 0.3s ease;
+}
+
+.diffButton:hover:not(:disabled) {
+  background-color: #f57c00;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(255, 152, 0, 0.4);
+}
+
+.diffButton:focus {
+  outline: 2px solid #333;
+  outline-offset: 2px;
+}
+
+.diffButton:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.diffButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.loading {
+  padding: 20px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+.error {
+  padding: 12px;
+  background-color: #ffebee;
+  color: #d32f2f;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  border-left: 4px solid #d32f2f;
+}
+
+.footer {
+  margin-top: auto;
+  padding-top: 15px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #999;
+  font-style: italic;
+}
+
+/* Edit Form Styles */
+
+.editSection {
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 30px;
+}
+
+.editSection h3 {
+  margin: 0 0 20px 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.editForm {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.formRow {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.formRow .formGroup {
+  flex: 1 1 calc(50% - 10px);
+  min-width: 250px;
+}
+
+.formInput {
+  padding: 0.75rem;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: all 200ms ease;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.formInput:focus {
+  outline: none;
+  border-color: #2196f3;
+  background-color: #f0f7ff;
+}
+
+.formInput.changed {
+  border-color: #ff9800;
+  background-color: #fff9f0;
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.1);
+}
+
+.formInput:disabled {
+  background-color: #f0f0f0;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.changedIndicator {
+  color: #ff9800;
+  font-size: 0.8rem;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+}
+
+.checkboxLabel input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #2196f3;
+}
+
+.checkboxLabel input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.fieldDescription {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #777;
+  line-height: 1.4;
+}
+
+.editError {
+  padding: 0.75rem;
+  background-color: #ffebee;
+  color: #c62828;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  border-left: 4px solid #c62828;
+}
+
+.buttonGroup {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.saveButton {
+  padding: 0.75rem 1.5rem;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 200ms ease;
+  font-size: 0.95rem;
+}
+
+.saveButton:hover:not(:disabled) {
+  background-color: #45a049;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.saveButton:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cancelButton {
+  padding: 0.75rem 1.5rem;
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 200ms ease;
+  font-size: 0.95rem;
+}
+
+.cancelButton:hover:not(:disabled) {
+  background-color: #da190b;
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+}
+
+.cancelButton:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ownerContainer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ownerContainer > div:first-child {
+  flex: 1 1 calc(100% - 200px);
+  min-width: 200px;
+}
+
+.participantContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  min-height: 40px;
+  align-items: center;
+  background-color: #fff;
+}
+
+.participantSearch {
+  flex: 1 1 150px;
+  border: none;
+  outline: none;
+  padding: 4px 0;
+  min-width: 100px;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.userTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #e0e0e0;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.userTagRemove {
+  border: none;
+  background-color: transparent;
+  cursor: pointer;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.calendarSection {
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 30px;
+}
+
+.calendarSection h3 {
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.calendarHint {
+  margin: 0 0 16px 0;
+  color: #5f6368;
+  font-size: 0.9rem;
+}
+
+.calendarWrapper {
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  background-color: #fff;
+  overflow: hidden;
+  min-height: 380px;
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  .header {
+    border-bottom-color: #444;
+  }
+
+  .header h2 {
+    color: #e0e0e0;
+  }
+
+  .eventName {
+    color: #aaa;
+  }
+
+  .eventDetails {
+    background-color: #1e2a3a;
+  }
+
+  .label {
+    color: #bbb;
+  }
+
+  .value {
+    color: #e0e0e0;
+  }
+
+  .syncSection h3 {
+    color: #e0e0e0;
+  }
+
+  .syncCard {
+    background-color: #1e1e2e;
+    border-color: #444;
+  }
+
+  .syncCard:hover {
+    border-color: #666;
+  }
+
+  .cardHeader h4 {
+    color: #e0e0e0;
+  }
+
+  .infoLabel {
+    color: #aaa;
+  }
+
+  .infoValue {
+    color: #e0e0e0;
+  }
+
+  .footer {
+    border-top-color: #444;
+  }
+
+  .note {
+    color: #888;
+  }
+
+  .editSection,
+  .calendarSection {
+    background-color: #1e1e2e;
+  }
+
+  .editSection h3,
+  .calendarSection h3 {
+    color: #e0e0e0;
+  }
+
+  .calendarHint {
+    color: #aaa;
+  }
+
+  .calendarWrapper {
+    background-color: #2a2a3e;
+    border-color: #555;
+  }
+
+  .formInput {
+    background-color: #2a2a3e;
+    border-color: #555;
+    color: #e0e0e0;
+  }
+
+  .formInput:focus {
+    background-color: #2a3a50;
+    border-color: #2196f3;
+  }
+
+  .formInput.changed {
+    background-color: #2e2516;
+    border-color: #ff9800;
+  }
+
+  .formInput:disabled {
+    background-color: #1a1a28;
+  }
+
+  .checkboxLabel {
+    color: #ccc;
+  }
+
+  .fieldDescription {
+    color: #999;
+  }
+
+  .editError {
+    background-color: #2a1515;
+    color: #ef9a9a;
+    border-left-color: #ef9a9a;
+  }
+
+  .participantContainer {
+    background-color: #2a2a3e;
+    border-color: #555;
+  }
+
+  .participantSearch {
+    background-color: transparent;
+    color: #e0e0e0;
+  }
+
+  .userTag {
+    background-color: #3a3a55;
+    color: #e0e0e0;
+  }
+
+  .saveButton:disabled,
+  .cancelButton:disabled {
+    background-color: #444;
+  }
+}
+

@@ -1,0 +1,506 @@
+/* ── WeekViewCombined ──────────────────────────────────────────────────────── */
+
+.wvc-outer {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Navigation bar ──────────────────────────────────────────────────────── */
+
+.wvc-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  border-radius: 10px 10px 0 0;
+  flex-wrap: wrap;
+}
+
+.wvc-nav-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #374151;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+
+.wvc-nav-btn:hover {
+  background: #e5e7eb;
+}
+
+.wvc-week-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #111827;
+  min-width: 220px;
+  text-align: center;
+}
+
+/* Resource selector */
+.wvc-resource-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.wvc-create-label {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.wvc-res-select {
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  padding: 3px 6px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  outline: none;
+}
+
+.wvc-res-select:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Color swatch next to the select showing the selected resource's color */
+.wvc-res-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Resource legend ─────────────────────────────────────────────────────── */
+
+.wvc-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+  flex-wrap: wrap;
+}
+
+.wvc-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #374151;
+}
+
+.wvc-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wvc-legend-name {
+  white-space: nowrap;
+}
+
+/* ── Scrollable area ─────────────────────────────────────────────────────── */
+
+.wvc-scroll-area {
+  overflow: auto;
+  max-height: 70vh;
+  position: relative;
+}
+
+.wvc-inner {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Sticky header (day titles) ──────────────────────────────────────────── */
+
+.wvc-header {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #f9fafb;
+  border-bottom: 2px solid #d1d5db;
+  flex-shrink: 0;
+}
+
+/* Corner cell – sticky in both top and left */
+.wvc-corner {
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 21;
+  background: #f9fafb;
+  border-right: 2px solid #d1d5db;
+  box-sizing: border-box;
+}
+
+.wvc-day-headers {
+  display: flex;
+}
+
+.wvc-day-hdr {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 11px;
+  color: #374151;
+  padding: 5px 6px;
+  border-right: 1px solid #d1d5db;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wvc-day-hdr--we {
+  background: #f3f4f6;
+}
+
+/* ── Body: time gutter + day columns ─────────────────────────────────────── */
+
+.wvc-body {
+  display: flex;
+}
+
+.wvc-gutter {
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background: #f9fafb;
+  border-right: 2px solid #d1d5db;
+  box-sizing: border-box;
+}
+
+.wvc-hour-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  padding: 1px 4px 0 0;
+  justify-content: flex-end;
+  font-size: 10px;
+  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+/* ── Day columns ─────────────────────────────────────────────────────────── */
+
+.wvc-day-col {
+  flex-shrink: 0;
+  position: relative;
+  border-right: 1px solid #d1d5db;
+  box-sizing: border-box;
+  cursor: crosshair;
+}
+
+.wvc-day-col--we {
+  background: rgba(243, 244, 246, 0.5);
+}
+
+/* Horizontal hour gridline spanning the full day column */
+.wvc-hour-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid #e5e7eb;
+  pointer-events: none;
+}
+
+/* Half-hour tick mark */
+.wvc-half-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed #f3f4f6;
+  pointer-events: none;
+}
+
+/* ── Drag strip – empty right zone reserved for drag-to-create ───────────── */
+
+.wvc-drag-strip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed #d1d5db;
+  background: rgba(243, 244, 246, 0.4);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* ── Events ──────────────────────────────────────────────────────────────── */
+
+.wvc-event {
+  position: absolute;
+  border-radius: 3px;
+  overflow: hidden;
+  cursor: pointer;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: filter 0.12s, box-shadow 0.12s;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.wvc-event:hover {
+  filter: brightness(1.12);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  z-index: 5;
+}
+
+.wvc-event-title {
+  display: block;
+  font-weight: 600;
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+  padding: 1px 2px;
+}
+
+.wvc-event--vertical {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 2px;
+}
+
+.wvc-event-title--vertical {
+  max-width: 100%;
+  max-height: 100%;
+  writing-mode: vertical-lr;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: rotate(180deg);
+}
+
+/* ── Drag-to-create preview ──────────────────────────────────────────────── */
+
+.wvc-drag-preview {
+  position: absolute;
+  left: 1px;
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.2);
+  border: 2px dashed rgba(59, 130, 246, 0.7);
+  pointer-events: none;
+  z-index: 4;
+  box-sizing: border-box;
+}
+
+/* Disable text selection while creating an event. */
+.wvc-dragging {
+  user-select: none;
+}
+
+/* ── Stacked layout (narrow containers) ─────────────────────────────────── */
+
+.wvc-stacked-section {
+  border-bottom: 2px solid #d1d5db;
+}
+
+.wvc-stacked-section:last-child {
+  border-bottom: none;
+}
+
+.wvc-stacked-hdr {
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 11px;
+  color: #374151;
+  padding: 5px 6px;
+  background: #f9fafb;
+  border-bottom: 1px solid #d1d5db;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.wvc-stacked-hdr--we {
+  background: #f3f4f6;
+}
+
+/* ── Tooltip ─────────────────────────────────────────────────────────────── */
+
+.wvc-tooltip {
+  position: fixed;
+  z-index: 100;
+  background: rgba(17, 24, 39, 0.92);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 8px));
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  line-height: 1.5;
+}
+
+.wvc-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(17, 24, 39, 0.92);
+}
+
+.wvc-tooltip-date {
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+.wvc-tooltip-resource {
+  font-size: 10px;
+  opacity: 0.85;
+  font-style: italic;
+}
+
+/* ── Dark Mode ───────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  .wvc-outer {
+    background: #1e1e2e;
+    border-color: #3a3a50;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .wvc-nav {
+    background: #252535;
+    border-bottom-color: #3a3a50;
+  }
+
+  .wvc-nav-btn {
+    background: #2a2a3e;
+    border-color: #4a4a60;
+    color: #cdd6f4;
+  }
+
+  .wvc-nav-btn:hover {
+    background: #333350;
+  }
+
+  .wvc-week-label {
+    color: #cdd6f4;
+  }
+
+  .wvc-create-label {
+    color: #9ca3af;
+  }
+
+  .wvc-res-select {
+    background: #2a2a3e;
+    border-color: #4a4a60;
+    color: #cdd6f4;
+  }
+
+  .wvc-legend {
+    background: #1e1e2e;
+    border-bottom-color: #3a3a50;
+  }
+
+  .wvc-legend-item {
+    color: #cdd6f4;
+  }
+
+  .wvc-header {
+    background: #252535;
+    border-bottom-color: #4a4a60;
+  }
+
+  .wvc-corner {
+    background: #252535;
+    border-right-color: #4a4a60;
+  }
+
+  .wvc-day-hdr {
+    color: #cdd6f4;
+    border-right-color: #3a3a50;
+  }
+
+  .wvc-day-hdr--we {
+    background: #222232;
+  }
+
+  .wvc-gutter {
+    background: #252535;
+    border-right-color: #4a4a60;
+  }
+
+  .wvc-hour-label {
+    color: #6b7280;
+  }
+
+  .wvc-day-col {
+    border-right-color: #3a3a50;
+  }
+
+  .wvc-day-col--we {
+    background: rgba(34, 34, 50, 0.5);
+  }
+
+  .wvc-hour-line {
+    border-top-color: #2e2e42;
+  }
+
+  .wvc-half-line {
+    border-top-color: #272737;
+  }
+
+  .wvc-drag-strip {
+    border-left-color: #3a3a50;
+    background: rgba(34, 34, 50, 0.4);
+  }
+
+  .wvc-stacked-section {
+    border-bottom-color: #4a4a60;
+  }
+
+  .wvc-stacked-hdr {
+    background: #252535;
+    border-bottom-color: #3a3a50;
+    color: #cdd6f4;
+  }
+
+  .wvc-stacked-hdr--we {
+    background: #222232;
+  }
+}
+

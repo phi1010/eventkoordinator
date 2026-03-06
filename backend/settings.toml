@@ -1,0 +1,9 @@
+# Dynaconf settings file (non-secret defaults/overrides)
+# Keep Python defaults in project/settings.py and override here only when needed.
+
+# Example:
+# DEBUG = false
+# ALLOWED_HOSTS = ["example.com", "localhost"]
+# CSRF_TRUSTED_ORIGINS = ["https://example.com"]
+# OIDC_DISCOVERY_URL = "https://sso.zam.haus/realms/ZAM/.well-known/openid-configuration"
+

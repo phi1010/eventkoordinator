@@ -1,0 +1,403 @@
+
+/* ── WeekView ───────────────────────────────────────────────────────────────── */
+
+.wv-outer {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Navigation bar ──────────────────────────────────────────────────────── */
+
+.wv-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 8px 16px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  border-radius: 10px 10px 0 0;
+}
+
+.wv-nav-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #374151;
+  padding: 0;
+  transition: background 0.12s;
+}
+
+.wv-nav-btn:hover {
+  background: #e5e7eb;
+}
+
+.wv-week-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #111827;
+  min-width: 220px;
+  text-align: center;
+}
+
+/* ── Scrollable area ─────────────────────────────────────────────────────── */
+
+.wv-scroll-area {
+  overflow: auto;
+  max-height: 70vh;
+  position: relative;
+}
+
+.wv-inner {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Sticky header (day titles + resource sub-headers) ───────────────────── */
+
+.wv-header {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #f9fafb;
+  border-bottom: 2px solid #d1d5db;
+  flex-shrink: 0;
+}
+
+/* Corner cell – sticky in both top and left */
+.wv-corner {
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 21;
+  background: #f9fafb;
+  border-right: 2px solid #d1d5db;
+  box-sizing: border-box;
+}
+
+.wv-day-headers {
+  display: flex;
+}
+
+/* One group per day (contains day title + resource sub-headers) */
+.wv-day-hdr {
+  flex-shrink: 0;
+  border-right: 1px solid #d1d5db;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.wv-day-hdr--we {
+  background: #f3f4f6;
+}
+
+.wv-day-title {
+  font-weight: 700;
+  font-size: 11px;
+  color: #374151;
+  padding: 4px 6px 3px;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Row of resource sub-header cells within a day */
+.wv-subcol-headers {
+  display: flex;
+}
+
+.wv-subcol-hdr {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  font-size: 9px;
+  color: #6b7280;
+  border-right: 1px solid #e5e7eb;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.wv-subcol-hdr:last-child {
+  border-right: none;
+}
+
+.wv-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wv-subcol-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Body: time gutter + day columns ─────────────────────────────────────── */
+
+.wv-body {
+  display: flex;
+}
+
+/* Time gutter – sticky left, height set inline to match day column height.
+   `position: sticky` also establishes a containing block for the absolutely
+   positioned hour labels inside. */
+.wv-gutter {
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background: #f9fafb;
+  border-right: 2px solid #d1d5db;
+  box-sizing: border-box;
+}
+
+/* Hour label: one per hour, absolutely positioned, spans the full HOUR_PX height */
+.wv-hour-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  padding: 1px 4px 0 0;
+  justify-content: flex-end;
+  font-size: 10px;
+  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+/* ── Day columns ─────────────────────────────────────────────────────────── */
+
+.wv-day-col {
+  flex-shrink: 0;
+  position: relative;
+  border-right: 1px solid #d1d5db;
+  box-sizing: border-box;
+}
+
+.wv-day-col--we {
+  background: rgba(243, 244, 246, 0.5);
+}
+
+/* Horizontal hour gridline spanning the full day column */
+.wv-hour-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid #e5e7eb;
+  pointer-events: none;
+}
+
+/* Half-hour tick mark (no label, lighter than hour line) */
+.wv-half-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed #f3f4f6;
+  pointer-events: none;
+}
+
+/* ── Resource sub-columns ────────────────────────────────────────────────── */
+
+.wv-subcol {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-right: 1px solid #f3f4f6;
+  box-sizing: border-box;
+  cursor: crosshair;
+}
+
+.wv-subcol:last-child {
+  border-right: none;
+}
+
+/* ── Events ──────────────────────────────────────────────────────────────── */
+
+.wv-event {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  border-radius: 3px;
+  overflow: hidden;
+  cursor: pointer;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: filter 0.12s, box-shadow 0.12s;
+  box-sizing: border-box;
+}
+
+.wv-event:hover {
+  filter: brightness(1.12);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  z-index: 5;
+}
+
+.wv-event-title {
+  display: block;
+  font-weight: 600;
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+  padding: 1px 2px;
+}
+
+/* ── Drag-to-create preview ──────────────────────────────────────────────── */
+
+.wv-drag-preview {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.2);
+  border: 2px dashed rgba(59, 130, 246, 0.7);
+  pointer-events: none;
+  z-index: 4;
+  box-sizing: border-box;
+}
+
+/* Disable text selection while creating an event. */
+.wv-dragging {
+  user-select: none;
+}
+
+/* ── Tooltip ─────────────────────────────────────────────────────────────── */
+
+.wv-tooltip {
+  position: fixed;
+  z-index: 100;
+  background: rgba(17, 24, 39, 0.92);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 8px));
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  line-height: 1.5;
+}
+
+.wv-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(17, 24, 39, 0.92);
+}
+
+.wv-tooltip-date {
+  font-size: 10px;
+  opacity: 0.75;
+}
+/* ── Dark Mode ───────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  .wv-outer {
+    background: #1e1e2e;
+    border-color: #3a3a50;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .wv-nav {
+    background: #252535;
+    border-bottom-color: #3a3a50;
+  }
+
+  .wv-nav-btn {
+    background: #2a2a3e;
+    border-color: #4a4a60;
+    color: #cdd6f4;
+  }
+
+  .wv-nav-btn:hover {
+    background: #333350;
+  }
+
+  .wv-week-label {
+    color: #cdd6f4;
+  }
+
+  .wv-header {
+    background: #252535;
+    border-bottom-color: #4a4a60;
+  }
+
+  .wv-corner {
+    background: #252535;
+    border-right-color: #4a4a60;
+  }
+
+  .wv-day-hdr {
+    border-right-color: #3a3a50;
+  }
+
+  .wv-day-hdr--we {
+    background: #222232;
+  }
+
+  .wv-day-title {
+    color: #cdd6f4;
+    border-bottom-color: #3a3a50;
+  }
+
+  .wv-subcol-hdr {
+    color: #9ca3af;
+    border-right-color: #3a3a50;
+  }
+
+  .wv-gutter {
+    background: #252535;
+    border-right-color: #4a4a60;
+  }
+
+  .wv-hour-label {
+    color: #6b7280;
+  }
+
+  .wv-day-col {
+    border-right-color: #3a3a50;
+  }
+
+  .wv-day-col--we {
+    background: rgba(34, 34, 50, 0.5);
+  }
+
+  .wv-subcol {
+    border-right-color: #2a2a3e;
+  }
+
+  .wv-hour-line {
+    border-top-color: #2e2e42;
+  }
+
+  .wv-half-line {
+    border-top-color: #272737;
+  }
+}
+

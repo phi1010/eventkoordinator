@@ -1,0 +1,138 @@
+.tooltipTrigger {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  cursor: pointer;
+}
+
+.tooltipTrigger:focus {
+  outline: 2px solid #646cff;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 10000;
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.tooltipContent {
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #333;
+  max-height: 400px;
+  overflow-y: auto;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.tooltipContent :global(h1),
+.tooltipContent :global(h2),
+.tooltipContent :global(h3),
+.tooltipContent :global(h4),
+.tooltipContent :global(h5),
+.tooltipContent :global(h6) {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  color: #222;
+}
+
+.tooltipContent :global(h1) {
+  font-size: 1.4rem;
+}
+
+.tooltipContent :global(h2) {
+  font-size: 1.2rem;
+}
+
+.tooltipContent :global(h3) {
+  font-size: 1.1rem;
+}
+
+.tooltipContent :global(p) {
+  margin: 0.5em 0;
+}
+
+.tooltipContent :global(ul),
+.tooltipContent :global(ol) {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.tooltipContent :global(li) {
+  margin: 0.25em 0;
+}
+
+.tooltipContent :global(code) {
+  background-color: #f5f5f5;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85em;
+  color: #d63384;
+}
+
+.tooltipContent :global(pre) {
+  background-color: #f5f5f5;
+  padding: 8px 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.tooltipContent :global(pre code) {
+  background-color: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.tooltipContent :global(a) {
+  color: #007bff;
+  text-decoration: none;
+}
+
+.tooltipContent :global(a:hover) {
+  text-decoration: underline;
+}
+
+.tooltipContent :global(blockquote) {
+  border-left: 3px solid #ddd;
+  padding-left: 12px;
+  margin: 0.5em 0;
+  color: #666;
+  font-style: italic;
+}
+
+.tooltipContent :global(strong) {
+  font-weight: 600;
+}
+
+.tooltipContent :global(em) {
+  font-style: italic;
+}
+
+.tooltipContent :global(hr) {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 1em 0;
+}
+

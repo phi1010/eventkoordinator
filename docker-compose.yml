@@ -1,0 +1,164 @@
+services:
+  backend:
+    build:
+      context: .
+      target: backend
+    volumes:
+      - db-data:/app/backend/data
+    environment:
+      DJANGO_SETTINGS_MODULE: project.settings
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS}
+      DJANGO_CORS_ALLOWED_ORIGINS: ${DJANGO_CORS_ALLOWED_ORIGINS}
+      DJANGO_DEBUG: 0
+      DJANGO_DATABASES__default__NAME: /app/backend/data/db.sqlite3
+      # OIDC
+      DJANGO_OIDC_RP_CLIENT_ID: ${DJANGO_OIDC_RP_CLIENT_ID}
+      DJANGO_OIDC_RP_CLIENT_SECRET: ${DJANGO_OIDC_RP_CLIENT_SECRET}
+      DJANGO_EMAIL_HOST: ${DJANGO_EMAIL_HOST}
+      DJANGO_EMAIL_PORT: ${DJANGO_EMAIL_PORT}
+      DJANGO_EMAIL_HOST_USER: ${DJANGO_EMAIL_HOST_USER}
+      DJANGO_EMAIL_HOST_PASSWORD: ${DJANGO_EMAIL_HOST_PASSWORD}
+      DJANGO_EMAIL_USE_SSL: ${DJANGO_EMAIL_USE_SSL}
+      DJANGO_EMAIL_USE_TLS: ${DJANGO_EMAIL_USE_TLS}
+      DJANGO_DEFAULT_FROM_EMAIL: ${DJANGO_DEFAULT_FROM_EMAIL}
+      DJANGO_LOGGING__version: 1
+      DJANGO_LOGGING__disable_existing_loggers: false
+      DJANGO_LOGGING__root__level: "DEBUG"
+      DJANGO_LOGGING__root__handlers: '["console"]'
+      DJANGO_LOGGING__loggers__django.request__level: "INFO"
+      DJANGO_LOGGING__loggers__django.request__propagate: true
+      DJANGO_LOGGING__loggers__django__level: "INFO"
+      #DJANGO_LOGGING__loggers__django__handlers: '["console"]'
+      DJANGO_LOGGING__loggers__django__propagate: true
+      DJANGO_LOGGING__loggers__django.template__level: "INFO"
+      #DJANGO_LOGGING__loggers__django.template__handlers: '["console"]'
+      DJANGO_LOGGING__loggers__django.template__propagate: true
+      DJANGO_LOGGING__loggers__django.db.backends__level: "INFO"
+      #DJANGO_LOGGING__loggers__django.db.backends__handlers: '["console"]'
+      DJANGO_LOGGING__loggers__django.db.backends__propagate: true
+      DJANGO_LOGGING__loggers__mozilla_django_oidc__level: "INFO"
+      #DJANGO_LOGGING__loggers__mozilla_django_oidc__handlers: '["console"]'
+      DJANGO_LOGGING__loggers__mozilla_django_oidc__propagate: true
+      DJANGO_LOGGING__loggers__openid_user_management.models.has_perm__level: "INFO"
+      #DJANGO_LOGGING__loggers__openid_user_management.models.has_perm__handlers: '["console"]'
+      DJANGO_LOGGING__loggers__openid_user_management.models.has_perm__propagate: true
+      DJANGO_LOGGING__formatters__simple__format: "[{asctime}] {levelname: <10} | {name: <32}: {message}"
+      DJANGO_LOGGING__formatters__simple__style: "{"
+      DJANGO_LOGGING__handlers__console__class: "logging.StreamHandler"
+      DJANGO_LOGGING__handlers__console__formatter: "simple"
+      DJANGO_LOGGING__handlers__console__stream: "ext://sys.stderr"
+      DJANGO_LOGGING__handlers__console__level: "DEBUG"
+      PROMETHEUS_MULTIPROC_DIR: /app/prometheus_multiproc
+      NGINX_PROXY_HOST: ${NGINX_PROXY_HOST:?Set NGINX_PROXY_HOST to the host and port of the public endpoint of the backend, e.g. localhost:8000 when debugging}
+    expose:
+      - "8000"
+    restart: no
+
+  nginx:
+    build:
+      context: .
+      target: nginx
+      args:
+        NGINX_PROXY_HOST: ${NGINX_PROXY_HOST:?Set NGINX_PROXY_HOST to the host and port of the public endpoint of the backend, e.g. localhost:8000 when debugging}
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-80}:80"
+    depends_on:
+      - backend
+    restart: no
+
+  grafana:
+    image: grafana/grafana:latest
+    ports: [ ]
+    # - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/:/etc/grafana/provisioning/:ro
+    environment:
+      GF_SERVER_ROOT_URL: "http://127.0.0.1:8000/grafana"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER}
+    restart: no
+
+  loki:
+    image: grafana/loki:latest
+    # This loki has no authentication.
+    # NEVER EXPOSE ITS PORTS
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      #- loki_data:/data/loki/
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: no
+
+  alloy:
+    image: grafana/alloy:latest
+    # This alloy has no authentication.
+    # NEVER EXPOSE ITS PORTS
+    #ports:
+    #  - 127.0.0.1:12345:12345
+    #  - 127.0.0.1:4317:4317
+    #  - 127.0.0.1:4318:4318
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ./confs
+        target: /etc/alloy/confs
+        read_only: true
+      - type: bind
+        source: /
+        target: /rootfs
+        read_only: true
+      - type: bind
+        source: /var/run
+        target: /var/run
+        read_only: true
+      - type: bind
+        source: /var/log
+        target: /var/log
+        read_only: true
+      - type: bind
+        source: /sys
+        target: /sys
+        read_only: true
+      - type: bind
+        source: /var/lib/docker/
+        target: /var/lib/docker/
+        read_only: true
+      - type: bind
+        source: /run/udev/data
+        target: /run/udev/data
+        read_only: true
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    depends_on:
+      - loki
+      - prometheus
+    restart: no
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-remote-write-receiver'
+    # This prometheus has no authentication.
+    # NEVER EXPOSE ITS PORTS
+    ports: #[]
+      - 127.0.0.1:9090:9090
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: no
+
+volumes:
+  db-data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
