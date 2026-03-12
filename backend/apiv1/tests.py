@@ -11,7 +11,6 @@ from django.test import TestCase
 
 from apiv1.management.commands.import_ical import parse_calendar_data
 from apiv1.models import (
-    Event,
     Proposal,
     ProposalArea,
     ProposalLanguage,
@@ -24,9 +23,18 @@ from apiv1.models import (
 
 class ProposalModelTests(TestCase):
     def setUp(self):
-        self.submission_type = SubmissionType.objects.create(code='workshop', label='Workshop')
-        self.language = ProposalLanguage.objects.create(code='en', label='English')
-        self.area = ProposalArea.objects.create(code='metal', label='Metal Workshop')
+        self.submission_type, _ = SubmissionType.objects.get_or_create(
+            code='workshop',
+            defaults={'label': 'Workshop'},
+        )
+        self.language, _ = ProposalLanguage.objects.get_or_create(
+            code='en',
+            defaults={'label': 'English'},
+        )
+        self.area, _ = ProposalArea.objects.get_or_create(
+            code='metal',
+            defaults={'label': 'Metal Workshop'},
+        )
 
     def _create_proposal(self, **overrides):
         payload = {
@@ -38,7 +46,8 @@ class ProposalModelTests(TestCase):
             'description': 'B' * 120,
             'occurrence_count': 1,
             'photo': SimpleUploadedFile('proposal.png', b'img', content_type='image/png'),
-            'duration_minutes': 120,
+            'duration_days': 1,
+            'duration_time_per_day': '02:00',
             'max_participants': 10,
             'material_cost_eur': '3.50',
             'preferred_dates': '2026-05-10 10:00, 2026-05-24 10:00',
@@ -48,7 +57,7 @@ class ProposalModelTests(TestCase):
 
     def test_event_ownership_and_editors_stay_auth_based(self):
         user_model = get_user_model()
-        self.assertIs(Event._meta.get_field('owner').remote_field.model, user_model)
+        self.assertIs(Proposal._meta.get_field('owner').remote_field.model, user_model)
         self.assertIs(Proposal._meta.get_field('editors').remote_field.model, user_model)
 
     def test_speaker_biography_min_length_is_validated(self):
