@@ -28,16 +28,21 @@ Usage in a test file::
 
 from __future__ import annotations
 
+import contextlib
+import functools
 import logging
 import os
 import re
 import shutil
 import subprocess
+import textwrap
 from pathlib import Path
 
+import playwright.sync_api
 from django.conf import settings
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import override_settings
+from icecream import ic
 
 logger = logging.getLogger(__name__)
 
@@ -275,3 +280,24 @@ class ViteStaticLiveServerTestCase(StaticLiveServerTestCase):
         ))
 
         super().setUpClass()
+
+@contextlib.contextmanager
+def print_aria_on_timeout(page : playwright.sync_api.Page):
+    """Context manager to print ARIA snapshots on timeout exceptions.
+
+    Use this to wrap any block of code where a Playwright timeout might occur
+    and you want to capture the current state of the page for debugging::
+
+        with print_aria_on_timeout():
+            page.click("button#submit")
+            page.wait_for_selector("#result")
+
+    If a TimeoutError is raised inside the block, the context manager will
+    catch it, print the current ARIA snapshot (if available), and re-raise
+    the exception so the test still fails as expected.
+    """
+    try:
+        yield
+    except playwright.sync_api.TimeoutError as e:
+        logger.error(f"Unexpected page after error {e!r} looks like this:\n{textwrap.indent(page.locator("body").aria_snapshot(), prefix='    ')}")
+        raise
