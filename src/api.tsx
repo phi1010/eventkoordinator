@@ -41,8 +41,12 @@ export async function initializeCsrfToken(): Promise<string> {
 
 // Get the current CSRF token (or fetch it if not yet initialized)
 export async function getCsrfToken(): Promise<string> {
-  if (!csrfToken) {
-    csrfToken = getCsrfTokenFromCookie() || (await initializeCsrfToken())
+  // Django can rotate CSRF (for example on login), so prefer current cookie.
+  const tokenFromCookie = getCsrfTokenFromCookie()
+  if (tokenFromCookie) {
+    csrfToken = tokenFromCookie
+  } else if (!csrfToken) {
+    csrfToken = await initializeCsrfToken()
   }
   return csrfToken || ''
 }
@@ -355,6 +359,9 @@ export async function login(username: string, password: string): Promise<User> {
     const errorData = data as unknown as AuthError
     throw new Error(errorData?.error || `Login failed: ${response.statusText}`)
   }
+
+  // Ensure subsequent state-changing requests use the post-login CSRF token.
+  csrfToken = getCsrfTokenFromCookie() || (await initializeCsrfToken())
 
   return data as unknown as User
 }
