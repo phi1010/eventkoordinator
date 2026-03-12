@@ -197,6 +197,9 @@ SECURE_CSP = {
     "script-src": [
         "'self'",
         "https://cdn.jsdelivr.net",
-    ],  #  "'unsafe-inline'" removed, might be required for ninja OpenAPI docs, but should be avoided if possible. If required, consider adding it only for the docs URL.
+        # Hash for the inline script injected by @vitejs/plugin-react
+        # (React refresh preamble).  Using a hash is safer than 'unsafe-inline'.
+        "'sha256-ieoeWczDHkReVBsRBqaal5AFMlBtNjMzgwKvLqi/tSU='",
+    ],
     "style-src": ["'self'", "https://cdn.jsdelivr.net"],
 }

@@ -15,10 +15,11 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.views.generic import RedirectView
 
 import apiv1.api
+from project.spa_views import SpaFallbackView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -26,4 +27,7 @@ urlpatterns = [
     path("api/v1/", apiv1.api.api.urls),
     path("oidc/", include("mozilla_django_oidc.urls")),
     path("", include("django_prometheus.urls")),
+    # SPA catch-all: any URL not matched above is handled by React-Router.
+    # Must be last so it never shadows the real API or admin routes.
+    re_path(r"^.*$", SpaFallbackView.as_view(), name="spa-fallback"),
 ]
