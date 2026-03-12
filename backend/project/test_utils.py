@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -83,8 +84,9 @@ def _git_repo_root(path: Path) -> Path:
 class SnapshotMixin:
     """Mixin that writes snapshot files and compares them against git HEAD.
 
-    The snapshot file is derived from ``self.id()`` so it automatically
-    includes class name, method name, and any ``subTest`` parameters.
+    The snapshot file is derived from ``self.id()`` and, when called from
+    inside ``subTest(...)``, includes a sanitized subTest suffix so each case
+    writes to a distinct file.
 
     Usage::
 
@@ -94,14 +96,38 @@ class SnapshotMixin:
                 self.assert_snapshot(content)
     """
 
+    @staticmethod
+    def _sanitize_snapshot_fragment(fragment: str) -> str:
+        """Convert a free-form subTest description into a safe filename part."""
+        return re.sub(r"[^A-Za-z0-9._-]+", "_", fragment).strip("_")
+
+    def _snapshot_id(self) -> str:
+        """Return a stable id for snapshots, including active subTest context."""
+        base_id = self.id()
+        subtest = getattr(self, "_subtest", None)
+        if subtest is None:
+            return base_id
+
+        # unittest._SubTest.id() starts with the parent test id and then a
+        # human-readable subTest description, e.g. "...test_x (role='staff')".
+        subtest_id = subtest.id()
+        if not subtest_id.startswith(base_id):
+            return base_id
+
+        suffix = subtest_id[len(base_id):].strip()
+        safe_suffix = self._sanitize_snapshot_fragment(suffix)
+        if not safe_suffix:
+            return base_id
+        return f"{base_id}__{safe_suffix}"
+
     def _snapshot_path(self) -> Path:
         """Return the snapshot file path derived from the test id.
 
-        Files are placed in ``backend/test_aria_snapshots/`` and named
-        after ``self.id()`` (e.g.
-        ``project.tests.SpaAriaSnapshotTests.test_homepage.aria.txt``).
+        Files are placed in ``backend/test_aria_snapshots/`` and named after
+        ``self.id()``. When called inside ``subTest(...)`` the name also
+        includes a sanitized subTest suffix to keep each case unique.
         """
-        filename = f"{self.id()}.aria.txt"
+        filename = f"{self._snapshot_id()}.aria.txt"
         return SNAPSHOT_DIR / filename
 
     def assert_snapshot(self, content: str) -> None:
@@ -249,4 +275,3 @@ class ViteStaticLiveServerTestCase(StaticLiveServerTestCase):
         ))
 
         super().setUpClass()
-

@@ -4,7 +4,7 @@
   - link "Django administration":
     - /url: /admin/
   - text: Welcome,
-  - strong: adminuser
+  - strong: adminuser_superuser
   - text: .
   - link "View site":
     - /url: /
