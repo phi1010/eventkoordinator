@@ -41,6 +41,108 @@ from django.test import override_settings
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Snapshot helpers
+# ---------------------------------------------------------------------------
+
+# Two levels above backend/ → repo root, then into backend/test_aria_snapshots
+_BACKEND_DIR: Path = Path(__file__).resolve().parents[1]
+SNAPSHOT_DIR: Path = _BACKEND_DIR / "test_aria_snapshots"
+
+
+def _git_show_committed(path: Path) -> str | None:
+    """Return the content of *path* as last committed in git, or ``None``.
+
+    Returns ``None`` when the file is untracked, not yet committed, or
+    git is unavailable.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "show", f"HEAD:{path.relative_to(_git_repo_root(path))}"],
+            capture_output=True,
+            text=True,
+            cwd=path.parent,
+            check=True,
+        )
+        return result.stdout
+    except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
+        return None
+
+
+def _git_repo_root(path: Path) -> Path:
+    """Return the root of the git repository containing *path*."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        cwd=path.parent,
+        check=True,
+    )
+    return Path(result.stdout.strip())
+
+
+class SnapshotMixin:
+    """Mixin that writes snapshot files and compares them against git HEAD.
+
+    The snapshot file is derived from ``self.id()`` so it automatically
+    includes class name, method name, and any ``subTest`` parameters.
+
+    Usage::
+
+        class MyTest(SnapshotMixin, SomeTestCase):
+            def test_something(self):
+                content = capture_something()
+                self.assert_snapshot(content)
+    """
+
+    def _snapshot_path(self) -> Path:
+        """Return the snapshot file path derived from the test id.
+
+        Files are placed in ``backend/test_aria_snapshots/`` and named
+        after ``self.id()`` (e.g.
+        ``project.tests.SpaAriaSnapshotTests.test_homepage.aria.txt``).
+        """
+        filename = f"{self.id()}.aria.txt"
+        return SNAPSHOT_DIR / filename
+
+    def assert_snapshot(self, content: str) -> None:
+        """Write *content* to the snapshot file and compare with git HEAD.
+
+        The snapshot is always written to disk (so it can be committed).
+        If the file already existed in git and the new content differs,
+        the test fails with a unified diff showing the changes.
+
+        A brand-new snapshot (not yet tracked by git) never causes a
+        failure — the developer is expected to review and commit it.
+        """
+        SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+
+        out = self._snapshot_path()
+        out.write_text(content, encoding="utf-8")
+        logger.debug("Snapshot written to %s", out)
+
+        committed = _git_show_committed(out)
+        if committed is None:
+            # File is new / untracked — nothing to compare against.
+            logger.info("New snapshot %s — commit it to establish a baseline.", out.name)
+            return
+
+        if content != committed:
+            import difflib
+
+            diff = difflib.unified_diff(
+                committed.splitlines(keepends=True),
+                content.splitlines(keepends=True),
+                fromfile=f"a/{out.name}  (committed)",
+                tofile=f"b/{out.name}  (current)",
+            )
+            patch = "".join(diff)
+            self.fail(
+                f"Snapshot {out.name} differs from the committed version.\n"
+                f"Run the test with --update-snapshots or commit the new "
+                f"file to accept the change.\n\n{patch}"
+            )
+
+# ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
 
