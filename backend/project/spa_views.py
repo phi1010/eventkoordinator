@@ -12,7 +12,14 @@ import posixpath
 from pathlib import Path
 
 from django.conf import settings
-from django.http import FileResponse, Http404, HttpRequest, HttpResponse
+from django.http import (
+    FileResponse,
+    Http404,
+    HttpRequest,
+    HttpResponse,
+    HttpResponseRedirect,
+    HttpResponseBase,
+)
 from django.views import View
 
 logger = logging.getLogger(__name__)
@@ -27,7 +34,7 @@ _STATIC_ASSET_EXTENSIONS = frozenset((
 
 def _index_html_path() -> Path:
     """Return the absolute path to the built ``index.html``."""
-    return Path(settings.STATIC_ROOT) / "spa" / "index.html"
+    return Path(__file__).parents[2] / "dist" / "index.html"
 
 
 def _looks_like_static_asset(path: str) -> bool:
@@ -51,7 +58,7 @@ class SpaFallbackView(View):
     is obvious during development rather than serving a silent blank page.
     """
 
-    def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:  # noqa: ARG002
+    def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponseBase:  # noqa: ARG002
         # Never serve index.html for what is clearly a static-asset request.
         if _looks_like_static_asset(request.path):
             logger.error(f"Static asset not found: {request.path}")
@@ -60,14 +67,5 @@ class SpaFallbackView(View):
                 "Ensure the Vite build was run with VITE_DJANGO_BASE=1 "
                 "so asset URLs include the /static/spa/ prefix."
             )
-
-        path = _index_html_path()
-        if not path.exists():
-            raise Http404(
-                "SPA index.html not found. "
-                "Run 'npm run build' and copy dist/ into STATIC_ROOT/spa/."
-            )
-        # FileResponse streams the file and sets Content-Type automatically.
-        return FileResponse(path.open("rb"), content_type="text/html")  # type: ignore[return-value]
-
+        return FileResponse(_index_html_path().open("rb"), content_type="text/html")
 

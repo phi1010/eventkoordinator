@@ -10,7 +10,7 @@ export default defineConfig(({ command }) => {
   // print mode
     console.log(`Building for ${djangoBuild ? 'Django' : 'dev server'} mode...`)
   return {
-    base: djangoBuild ? '/static/spa/' : '/',
+    base: djangoBuild ? '/static/' : '/',
     plugins: [react()],
     css: {
       modules: {

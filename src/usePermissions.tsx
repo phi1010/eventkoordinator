@@ -1,31 +1,58 @@
 import { useState, useEffect } from 'react'
 import { getUserPermissions, type UserPermissions } from './api'
 
+const AUTH_CHANGED_EVENT = 'app:auth-changed'
+
+export function notifyAuthChanged() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_CHANGED_EVENT))
+  }
+}
+
 export function usePermissions() {
   const [permissions, setPermissions] = useState<UserPermissions | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let isMounted = true
+
     const loadPermissions = async () => {
+      setLoading(true)
       try {
         const perms = await getUserPermissions()
-        setPermissions(perms)
+        if (isMounted) {
+          setPermissions(perms)
+        }
       } catch (error) {
         console.error('Failed to load permissions:', error)
-        // Set default unauthenticated permissions
-        setPermissions({
-          is_authenticated: false,
-          is_staff: false,
-          is_superuser: false,
-          is_active: false,
-          permissions: [],
-        })
+        if (isMounted) {
+          // Set default unauthenticated permissions
+          setPermissions({
+            is_authenticated: false,
+            is_staff: false,
+            is_superuser: false,
+            is_active: false,
+            permissions: [],
+          })
+        }
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
-    loadPermissions()
+    const handleAuthChanged = () => {
+      void loadPermissions()
+    }
+
+    void loadPermissions()
+    window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
+
+    return () => {
+      isMounted = false
+      window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
+    }
   }, [])
 
   const hasPermission = (permission: string): boolean => {

@@ -129,9 +129,7 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
               role="listitem"
               className={styles.navLink}
               href="/admin/"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Admin panel (opens in new tab)"
+              aria-label="Admin panel"
             >
               Admin
             </a>

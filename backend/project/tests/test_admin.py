@@ -55,7 +55,7 @@ class AdminPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                 # Fill in login credentials
                 username_input = page.locator('input[id="username"]')
                 password_input = page.locator('input[id="password"]')
-                login_button = page.locator('button:has-text("Login")')
+                login_button = page.get_by_role('button', name='Login', exact=True)
 
                 username_input.fill('adminuser')
                 password_input.fill('testpassword123')
@@ -69,17 +69,16 @@ class AdminPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                 logged_in_username = page.locator('text=adminuser')
                 logged_in_username.wait_for(timeout=5000)
 
-                # Check that Admin link is available in navbar
-                admin_link = page.locator('a[href="/admin/"]')
-                assert admin_link.is_visible(), "Admin link should be visible for staff users"
+                page.get_by_label("Admin panel").click()
 
-                # Navigate to admin panel
-                page.goto(f'{self.live_server_url}/admin/')
+                # Navigate to admin panel and verify admin index is shown
+                #page.goto(f'{self.live_server_url}/admin/')
                 page.wait_for_load_state('networkidle')
+                page.get_by_role('heading', name='Site administration').wait_for(timeout=5000)
                 page.wait_for_timeout(500)
 
                 # Get the accessibility snapshot of the admin interface
-                snapshot = page.accessibility.snapshot()
+                snapshot = page.locator("body").aria_snapshot()
 
                 # Use the SnapshotMixin to save and compare snapshot
                 self.assert_snapshot(snapshot)
@@ -89,4 +88,3 @@ class AdminPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
 
             finally:
                 browser.close()
-

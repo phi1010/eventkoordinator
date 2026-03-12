@@ -6,7 +6,7 @@ import { MainView } from './MainView'
 import { ProposalSelectionPanel } from './SelectionPanel'
 import { SyncDiff } from './SyncDiff'
 import { getCurrentUser, initializeCsrfToken, type User } from './api'
-import { usePermissions } from './usePermissions'
+import { usePermissions, notifyAuthChanged } from './usePermissions'
 import styles from './IndexView.module.css'
 
 export function IndexView() {
@@ -28,10 +28,12 @@ export function IndexView() {
 
   const handleLogin = (authenticatedUser: User) => {
     setUser(authenticatedUser)
+    notifyAuthChanged()
   }
 
   const handleLogout = () => {
     setUser(null)
+    notifyAuthChanged()
   }
 
   return (
