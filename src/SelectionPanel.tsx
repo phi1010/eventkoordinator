@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { searchProposals, createProposal, deleteProposal, checkObjectPermission } from './api'
+import {
+  searchProposals,
+  createProposal,
+  deleteProposal,
+  checkObjectPermission,
+  fetchProposalTransitions,
+} from './api'
 import { usePermissions } from './usePermissions'
 import { ProposalEditor } from './ProposalEditor'
 import styles from './SelectionPanel.module.css'
@@ -165,6 +171,7 @@ export interface ProposalItem extends SelectionItem {
   proposalId: string
   title: string
   submission_type: string
+  workflow_status?: string
 }
 
 interface ProposalSelectionPanelProps {
@@ -186,6 +193,41 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
   const navigate = useNavigate()
   const { proposalId: urlProposalId } = useParams<{ proposalId?: string }>()
 
+  const formatWorkflowStatus = (status?: string) => {
+    if (!status) return 'unknown'
+    return status.replace(/_/g, ' ')
+  }
+
+  const refreshWorkflowStatuses = useCallback(async (proposalItems: ProposalItem[]) => {
+    const realItems = proposalItems.filter((p) => p.proposalId !== '')
+    if (realItems.length === 0) {
+      return
+    }
+
+    const statusEntries = await Promise.all(
+      realItems.map(async (item) => {
+        try {
+          const transitions = await fetchProposalTransitions(item.proposalId)
+          return [item.id, transitions.current_status] as const
+        } catch (statusError) {
+          console.warn(`Failed to load workflow status for proposal ${item.proposalId}:`, statusError)
+          return [item.id, item.workflow_status || 'unknown'] as const
+        }
+      })
+    )
+
+    const statusById = new Map(statusEntries)
+    setProposals((prev) => prev.map((item) => {
+      if (!statusById.has(item.id)) {
+        return item
+      }
+      return {
+        ...item,
+        workflow_status: statusById.get(item.id) || 'unknown',
+      }
+    }))
+  }, [])
+
   // Load proposals helper (used on mount and after saves)
   const loadProposals = useCallback(async () => {
     try {
@@ -196,6 +238,7 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
         proposalId: p.id,
         title: p.title,
         submission_type: p.submission_type,
+        workflow_status: 'unknown',
       }))
 
       if (items.length === 0) {
@@ -209,6 +252,7 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
         setSelectedProposalId('empty')
       } else {
         setProposals(items)
+        void refreshWorkflowStatuses(items)
         // Determine effective selection from URL, falling back to first proposal
         const effectiveProposalId = (urlProposalId && items.some((p) => p.id === urlProposalId))
           ? urlProposalId
@@ -220,7 +264,7 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
     } finally {
       setLoading(false)
     }
-  }, [urlProposalId])
+  }, [refreshWorkflowStatuses, urlProposalId])
 
   useEffect(() => {
     void loadProposals()
@@ -282,6 +326,7 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
         proposalId: String(newProposal.id),
         title: newProposal.title,
         submission_type: newProposal.submission_type,
+        workflow_status: 'draft',
       }
 
       setProposals((prev) => [newItem, ...prev])
@@ -380,9 +425,16 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
   ) : undefined
 
   const renderProposalLabel = (proposal: ProposalItem) => (
-    <div>
-      <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{proposal.title}</div>
-      <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{proposal.submission_type}</div>
+    <div className={styles.proposalLabel}>
+      <div className={styles.proposalLabelHeader}>
+        <span className={styles.proposalTitle}>{proposal.title}</span>
+        {proposal.proposalId !== '' && (
+          <span className={styles.workflowBadge} aria-hidden="true">
+            {formatWorkflowStatus(proposal.workflow_status)}
+          </span>
+        )}
+      </div>
+      <div className={styles.proposalSubmissionType}>{proposal.submission_type}</div>
     </div>
   )
 

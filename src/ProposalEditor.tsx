@@ -175,7 +175,14 @@ function formatRelativeTime(dateValue: string): string {
   return `${years} year${years === 1 ? '' : 's'} ago`
 }
 
-export function ProposalEditor({ proposalId: _proposalId, canEdit = false, canDelete = false, onProposalSave, onDeleteProposal, onRequestNavigation }: ProposalEditorProps) {
+export function ProposalEditor({
+  proposalId: _proposalId,
+  canEdit = false,
+  canDelete = false,
+  onProposalSave,
+  onDeleteProposal,
+  onRequestNavigation,
+}: ProposalEditorProps) {
   const navigate = useNavigate()
   const { canView, canAdd, loading: permissionsLoading } = usePermissions()
   const [formData, setFormData] = useState<ProposalFormData>(DEFAULT_FORM_DATA)
