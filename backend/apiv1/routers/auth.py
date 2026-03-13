@@ -53,9 +53,8 @@ def logout(request):
         return 401, ErrorOut(error="Not authenticated")
 
 
-@router.post("/csrf", auth=None)
+@router.get("/csrf", auth=None)
 @ensure_csrf_cookie
-@csrf_exempt
 def get_csrf_token(request):
     """Get CSRF token for the session"""
     return HttpResponse()
