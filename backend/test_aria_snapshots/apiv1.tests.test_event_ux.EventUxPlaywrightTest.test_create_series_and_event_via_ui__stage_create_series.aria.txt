@@ -19,60 +19,12 @@
       - heading "Events" [level=2]
       - button "Create new event"
       - listbox "Events":
-        - option "General Information"
-        - option "New Series Session <localized-datetime> draft" [selected]
+        - option "General Information" [selected]
     - main "Events content":
       - heading "New Series" [level=1]
-      - heading "Edit Event" [level=2]
-      - paragraph: New Series Session
-      - heading "Event Details" [level=3]
-      - form "Edit event details":
-        - text: Name
-        - textbox "Name": New Series Session
-        - text: Start Time
-        - textbox "Start Time": <iso-datetime>
-        - text: End Time
-        - textbox "End Time": <iso-datetime>
-        - text: Tag
-        - textbox "Tag":
-          - /placeholder: e.g., workshop, keynote, break
-          - text: draft
-        - checkbox "Span full days"
-        - text: Span full days
-        - paragraph: When checked, the event spans continuously over midnight (e.g. Mon 08:00 → Tue 16:00 shows as one block). When unchecked, multi-day events are split into daily blocks using the same daily start/end hours (e.g. Mon <time-range> and Tue <time-range>).
+      - form "Edit series":
+        - text: Series Name
+        - textbox "Series Name": New Series
+        - text: Description
+        - textbox "Description"
         - button "Save Changes" [disabled]
-      - heading "Pick Time in Calendar" [level=3]
-      - paragraph: Displayed in local time. Stored in UTC. Drag on the calendar to update start and end.
-      - button "Previous week": ‹
-      - text: <week-range>
-      - button "Next week": ›
-      - text: "New events for:"
-      - combobox "New events for:":
-        - option "Event Schedule" [selected]
-      - text: Event Schedule
-      - grid:
-        - text: <week-days> <hour-grid>
-        - button "New Series Session (internal-calendar), <time-range>": New Series Session (internal-calendar)
-        - button "New Series Session, <time-range>": New Series Session
-      - heading "Synchronization Status" [level=3]
-      - heading "pretalx" [level=4]
-      - text: "✓ Up to date Last synced: <localized-datetime>"
-      - button "Push or update event to pretalx": Push/Update
-      - button "View differences for pretalx": View Diff
-      - heading "pretix" [level=4]
-      - text: "⚠ Differs Last synced: <localized-datetime>"
-      - button "Push or update event to pretix": Push/Update
-      - button "View differences for pretix": View Diff
-      - heading "Stadt Erlangen Kalender" [level=4]
-      - text: ⊘ No entry
-      - button "Push or update event to Stadt Erlangen Kalender": Push/Update
-      - button "View differences for Stadt Erlangen Kalender": View Diff
-      - heading "nextcloud calendar" [level=4]
-      - text: "⚠ Differs Last synced: <localized-datetime> Error: Connection timeout"
-      - button "Push or update event to nextcloud calendar": Push/Update
-      - button "View differences for nextcloud calendar": View Diff
-      - heading "Wordpress calendar" [level=4]
-      - text: "✓ Up to date Last synced: <localized-datetime>"
-      - button "Push or update event to Wordpress calendar": Push/Update
-      - button "View differences for Wordpress calendar": View Diff
-      - paragraph: Changes to this event will be synchronized across all platforms.

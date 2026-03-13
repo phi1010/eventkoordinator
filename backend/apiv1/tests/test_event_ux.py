@@ -401,6 +401,18 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         logger.debug("Waiting for Series listbox to reflect new series")
                         series_listbox = page.get_by_role("listbox", name="Series")
                         series_listbox.wait_for(timeout=500)
+
+                        logger.debug("Waiting for Events listbox and General Information tab")
+                        events_listbox = page.get_by_role("listbox", name="Events")
+                        events_listbox.wait_for(timeout=500)
+                        events_listbox.get_by_text("General Information").wait_for(
+                            timeout=500
+                        )
+                        logger.debug("Waiting for series general editor to be visible")
+                        page.get_by_role("form", name="Edit series").wait_for(
+                            timeout=500
+                        )
+
                         page.locator("body").screenshot(
                             path=self._snapshot_path().with_suffix(".create_series.png")
                         )

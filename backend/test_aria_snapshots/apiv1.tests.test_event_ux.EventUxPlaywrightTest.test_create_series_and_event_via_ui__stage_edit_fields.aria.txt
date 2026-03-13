@@ -20,7 +20,6 @@
       - button "Create new event"
       - listbox "Events":
         - option "General Information"
-        - option "New Series Session <localized-datetime> draft"
         - option "New Event <localized-datetime>" [selected]
     - main "Events content":
       - heading "New Series" [level=1]
@@ -54,7 +53,6 @@
       - text: Event Schedule
       - grid:
         - text: <week-days> <hour-grid>
-        - button "New Series Session (internal-calendar), <time-range>": New Series Session (internal-calendar)
         - button "New Event (internal-calendar), <time-range>": New Event (internal-calendar)
         - button "My New Workshop, <time-range>": My New Workshop
       - heading "Synchronization Status" [level=3]

@@ -181,12 +181,7 @@ export function MainView() {
     try {
       const newSeries = await createSeries()
       setSeries((prev) => [...prev, toSeriesItem(newSeries)])
-      const firstEvent = newSeries.events[0]
-      if (firstEvent) {
-        navigate(`/coordinator/${newSeries.id}/${firstEvent.id}`)
-      } else {
-        navigate(`/coordinator/${newSeries.id}`)
-      }
+      navigate(`/coordinator/${newSeries.id}`)
     } catch (err) {
       console.error('Failed to create series:', err)
     }
@@ -458,19 +453,14 @@ function CoordinatorInnerView({
       )
     }
 
-    if (s.events.length === 0) {
-      return (
-        <div className={styles.placeholderText}>
-          <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>No events yet</p>
-          <p>Click the "Create new event" button to get started</p>
-        </div>
-      )
-    }
+    const effectiveSelectedEventId = eventItems.some((event) => event.id === selectedEventId)
+      ? selectedEventId
+      : 'general'
 
     return (
       <SelectionPanel<EventItem>
         items={eventItems}
-        selectedItemId={selectedEventId}
+        selectedItemId={effectiveSelectedEventId}
         onSelectionChange={onEventChange}
         onBeforeSelectionChange={handleBeforeEventChange}
         renderItemLabel={renderEventLabel}

@@ -20,7 +20,6 @@
       - button "Create new event"
       - listbox "Events":
         - option "General Information"
-        - option "New Series Session <localized-datetime> draft"
         - option "My New Workshop <localized-datetime> workshop" [selected]
     - main "Events content":
       - heading "New Series" [level=1]
@@ -55,7 +54,6 @@
         - text: <week-days> <hour-grid>
         - button "My New Workshop (internal-calendar), <time-range>": My New Workshop (internal-calendar)
         - button "My New Workshop, <time-range>": My New Workshop
-        - button "New Series Session (internal-calendar), <time-range>": New Series Session (internal-calendar)
       - heading "Synchronization Status" [level=3]
       - heading "pretalx" [level=4]
       - text: "✓ Up to date Last synced: <localized-datetime>"

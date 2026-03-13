@@ -55,10 +55,8 @@ def get_series(request) -> list[SeriesListItem]:
 @router.post("/create", response={201: Series, 401: ErrorOut, 403: ErrorOut})
 @api_permission_required((apiv1, "add", SeriesModel))
 def create_series(request, payload: CreateSeriesIn) -> tuple[int, Series]:
-    """Create a new series with an initial event"""
+    """Create a new series without creating an initial event."""
     series_id = uuid4()
-    event_id = uuid4()
-    now = django.utils.timezone.now().replace(second=0, microsecond=0)
 
     # Create series in database
     series_model = SeriesModel.objects.create(
@@ -67,15 +65,6 @@ def create_series(request, payload: CreateSeriesIn) -> tuple[int, Series]:
         description=payload.description,
     )
 
-    # Create initial event
-    EventModel.objects.create(
-        id=event_id,
-        series=series_model,
-        name=(payload.name or "New Series") + " Session",
-        start_time=now,
-        end_time=now + timedelta(hours=1),
-        tag="draft",
-    )
 
     return 201, model_series_to_schema(series_model)
 
