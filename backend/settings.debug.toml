@@ -29,6 +29,8 @@ SECRET_KEY = "DEBUG_SECRET_KEY"
 
 DEBUG = true
 
+PLAYWRIGHT_HEADLESS = false
+
 [DATABASES.default]
 ENGINE = "django_prometheus.db.backends.postgresql"
 NAME = "db"

@@ -167,6 +167,10 @@ LOGOUT_REDIRECT_URL = "/"
 LOGIN_URL = "/oidc/authenticate/"
 OIDC_USERNAME_ALGO = "openid_user_management.auth.generate_username"
 
+# Whether Playwright browsers run headless.  True by default; set to False
+# in debug/development to see the browser window during test runs.
+PLAYWRIGHT_HEADLESS = True
+
 MEDIA_ROOT = BASE_DIR / "media"
 # MEDIA_URL = "media/"
 

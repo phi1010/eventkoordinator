@@ -14,6 +14,7 @@ from apiv1.models.basedata import ProposalArea, ProposalLanguage, SubmissionType
 from project.test_utils import (
     SnapshotMixin,
     ViteStaticLiveServerTestCase,
+    playwright_launch_options,
     print_aria_on_timeout,
 )
 
@@ -97,7 +98,7 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
 
     def test_create_save_submit_proposal(self) -> None:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=False)
+            browser = playwright.chromium.launch(**playwright_launch_options())
             page = browser.new_page()
             try:
                 with print_aria_on_timeout(page):
