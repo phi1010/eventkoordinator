@@ -1,0 +1,75 @@
+- navigation "Main navigation":
+  - link "Event Coordinator – go to home":
+    - /url: /
+    - heading "Event Coordinator" [level=1]
+  - list:
+    - listitem: Proposal Editor
+  - button "User menu": proposalux-user6120118
+- main:
+  - complementary "Proposals":
+    - heading "Proposals" [level=2]
+    - button "Create New Proposal"
+    - listbox "Proposals":
+      - option [selected]
+  - main "Proposals content":
+    - heading "Proposal Editor" [level=1]
+    - form "Proposal editor":
+      - group:
+        - text: General Information Title (max 30 characters)
+        - textbox "Title (max 30 characters)"
+        - text: 0/30 Submission Type
+        - combobox "Submission Type":
+          - option "-- Select submission type --" [selected]
+          - option "Workshop"
+          - option "Open activity"
+        - text: "Workshop: Fixed booking, fee required, providers receive a remuneration; Open offer: No booking or fee required; takes place in the main building. Area (optional)"
+        - combobox "Area (optional)":
+          - option "-- Select an area --" [selected]
+          - option "Woodworking"
+          - option "Holzwerkstatt"
+          - option "Printing Workshop"
+          - option "Color Workshop"
+          - option "Open Groundfloor (Main Building)"
+          - option "Tinkering Workshop and Bio Lab"
+          - option "Prototyping Workshop and Electronics"
+          - option "Textil Workshop"
+          - option "Metal Workshop"
+          - option "Community Kitchen"
+        - text: Language
+        - combobox "Language":
+          - option "-- Select language --" [selected]
+          - option "Deutsch"
+          - option "English"
+        - text: Abstract (50-250 characters)
+        - textbox "Abstract (50-250 characters)"
+        - text: This will be published on our website in the program overview. (50–250 characters) 0/250 Description (50-1000 characters)
+        - textbox "Description (50-1000 characters)"
+        - text: This will be published on our website in the detailed description. Please include goal, prerequisites and whether participants take something home. (50–1000 characters) 0/1000 Internal Notes (optional)
+        - textbox "Internal Notes (optional)"
+        - text: Internal notes are not public. Mention equipment needs (e.g., laptops, projector, laser cutter). Number of Days
+        - spinbutton "Number of Days": "1"
+        - text: Number of days for the event (minimum 1). Time per Day (HH:MM or minutes)
+        - textbox "Time per Day (HH:MM or minutes)":
+          - /placeholder: HH:MM
+          - text: 00:00
+        - text: "Time per day in HH:MM format. Product of days and time should be greater than zero. (Example: 08:30 for 8 hours 30 minutes) How often would you offer this event?"
+        - spinbutton "How often would you offer this event?": "0"
+      - group: Additional Information
+      - group: About Yourself
+      - button "Save Proposal" [disabled]
+    - heading "Submission Checklist" [level=3]
+    - list:
+      - listitem: ⚠ Title (max 30 characters)
+      - listitem: ⚠ Abstract (50-250 characters)
+      - listitem: ⚠ Description (50-1000 characters)
+      - listitem: ⚠ Duration set
+      - listitem: ⚠ Max participants set
+      - listitem: ⚠ Occurrence count set
+      - listitem: ⚠ Preferred dates specified
+      - listitem: ⚠ Language selected
+      - listitem: ⚠ Submission type selected
+      - listitem: ⚠ Workshop area selected
+      - listitem: ⚠ At least one speaker added
+      - listitem: ✓ All speakers have biography
+    - group: Edit history last changed just now
+    - button "Submit proposal" [disabled]

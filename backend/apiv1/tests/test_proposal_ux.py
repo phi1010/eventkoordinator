@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
     """Covers create -> save -> submit proposal flow with stage snapshots."""
 
-    vite_force_rebuild = False
+    vite_force_rebuild = True
 
     def setUp(self) -> None:
         super().setUp()
@@ -112,6 +112,8 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                     page.get_by_role("button", name="Create New Proposal").click()
                     page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
 
+                    page.wait_for_load_state("networkidle")
+
                     with self.subTest(stage="create"):
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
@@ -135,17 +137,20 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         self._log_field_step("Number of Days")
                         page.get_by_label("Number of Days").fill("1")
                         self._log_field_step("Time per Day")
-                        page.get_by_label("Time per Day").fill("02:00")
+                        page.get_by_label("Time per Day (HH:MM or minutes)").fill("02:00")
                         self._log_field_step("How often")
-                        page.get_by_label("How often").fill("1")
+                        page.get_by_label("How often would you offer this event?").fill("1")
 
                         self._log_field_step("Additional Information")
-                        page.get_by_label("Additional Information").click()
+                        page.locator("summary", has_text="Additional Information").click()
 
                         self._log_field_step("max participants")
-                        page.get_by_label("Max Participants").fill("10")
+                        page.get_by_label("Max. Number of Participants").fill("10")
                         self._log_field_step("preferred dates")
-                        page.get_by_label("Preferred Dates").fill("2026-08-10 to 2026-08-11")
+                        page.get_by_label("Preferred Date and Alternatives").fill("2026-08-10 to 2026-08-11")
+
+                        self._log_field_step("About Yourself")
+                        page.locator("summary", has_text="About Yourself").click()
 
                         self._log_field_step("speaker email")
                         page.get_by_label("Email (required):").fill("speaker@example.com")

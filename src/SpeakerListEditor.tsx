@@ -23,6 +23,10 @@ interface EditingSpeaker {
   use_gravatar: boolean
 }
 
+function getSpeakerFieldId(prefix: string, speakerId: string, fieldName: string) {
+  return `${prefix}-${speakerId}-${fieldName}`
+}
+
 export function SpeakerListEditor({
   proposalId,
   speakers,
@@ -138,10 +142,14 @@ export function SpeakerListEditor({
                 // Edit Mode
                 <div key={speaker.id} className={styles.editCard}>
                   <div style={{ marginBottom: '0.75rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
+                    <label
+                      htmlFor={getSpeakerFieldId('edit-speaker', speaker.id, 'email')}
+                      style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}
+                    >
                       Email:
                     </label>
                     <input
+                      id={getSpeakerFieldId('edit-speaker', speaker.id, 'email')}
                       type="email"
                       value={editingSpeaker.email}
                       onChange={(e) =>
@@ -153,10 +161,14 @@ export function SpeakerListEditor({
                   </div>
 
                   <div style={{ marginBottom: '0.75rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
+                    <label
+                      htmlFor={getSpeakerFieldId('edit-speaker', speaker.id, 'display-name')}
+                      style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}
+                    >
                       Display Name:
                     </label>
                     <input
+                      id={getSpeakerFieldId('edit-speaker', speaker.id, 'display-name')}
                       type="text"
                       value={editingSpeaker.display_name}
                       onChange={(e) =>
@@ -171,10 +183,14 @@ export function SpeakerListEditor({
                   </div>
 
                   <div style={{ marginBottom: '0.75rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
+                    <label
+                      htmlFor={getSpeakerFieldId('edit-speaker', speaker.id, 'biography')}
+                      style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}
+                    >
                       Biography:
                     </label>
                     <textarea
+                      id={getSpeakerFieldId('edit-speaker', speaker.id, 'biography')}
                       value={editingSpeaker.biography}
                       onChange={(e) =>
                         setEditingSpeaker({ ...editingSpeaker, biography: e.target.value })
@@ -189,8 +205,12 @@ export function SpeakerListEditor({
                     </small>
                   </div>
 
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                  <label
+                    htmlFor={getSpeakerFieldId('edit-speaker', speaker.id, 'use-gravatar')}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}
+                  >
                     <input
+                      id={getSpeakerFieldId('edit-speaker', speaker.id, 'use-gravatar')}
                       type="checkbox"
                       checked={editingSpeaker.use_gravatar}
                       onChange={(e) =>
@@ -303,10 +323,11 @@ export function SpeakerListEditor({
           </h4>
 
           <div style={{ marginBottom: '0.75rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
+            <label htmlFor="new-speaker-email" style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
               Email (required):
             </label>
             <input
+              id="new-speaker-email"
               type="email"
               value={newSpeaker.email || ''}
               onChange={(e) => setNewSpeaker({ ...newSpeaker, email: e.target.value })}
@@ -319,10 +340,11 @@ export function SpeakerListEditor({
           </div>
 
           <div style={{ marginBottom: '0.75rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
+            <label htmlFor="new-speaker-display-name" style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
               Display Name:
             </label>
             <input
+              id="new-speaker-display-name"
               type="text"
               value={newSpeaker.display_name || ''}
               onChange={(e) => setNewSpeaker({ ...newSpeaker, display_name: e.target.value })}
@@ -335,10 +357,11 @@ export function SpeakerListEditor({
           </div>
 
           <div style={{ marginBottom: '0.75rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
+            <label htmlFor="new-speaker-biography" style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
               Biography:
             </label>
             <textarea
+              id="new-speaker-biography"
               value={newSpeaker.biography || ''}
               onChange={(e) => setNewSpeaker({ ...newSpeaker, biography: e.target.value })}
               disabled={disabled || isSaving}
@@ -351,8 +374,12 @@ export function SpeakerListEditor({
             </small>
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', fontSize: '0.9rem' }}>
+          <label
+            htmlFor="new-speaker-use-gravatar"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', fontSize: '0.9rem' }}
+          >
             <input
+              id="new-speaker-use-gravatar"
               type="checkbox"
               checked={newSpeaker.use_gravatar || false}
               onChange={(e) => setNewSpeaker({ ...newSpeaker, use_gravatar: e.target.checked })}

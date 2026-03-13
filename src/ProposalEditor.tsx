@@ -51,8 +51,6 @@ interface ProposalEditorProps {
   onRequestNavigation?: (confirmFn: () => Promise<boolean>) => void
 }
 
-type SectionName = 'general' | 'additional' | 'profile'
-
 const DEFAULT_FORM_DATA: ProposalFormData = {
   title: '',
   submission_type: '',
@@ -143,8 +141,6 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [expandedSection, setExpandedSection] = useState<SectionName>('general')
-  const [historyExpanded, setHistoryExpanded] = useState(false)
   const [checklist, setChecklist] = useState<Record<string, ProposalChecklistItem>>({})
   const [checklistLoading, setChecklistLoading] = useState(false)
   const [history, setHistory] = useState<ProposalHistoryEntry[]>([])
@@ -442,18 +438,15 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
 
       <form className={styles.form} aria-label="Proposal editor">
         {/* General Section */}
-        <fieldset className={styles.fieldset}>
-          <legend
-            className={styles.legend}
-            onClick={() => setExpandedSection(expandedSection === 'general' ? 'additional' : 'general')}
-            style={{ cursor: 'pointer' }}
-            aria-expanded={expandedSection === 'general'}
-          >
-            <span aria-hidden="true">{expandedSection === 'general' ? '▼' : '▶'}</span>{' '}General Information
-          </legend>
+        <details
+          className={styles.fieldset}
+          name="proposal-editor-sections" open={true}
+        >
+          <summary className={styles.legend}>
+            <span className={styles.summaryContent}>General Information</span>
+          </summary>
 
-          {expandedSection === 'general' && (
-            <>
+          <div className={styles.detailsContent}>
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-title" className={styles.label}>
                   Title (max 30 characters)
@@ -680,23 +673,19 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
                   required
                 />
               </div>
-            </>
-          )}
-        </fieldset>
+          </div>
+        </details>
 
         {/* Additional Information Section */}
-        <fieldset className={styles.fieldset}>
-          <legend
-            className={styles.legend}
-            onClick={() => setExpandedSection(expandedSection === 'additional' ? 'profile' : 'additional')}
-            style={{ cursor: 'pointer' }}
-            aria-expanded={expandedSection === 'additional'}
-          >
-            <span aria-hidden="true">{expandedSection === 'additional' ? '▼' : '▶'}</span>{' '}Additional Information
-          </legend>
+        <details
+          className={styles.fieldset}
+          name="proposal-editor-sections"
+        >
+          <summary className={styles.legend}>
+            <span className={styles.summaryContent}>Additional Information</span>
+          </summary>
 
-          {expandedSection === 'additional' && (
-            <>
+          <div className={styles.detailsContent}>
               <div className={styles.formGroup}>
                 <label className={styles.label}>
                   <input
@@ -766,23 +755,19 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
                   Please enter specific dates and times that work for you.
                 </small>
               </div>
-            </>
-          )}
-        </fieldset>
+          </div>
+        </details>
 
         {/* Profile Section */}
-        <fieldset className={styles.fieldset}>
-          <legend
-            className={styles.legend}
-            onClick={() => setExpandedSection(expandedSection === 'profile' ? 'general' : 'profile')}
-            style={{ cursor: 'pointer' }}
-            aria-expanded={expandedSection === 'profile'}
-          >
-            <span aria-hidden="true">{expandedSection === 'profile' ? '▼' : '▶'}</span>{' '}About Yourself
-          </legend>
+        <details
+          className={styles.fieldset}
+          name="proposal-editor-sections"
+        >
+          <summary className={styles.legend}>
+            <span className={styles.summaryContent}>About Yourself</span>
+          </summary>
 
-          {expandedSection === 'profile' && (
-            <>
+          <div className={styles.detailsContent}>
               <div className={styles.formGroup}>
                 <label className={styles.label}>
                   <input
@@ -927,9 +912,8 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
                   disabled={isSaving || !_proposalId || !_proposalId.trim() || !canEdit}
                 />
               </div>
-            </>
-          )}
-        </fieldset>
+          </div>
+        </details>
 
         {error && <div className={styles.error} role="alert">{error}</div>}
 
@@ -990,21 +974,20 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
 
       {/* History Display - Moved to bottom */}
       {_proposalId && _proposalId.trim() && (
-        <fieldset className={styles.fieldset} style={{ marginTop: '2rem' }}>
-          <legend
-            className={styles.legend}
-            onClick={() => setHistoryExpanded((prev) => !prev)}
-            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem' }}
-            aria-expanded={historyExpanded}
-          >
-            <span aria-hidden="true">{historyExpanded ? '▼' : '▶'}</span>{' '}Edit history
-            <span className={styles.historyBadge}>
-              {historyBadge}
+        <details
+          className={styles.fieldset}
+          style={{ marginTop: '2rem' }}
+        >
+          <summary className={`${styles.legend} ${styles.historySummary}`}>
+            <span className={`${styles.summaryContent} ${styles.historySummary}`}>
+              <span>Edit history</span>
+              <span className={styles.historyBadge}>
+                {historyBadge}
+              </span>
             </span>
-          </legend>
+          </summary>
 
-          {historyExpanded && (
-            <div style={{ marginTop: '0.25rem' }}>
+          <div className={styles.detailsContent} style={{ marginTop: '0.25rem' }}>
               {historyLoading ? (
                 <p className={styles.historyMuted}>Loading history...</p>
               ) : history.length === 0 ? (
@@ -1088,9 +1071,8 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
                   ))}
                 </ul>
               )}
-            </div>
-          )}
-        </fieldset>
+          </div>
+        </details>
       )}
 
       {/* Transition Buttons - Below history */}

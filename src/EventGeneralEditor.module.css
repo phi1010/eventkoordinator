@@ -242,6 +242,29 @@
   font-weight: 600;
   padding: 0 0.5rem;
   font-size: 1rem;
+  cursor: pointer;
+}
+
+.summaryContent {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend:focus-visible {
+  outline: 2px solid #2196f3;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.detailsContent {
+  margin-top: 0.75rem;
+}
+
+.historySummary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .historyBadge {
@@ -252,6 +275,7 @@
   font-size: 0.75rem;
   font-weight: 500;
   white-space: nowrap;
+  margin-left: auto;
 }
 
 .historyMuted {
@@ -334,6 +358,10 @@
 
   .legend {
     color: #e0e0e0;
+  }
+
+  .legend:focus-visible {
+    outline-color: #90b0f0;
   }
 
   .historyBadge {
