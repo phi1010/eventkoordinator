@@ -135,6 +135,50 @@ class SnapshotMixin:
         filename = f"{self._snapshot_id()}.aria.txt"
         return SNAPSHOT_DIR / filename
 
+    @staticmethod
+    def _normalize_snapshot_for_compare(content: str) -> str:
+        """Replace volatile datetime strings with stable placeholders."""
+        normalized = re.sub(
+            r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?\b",
+            "<iso-datetime>",
+            content,
+        )
+        # Normalize labels like "09:31-10:31" and "09:31–10:31".
+        normalized = re.sub(
+            r"\b\d{2}:\d{2}[\u2013-]\d{2}:\d{2}\b",
+            "<time-range>",
+            normalized,
+        )
+        # Normalize week headers like "Mon 9 Mar Tue 10 Mar ...".
+        normalized = re.sub(
+            r"\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{1,2}\s+[A-Za-z]{3}(?:\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{1,2}\s+[A-Za-z]{3})+\b",
+            "<week-days>",
+            normalized,
+        )
+        # Normalize full hour grid labels such as "00:00 01:00 ... 23:00".
+        normalized = re.sub(
+            r"\b00:00(?:\s+\d{2}:\d{2}){23}\b",
+            "<hour-grid>",
+            normalized,
+        )
+        # Normalize sync timestamps while preserving the rest of the status text.
+        normalized = re.sub(
+            r"Last synced:\s*\d{1,2}\.\s+\S+,\s*\d{2}:\d{2}",
+            "Last synced: <localized-datetime>",
+            normalized,
+        )
+        normalized = re.sub(
+            r"\b\d{1,2}\.\s+\S+,\s+\d{2}:\d{2}\b",
+            "<localized-datetime>",
+            normalized,
+        )
+        normalized = re.sub(
+            r"\b\d{1,2}\.\s+\S+\s+\d{2,4}\s+\d{2}:\d{2}\b",
+            "<localized-datetime>",
+            normalized,
+        )
+        return normalized
+
     def assert_snapshot(self, content: str) -> None:
         """Write *content* to the snapshot file and compare with git HEAD.
 
@@ -148,7 +192,8 @@ class SnapshotMixin:
         SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
         out = self._snapshot_path()
-        out.write_text(content, encoding="utf-8")
+        normalized_content = self._normalize_snapshot_for_compare(content)
+        out.write_text(normalized_content, encoding="utf-8")
         logger.debug("Snapshot written to %s", out)
 
         committed = _git_show_committed(out)
@@ -157,14 +202,16 @@ class SnapshotMixin:
             logger.info("New snapshot %s — commit it to establish a baseline.", out.name)
             return
 
-        if content != committed:
+        normalized_committed = self._normalize_snapshot_for_compare(committed)
+
+        if normalized_content != normalized_committed:
             import difflib
 
             diff = difflib.unified_diff(
-                committed.splitlines(keepends=True),
-                content.splitlines(keepends=True),
-                fromfile=f"a/{out.name}  (committed)",
-                tofile=f"b/{out.name}  (current)",
+                normalized_committed.splitlines(keepends=True),
+                normalized_content.splitlines(keepends=True),
+                fromfile=f"a/{out.name}  (committed, normalized)",
+                tofile=f"b/{out.name}  (current, normalized)",
             )
             patch = "".join(diff)
             self.fail(
