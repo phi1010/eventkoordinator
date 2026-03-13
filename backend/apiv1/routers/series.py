@@ -12,6 +12,7 @@ from ninja import Router
 
 import apiv1
 from apiv1.api_utils import (
+    api_permission_mandatory,
     api_permission_required,
 )
 from apiv1.helpers import (
@@ -148,6 +149,26 @@ def update_series(request, series_id: str, payload: UpdateSeriesIn) -> tuple[int
     return 200, model_series_to_schema(series_model)
 
 
+@router.delete(
+    "/{series_id}", response={204: None, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut}
+)
+@api_permission_mandatory()
+def delete_series(request, series_id: str) -> tuple[int, None] | tuple[int, ErrorOut]:
+    """Delete a series and all of its events."""
+    try:
+        series_model = SeriesModel.objects.get(id=series_id)
+    except SeriesModel.DoesNotExist:
+        return 404, ErrorOut(error="Series not found")
+
+    if not request.user.has_perm(
+        f"{apiv1.__name__}.delete_{SeriesModel.__name__.lower()}", series_model
+    ):
+        return 401, ErrorOut(error="Unauthorized to delete this series")
+
+    series_model.delete()
+    return 204, None
+
+
 @router.put(
     "/{series_id}/events/{event_id}",
     response={200: Event, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
@@ -193,6 +214,28 @@ def update_event(request, series_id: str, event_id: str, payload: UpdateEventIn)
 
     event_model.save()
     return 200, model_event_to_schema(event_model)
+
+
+@router.delete(
+    "/{series_id}/events/{event_id}",
+    response={204: None, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+)
+@api_permission_mandatory()
+def delete_event(request, series_id: str, event_id: str) -> tuple[int, None] | tuple[int, ErrorOut]:
+    """Delete an event from a series."""
+    try:
+        series_model = SeriesModel.objects.get(id=series_id)
+        event_model = EventModel.objects.get(id=event_id, series=series_model)
+    except (SeriesModel.DoesNotExist, EventModel.DoesNotExist):
+        return 404, ErrorOut(error="Series or event not found")
+
+    if not request.user.has_perm(
+        f"{apiv1.__name__}.delete_{EventModel.__name__.lower()}", event_model
+    ):
+        return 401, ErrorOut(error="Unauthorized to delete this event")
+
+    event_model.delete()
+    return 204, None
 
 
 

@@ -377,6 +377,29 @@ def update_proposal(
     )
 
 
+@router.delete(
+    "/{proposal_id}",
+    response={204: None, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+)
+@api_permission_mandatory()
+def delete_proposal(
+    request, proposal_id: uuid.UUID
+) -> tuple[int, None] | tuple[int, ErrorOut]:
+    """Delete a proposal when the current user has object-level permission."""
+    try:
+        proposal = ProposalModel.objects.get(pk=proposal_id)
+    except ProposalModel.DoesNotExist:
+        return 404, ErrorOut(error="Proposal not found")
+
+    if not request.user.has_perm(
+        f"{apiv1.__name__}.delete_{ProposalModel.__name__.lower()}", proposal
+    ):
+        return 401, ErrorOut(error="Unauthorized to delete this proposal")
+
+    proposal.delete()
+    return 204, None
+
+
 @router.get(
     "/{proposal_id}/checklist",
     response={200: dict, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},

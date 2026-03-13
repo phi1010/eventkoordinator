@@ -515,6 +515,20 @@ export async function updateSeries(request: UpdateSeriesRequest): Promise<Series
   return toFrontendSeriesItem(data as unknown as ApiSeries)
 }
 
+export async function deleteSeries(seriesId: string): Promise<void> {
+  const { error, response } = await client.DELETE('/api/v1/series/{series_id}', {
+    params: {
+      path: {
+        series_id: seriesId,
+      },
+    },
+  })
+
+  if (error || !response.ok) {
+    throw new Error(error?.error || `Failed to delete series: ${response.statusText}`)
+  }
+}
+
 export interface UpdateEventRequest {
   seriesId: string
   eventId: string
@@ -551,6 +565,21 @@ export async function updateEvent(request: UpdateEventRequest): Promise<Event> {
   }
 
   return toFrontendEvent(data as unknown as ApiEvent)
+}
+
+export async function deleteEvent(seriesId: string, eventId: string): Promise<void> {
+  const { error, response } = await client.DELETE('/api/v1/series/{series_id}/events/{event_id}', {
+    params: {
+      path: {
+        series_id: seriesId,
+        event_id: eventId,
+      },
+    },
+  })
+
+  if (error || !response.ok) {
+    throw new Error(error?.error || `Failed to delete event: ${response.statusText}`)
+  }
 }
 
 export async function searchUsers(query: string = ''): Promise<UserBasic[]> {
@@ -781,6 +810,20 @@ export async function createProposal(formData?: {
   }
 
   return data as unknown as ProposalSummary
+}
+
+export async function deleteProposal(proposalId: string): Promise<void> {
+  const { error, response } = await client.DELETE('/api/v1/proposals/{proposal_id}', {
+    params: {
+      path: {
+        proposal_id: proposalId,
+      },
+    },
+  })
+
+  if (error || !response.ok) {
+    throw new Error(error?.error || `Failed to delete proposal: ${response.statusText}`)
+  }
 }
 
 export interface ProposalChecklistItem {

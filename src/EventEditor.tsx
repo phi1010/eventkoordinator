@@ -17,8 +17,10 @@ interface EventEditorProps {
   series: Series
   event: Event
   onEventUpdate: (updated: Event) => void
+  onDeleteEvent?: () => Promise<void>
   onRequestNavigation?: (confirmFn: () => Promise<boolean>) => void
   disabled?: boolean
+  canDelete?: boolean
 }
 
 function parseLocalDateTimeInput(value: string): Date | null {
@@ -38,7 +40,7 @@ function toLocalDateTimeInputValue(date: Date | string): string {
   return `${y}-${m}-${day}T${hh}:${mm}`
 }
 
-export function EventEditor({ series, event, onEventUpdate, onRequestNavigation, disabled = false }: EventEditorProps) {
+export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onRequestNavigation, disabled = false, canDelete = false }: EventEditorProps) {
   const navigate = useNavigate()
   const [syncInfo, setSyncInfo] = useState<EventSyncInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -53,6 +55,7 @@ export function EventEditor({ series, event, onEventUpdate, onRequestNavigation,
   const [useFullDays, setUseFullDays] = useState(event.useFullDays || false)
   const [changedFields, setChangedFields] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
 
   // Calendar reference state – calendarRange is driven solely by WeekViewCombined's onWeekRangeChange
@@ -308,6 +311,25 @@ export function EventEditor({ series, event, onEventUpdate, onRequestNavigation,
     setEditError(null)
   }
 
+  const handleDelete = async () => {
+    const confirmed = window.confirm(
+      `Delete the event "${event.name}"? This cannot be undone.`
+    )
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      setEditError(null)
+      await onDeleteEvent?.()
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to delete event')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const handlePush = async (platform: string) => {
     try {
       setPushing(platform)
@@ -455,7 +477,7 @@ export function EventEditor({ series, event, onEventUpdate, onRequestNavigation,
             <button
               type="button"
               onClick={handleSaveChanges}
-              disabled={!hasChanges || isSaving}
+              disabled={!hasChanges || isSaving || isDeleting}
               className={styles.saveButton}
               aria-busy={isSaving}
             >
@@ -469,6 +491,16 @@ export function EventEditor({ series, event, onEventUpdate, onRequestNavigation,
                 className={styles.cancelButton}
               >
                 Cancel
+              </button>
+            )}
+            {canDelete && onDeleteEvent && (
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                disabled={isSaving || isDeleting}
+                className={styles.deleteButton}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Event'}
               </button>
             )}
           </div>

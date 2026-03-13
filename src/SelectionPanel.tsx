@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { searchProposals, createProposal, checkObjectPermission } from './api'
+import { searchProposals, createProposal, deleteProposal, checkObjectPermission } from './api'
 import { usePermissions } from './usePermissions'
 import { ProposalEditor } from './ProposalEditor'
 import styles from './SelectionPanel.module.css'
@@ -180,6 +180,7 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
   const [createError, setCreateError] = useState<string | null>(null)
   const [canViewSelectedProposal, setCanViewSelectedProposal] = useState<boolean | null>(null)
   const [canEditSelectedProposal, setCanEditSelectedProposal] = useState<boolean | null>(null)
+  const [canDeleteSelectedProposal, setCanDeleteSelectedProposal] = useState(false)
   const [editorPermissionLoading, setEditorPermissionLoading] = useState(false)
   const { canAdd, canBrowse } = usePermissions()
   const navigate = useNavigate()
@@ -231,12 +232,13 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
       if (!selected || !selected.proposalId) {
         setCanViewSelectedProposal(true)
         setCanEditSelectedProposal(true)
+        setCanDeleteSelectedProposal(false)
         return
       }
 
       setEditorPermissionLoading(true)
       try {
-        const [canView, canChange] = await Promise.all([
+        const [canView, canChange, canDelete] = await Promise.all([
           checkObjectPermission({
             app: 'apiv1',
             action: 'view',
@@ -249,9 +251,16 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
             object_type: 'proposal',
             object_id: selected.proposalId,
           }),
+          checkObjectPermission({
+            app: 'apiv1',
+            action: 'delete',
+            object_type: 'proposal',
+            object_id: selected.proposalId,
+          }),
         ])
         setCanViewSelectedProposal(canView)
         setCanEditSelectedProposal(canChange)
+        setCanDeleteSelectedProposal(canDelete)
       } finally {
         setEditorPermissionLoading(false)
       }
@@ -292,6 +301,30 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
 
   const handleProposalChange = (newProposalId: string) => {
     navigate(`/proposal-editor/${newProposalId}`)
+  }
+
+  const handleProposalDelete = async (proposalId: string) => {
+    await deleteProposal(proposalId)
+
+    const remainingProposals = proposals.filter((proposal) => proposal.proposalId !== proposalId)
+
+    if (remainingProposals.length === 0) {
+      const emptyItem: ProposalItem = {
+        id: 'empty',
+        proposalId: '',
+        title: 'No proposals yet',
+        submission_type: 'Click "Create New Proposal" to get started',
+      }
+      setProposals([emptyItem])
+      setSelectedProposalId('empty')
+      navigate('/proposal-editor')
+      return
+    }
+
+    const nextProposalId = remainingProposals[0].id
+    setProposals(remainingProposals)
+    setSelectedProposalId(nextProposalId)
+    navigate(`/proposal-editor/${nextProposalId}`)
   }
 
   if (loading) {
@@ -379,6 +412,8 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
             key={proposal.proposalId}
             proposalId={proposal.proposalId}
             canEdit={canEditSelectedProposal ?? false}
+            canDelete={canDeleteSelectedProposal}
+            onDeleteProposal={handleProposalDelete}
             onProposalSave={async (formData) => {
               // Refresh proposal list after a proposal is saved
               try {

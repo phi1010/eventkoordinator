@@ -6,15 +6,18 @@ import styles from './EventGeneralEditor.module.css'
 interface SeriesGeneralEditorProps {
   series: Series
   onSeriesUpdate: (updated: Series) => void
+  onDeleteSeries: () => Promise<void>
   onRequestNavigation?: (confirmFn: () => Promise<boolean>) => void
   disabled?: boolean
+  canDelete?: boolean
 }
 
-export function SeriesGeneralEditor({ series, onSeriesUpdate, onRequestNavigation, disabled = false }: SeriesGeneralEditorProps) {
+export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, onRequestNavigation, disabled = false, canDelete = false }: SeriesGeneralEditorProps) {
   const [name, setName] = useState(series.name)
   const [description, setDescription] = useState(series.description || '')
   const [changedFields, setChangedFields] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Track unsaved changes
@@ -87,6 +90,25 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onRequestNavigatio
     setError(null)
   }
 
+  const handleDelete = async () => {
+    const confirmed = window.confirm(
+      `Delete the series "${series.name}"? This will also delete all events in the series.`
+    )
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      setError(null)
+      await onDeleteSeries()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete series')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <div className={styles.container}>
       <form className={styles.form} aria-label="Edit series">
@@ -126,7 +148,7 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onRequestNavigatio
           <button
             type="button"
             onClick={handleSave}
-            disabled={!hasChanges || isSaving}
+            disabled={!hasChanges || isSaving || isDeleting}
             className={styles.saveButton}
             aria-busy={isSaving}
           >
@@ -140,6 +162,16 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onRequestNavigatio
               className={styles.cancelButton}
             >
               Cancel
+            </button>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              disabled={isSaving || isDeleting}
+              className={styles.deleteButton}
+            >
+              {isDeleting ? 'Deleting...' : 'Delete Series'}
             </button>
           )}
         </div>

@@ -3,7 +3,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { SelectionPanel, type SelectionItem } from './SelectionPanel'
 import { ContentRenderer } from './ContentRenderer'
 import { Tooltip } from './Tooltip'
-import { loadSeriesFromAPI, fetchSeriesById, createSeries, createEvent, type Event, type Series, type Event as ApiEvent, type Series as ApiSeries } from './api'
+import { loadSeriesFromAPI, fetchSeriesById, createSeries, createEvent, deleteSeries, deleteEvent, type Event, type Series, type Event as ApiEvent, type Series as ApiSeries } from './api'
 import { usePermissions } from './usePermissions'
 import styles from './MainView.module.css'
 
@@ -235,6 +235,37 @@ export function MainView() {
     }))
   }
 
+  const handleSeriesDelete = async (seriesId: string) => {
+    await deleteSeries(seriesId)
+
+    const remainingSeries = series.filter((item) => item.id !== seriesId)
+    setSeries(remainingSeries)
+
+    if (remainingSeries.length === 0) {
+      navigate('/coordinator')
+      return
+    }
+
+    navigate(`/coordinator/${remainingSeries[0].id}`)
+  }
+
+  const handleEventDelete = async (seriesId: string, eventId: string) => {
+    await deleteEvent(seriesId, eventId)
+
+    setSeries((prev) => prev.map((item) => {
+      if (item.id !== seriesId) {
+        return item
+      }
+
+      return {
+        ...item,
+        events: item.events.filter((event) => event.id !== eventId),
+      }
+    }))
+
+    navigate(`/coordinator/${seriesId}`)
+  }
+
   return (
     <CoordinatorInnerView
       series={series}
@@ -246,6 +277,8 @@ export function MainView() {
       onCreateEvent={handleCreateEvent}
       onSeriesUpdate={handleSeriesUpdate}
       onEventUpdate={handleEventUpdate}
+      onSeriesDelete={handleSeriesDelete}
+      onEventDelete={handleEventDelete}
       canAddSeries={canAdd('series')}
       canAddEvent={canAdd('event')}
       canChangeSeries={canChange('series')}
@@ -264,6 +297,8 @@ interface CoordinatorInnerViewProps {
   onCreateEvent: () => Promise<void>
   onSeriesUpdate: (updated: Series) => void
   onEventUpdate: (seriesId: string, updated: Event) => void
+  onSeriesDelete: (seriesId: string) => Promise<void>
+  onEventDelete: (seriesId: string, eventId: string) => Promise<void>
   canAddSeries: boolean
   canAddEvent: boolean
   canChangeSeries: boolean
@@ -280,6 +315,8 @@ function CoordinatorInnerView({
   onCreateEvent,
   onSeriesUpdate,
   onEventUpdate,
+  onSeriesDelete,
+  onEventDelete,
   canAddSeries,
   canAddEvent,
   canChangeSeries,
@@ -450,6 +487,8 @@ function CoordinatorInnerView({
               selectedEventId={event.id}
               onSeriesUpdate={onSeriesUpdate}
               onEventUpdate={(updated) => onEventUpdate(s.id, updated)}
+              onSeriesDelete={onSeriesDelete}
+              onEventDelete={onEventDelete}
               onRequestNavigation={handleRequestNavigation}
               canEditSeries={canChangeSeries}
               canEditEvent={canChangeEvent}

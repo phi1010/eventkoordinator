@@ -24,6 +24,7 @@ import {
   type Series,
 } from './api'
 import { useUnsavedChanges } from './useUnsavedChanges'
+import { usePermissions } from './usePermissions'
 import { SpeakerListEditor } from './SpeakerListEditor'
 import { ProposalTransitionButtons } from './ProposalTransitionButtons'
 import styles from './EventGeneralEditor.module.css'
@@ -55,7 +56,9 @@ interface ProposalFormData {
 interface ProposalEditorProps {
   proposalId?: string
   canEdit?: boolean
+  canDelete?: boolean
   onProposalSave?: (formData: ProposalFormData) => void
+  onDeleteProposal?: (proposalId: string) => Promise<void>
   onRequestNavigation?: (confirmFn: () => Promise<boolean>) => void
 }
 
@@ -172,12 +175,14 @@ function formatRelativeTime(dateValue: string): string {
   return `${years} year${years === 1 ? '' : 's'} ago`
 }
 
-export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onProposalSave, onRequestNavigation }: ProposalEditorProps) {
+export function ProposalEditor({ proposalId: _proposalId, canEdit = false, canDelete = false, onProposalSave, onDeleteProposal, onRequestNavigation }: ProposalEditorProps) {
   const navigate = useNavigate()
+  const { canView, canAdd, loading: permissionsLoading } = usePermissions()
   const [formData, setFormData] = useState<ProposalFormData>(DEFAULT_FORM_DATA)
   const [changedFields, setChangedFields] = useState<Set<string>>(new Set())
   const changedFieldsRef = useRef(changedFields)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [checklist, setChecklist] = useState<Record<string, ProposalChecklistItem>>({})
@@ -240,6 +245,29 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
 
     if (resetChangedFields) {
       setChangedFields(new Set())
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!_proposalId || !onDeleteProposal) {
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Delete the proposal "${formData.title || 'Untitled proposal'}"? This cannot be undone.`
+    )
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      setError(null)
+      await onDeleteProposal(_proposalId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete proposal')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -403,6 +431,8 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
   // Track unsaved changes
   const hasChanges = changedFields.size > 0
   const canLinkEvents = Boolean(_proposalId && _proposalId.trim()) && currentStatus === 'accepted'
+  const canShowLinkedEventCreateControls =
+    canLinkEvents && !permissionsLoading && canView('series') && canAdd('event')
   const { confirmNavigation } = useUnsavedChanges(hasChanges)
 
   // Expose confirmation function to parent
@@ -1021,12 +1051,17 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
         {error && <div className={styles.error} role="alert">{error}</div>}
 
         <div className={styles.buttonGroup}>
-          <button type="button" onClick={handleSave} disabled={!hasChanges || isSaving} className={styles.saveButton} aria-busy={isSaving}>
+          <button type="button" onClick={handleSave} disabled={!hasChanges || isSaving || isDeleting} className={styles.saveButton} aria-busy={isSaving}>
             {isSaving ? 'Saving...' : 'Save Proposal'}
           </button>
           {hasChanges && (
-            <button type="button" onClick={handleCancel} disabled={isSaving || !canEdit} className={styles.cancelButton}>
+            <button type="button" onClick={handleCancel} disabled={isSaving || isDeleting || !canEdit} className={styles.cancelButton}>
               Cancel
+            </button>
+          )}
+          {canDelete && _proposalId && onDeleteProposal && (
+            <button type="button" onClick={() => void handleDelete()} disabled={isSaving || isDeleting} className={styles.deleteButton}>
+              {isDeleting ? 'Deleting...' : 'Delete Proposal'}
             </button>
           )}
         </div>
@@ -1260,58 +1295,60 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
                 ))}
               </ul>
             )}
-            <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <div>
-                <label htmlFor="create-event-series-filter" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.3rem' }}>
-                  Series
-                </label>
-                <input
-                  id="create-event-series-filter"
-                  type="text"
-                  placeholder="Filter series..."
-                  value={seriesSearchQuery}
-                  onChange={(e) => {
-                    setSeriesSearchQuery(e.target.value)
-                    setSelectedSeriesId('')
+            {canShowLinkedEventCreateControls && (
+              <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div>
+                  <label htmlFor="create-event-series-filter" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.3rem' }}>
+                    Series
+                  </label>
+                  <input
+                    id="create-event-series-filter"
+                    type="text"
+                    placeholder="Filter series..."
+                    value={seriesSearchQuery}
+                    onChange={(e) => {
+                      setSeriesSearchQuery(e.target.value)
+                      setSelectedSeriesId('')
+                    }}
+                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <select
+                  id="create-event-series-select"
+                  aria-label="Series"
+                  value={selectedSeriesId}
+                  onChange={(e) => setSelectedSeriesId(e.target.value)}
+                  style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '0.9rem' }}
+                >
+                  <option value="">-- Select a series --</option>
+                  {seriesSearchResults.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleCreateEvent}
+                  disabled={!selectedSeriesId || isCreatingEvent}
+                  style={{
+                    padding: '0.5rem 1.2rem',
+                    backgroundColor: '#4caf50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: !selectedSeriesId || isCreatingEvent ? 'not-allowed' : 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.9rem',
+                    opacity: !selectedSeriesId || isCreatingEvent ? 0.6 : 1,
+                    alignSelf: 'flex-start',
                   }}
-                  style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '0.9rem', boxSizing: 'border-box' }}
-                />
+                >
+                  {isCreatingEvent ? 'Creating...' : 'Create New Event'}
+                </button>
+                {createEventError && (
+                  <div style={{ color: '#d32f2f', fontSize: '0.85rem', marginTop: '0.3rem' }}>{createEventError}</div>
+                )}
               </div>
-              <select
-                id="create-event-series-select"
-                aria-label="Series"
-                value={selectedSeriesId}
-                onChange={(e) => setSelectedSeriesId(e.target.value)}
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '0.9rem' }}
-              >
-                <option value="">-- Select a series --</option>
-                {seriesSearchResults.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={handleCreateEvent}
-                disabled={!selectedSeriesId || isCreatingEvent}
-                style={{
-                  padding: '0.5rem 1.2rem',
-                  backgroundColor: '#4caf50',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: !selectedSeriesId || isCreatingEvent ? 'not-allowed' : 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  opacity: !selectedSeriesId || isCreatingEvent ? 0.6 : 1,
-                  alignSelf: 'flex-start',
-                }}
-              >
-                {isCreatingEvent ? 'Creating...' : 'Create New Event'}
-              </button>
-              {createEventError && (
-                <div style={{ color: '#d32f2f', fontSize: '0.85rem', marginTop: '0.3rem' }}>{createEventError}</div>
-              )}
-            </div>
+            )}
           </div>
         </details>
       )}

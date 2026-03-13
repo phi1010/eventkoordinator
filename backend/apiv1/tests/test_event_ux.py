@@ -491,3 +491,61 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
 
             finally:
                 browser.close()
+
+    def test_delete_event_and_series_via_ui(self) -> None:
+        """Delete an event and then its series after accepting browser confirms."""
+        user = get_user_model().objects.get(username=self.username)
+        user.user_permissions.add(
+            *Permission.objects.filter(codename__in=["delete_event", "delete_series"])
+        )
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(**playwright_launch_options())
+            page = browser.new_page()
+            page.set_viewport_size({"width": 1600, "height": 900})
+            try:
+                with print_aria_on_timeout(page):
+                    base_url = self.live_server_url
+                    if callable(base_url):
+                        base_url = base_url()
+
+                    self._login_via_navbar(page, base_url)
+                    self._go_to_coordinator(page, base_url)
+
+                    series_listbox = page.get_by_role("listbox", name="Series")
+                    series_listbox.get_by_text(self.series.name).click()
+                    events_listbox = page.get_by_role("listbox", name="Events")
+                    events_listbox.get_by_text(self.event.name).click()
+                    page.get_by_role("form", name="Edit event details").wait_for(timeout=500)
+
+                    with self.subTest(stage="before_delete_event"):
+                        self.assert_snapshot(page.locator("body").aria_snapshot())
+
+                    with self.subTest(stage="after_delete_event"):
+                        with page.expect_event("dialog") as dialog_info:
+                            page.get_by_role("button", name="Delete Event").click()
+                        dialog = dialog_info.value
+                        self.assertIn("Delete the event", dialog.message)
+                        dialog.accept()
+                        page.wait_for_load_state("networkidle")
+                        page.wait_for_timeout(300)
+                        self.assertEqual(
+                            events_listbox.get_by_text(self.event.name).count(),
+                            0,
+                            "Deleted event is still visible in the events list",
+                        )
+                        self.assert_snapshot(page.locator("body").aria_snapshot())
+
+                    with self.subTest(stage="after_delete_series"):
+                        with page.expect_event("dialog") as dialog_info:
+                            page.get_by_role("button", name="Delete Series").click()
+                        dialog = dialog_info.value
+                        self.assertIn("Delete the series", dialog.message)
+                        dialog.accept()
+                        page.wait_for_load_state("networkidle")
+                        page.wait_for_timeout(300)
+                        page.get_by_text("No series yet").wait_for(timeout=1000)
+                        self.assert_snapshot(page.locator("body").aria_snapshot())
+            finally:
+                browser.close()
+

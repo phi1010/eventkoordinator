@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
-import random
 import re
 
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.models import Permission
 from playwright.sync_api import Page, sync_playwright
 
-from apiv1.models.basedata import ProposalArea, ProposalLanguage, SubmissionType
+from apiv1.models.basedata import Proposal, ProposalArea, ProposalLanguage, SubmissionType
 from project.test_utils import (
     SnapshotMixin,
     ViteStaticLiveServerTestCase,
@@ -213,3 +212,62 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         self.assert_snapshot(page.locator("body").aria_snapshot())
             finally:
                 browser.close()
+
+    def test_delete_proposal_via_ui(self) -> None:
+        user = get_user_model().objects.get(username=self.username)
+        draft_proposal = Proposal.objects.create(
+            title="Delete Me Proposal",
+            submission_type=SubmissionType.objects.get(code="workshop"),
+            area=ProposalArea.objects.get(code="woodworking"),
+            language=ProposalLanguage.objects.get(code="de"),
+            abstract="This draft proposal exists only to exercise delete confirmation in the UI.",
+            description="This draft proposal contains enough detail to satisfy model validation during the delete UX test.",
+            internal_notes="",
+            occurrence_count=1,
+            duration_days=1,
+            duration_time_per_day="02:00",
+            is_basic_course=False,
+            max_participants=8,
+            material_cost_eur="0.00",
+            preferred_dates="2026-09-10",
+            is_regular_member=False,
+            has_building_access=False,
+            owner=user,
+        )
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(**playwright_launch_options())
+            page = browser.new_page()
+            try:
+                with print_aria_on_timeout(page):
+                    base_url = self.live_server_url
+                    if callable(base_url):
+                        base_url = base_url()
+
+                    self._login_via_navbar(page, base_url)
+                    page.get_by_role("button", name="Create a Proposal").click()
+                    page.get_by_role("main", name="Proposals content").wait_for(timeout=5000)
+                    page.get_by_text("Delete Me Proposal", exact=True).click()
+                    page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
+
+                    with self.subTest(stage="before_delete"):
+                        self.assert_snapshot(page.locator("body").aria_snapshot())
+
+                    with self.subTest(stage="after_delete"):
+                        with page.expect_event("dialog") as dialog_info:
+                            page.get_by_role("button", name="Delete Proposal").click()
+                        dialog = dialog_info.value
+                        self.assertIn("Delete the proposal", dialog.message)
+                        dialog.accept()
+                        page.wait_for_load_state("networkidle")
+                        page.wait_for_timeout(300)
+                        page.get_by_text("No proposals yet").wait_for(timeout=1000)
+                        self.assert_snapshot(page.locator("body").aria_snapshot())
+            finally:
+                browser.close()
+
+        self.assertFalse(
+            Proposal.objects.filter(pk=draft_proposal.pk).exists(),
+            "Proposal should be deleted after accepting the confirmation dialog",
+        )
+

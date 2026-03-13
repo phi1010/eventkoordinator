@@ -9,17 +9,20 @@ interface ContentRendererProps {
   selectedEventId: string
   onSeriesUpdate: (updated: Series) => void
   onEventUpdate: (updated: Event) => void
+  onSeriesDelete: (seriesId: string) => Promise<void>
+  onEventDelete: (seriesId: string, eventId: string) => Promise<void>
   onRequestNavigation?: (confirmFn: () => Promise<boolean>) => void
   canEditSeries?: boolean
   canEditEvent?: boolean
 }
 
-export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEventUpdate, onRequestNavigation, canEditSeries = true, canEditEvent = true }: ContentRendererProps) {
+export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEventUpdate, onSeriesDelete, onEventDelete, onRequestNavigation, canEditSeries = true, canEditEvent = true }: ContentRendererProps) {
   const selectedEvent = series.events.find((e) => e.id === selectedEventId)
   const isGeneralInfo = selectedEventId === 'general'
   const confirmNavigationRef = useRef<(() => Promise<boolean>) | null>(null)
   const [canViewSelectedObject, setCanViewSelectedObject] = useState<boolean | null>(null)
   const [canEditSelectedObject, setCanEditSelectedObject] = useState<boolean | null>(null)
+  const [canDeleteSelectedObject, setCanDeleteSelectedObject] = useState(false)
   const [permissionLoading, setPermissionLoading] = useState(false)
 
   useEffect(() => {
@@ -27,7 +30,7 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
       if (isGeneralInfo) {
         setPermissionLoading(true)
         try {
-          const [canView, canChange] = await Promise.all([
+          const [canView, canChange, canDelete] = await Promise.all([
             checkObjectPermission({
               app: 'apiv1',
               action: 'view',
@@ -40,9 +43,16 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
               object_type: 'series',
               object_id: series.id,
             }),
+            checkObjectPermission({
+              app: 'apiv1',
+              action: 'delete',
+              object_type: 'series',
+              object_id: series.id,
+            }),
           ])
           setCanViewSelectedObject(canView)
           setCanEditSelectedObject(canEditSeries && canChange)
+          setCanDeleteSelectedObject(canDelete)
         } finally {
           setPermissionLoading(false)
         }
@@ -52,7 +62,7 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
       if (selectedEvent) {
         setPermissionLoading(true)
         try {
-          const [canView, canChange] = await Promise.all([
+          const [canView, canChange, canDelete] = await Promise.all([
             checkObjectPermission({
               app: 'apiv1',
               action: 'view',
@@ -65,9 +75,16 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
               object_type: 'event',
               object_id: selectedEvent.id,
             }),
+            checkObjectPermission({
+              app: 'apiv1',
+              action: 'delete',
+              object_type: 'event',
+              object_id: selectedEvent.id,
+            }),
           ])
           setCanViewSelectedObject(canView)
           setCanEditSelectedObject(canEditEvent && canChange)
+          setCanDeleteSelectedObject(canDelete)
         } finally {
           setPermissionLoading(false)
         }
@@ -76,6 +93,7 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
 
       setCanViewSelectedObject(null)
       setCanEditSelectedObject(null)
+      setCanDeleteSelectedObject(false)
     }
 
     void checkPermissions()
@@ -100,8 +118,10 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
           <SeriesGeneralEditor
             series={series}
             onSeriesUpdate={onSeriesUpdate}
+            onDeleteSeries={() => onSeriesDelete(series.id)}
             onRequestNavigation={handleRequestNavigation}
             disabled={!canEditSelectedObject}
+            canDelete={canDeleteSelectedObject}
           />
         ) : (
           <div className={styles.placeholder}>
@@ -114,8 +134,10 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
             series={series}
             event={selectedEvent}
             onEventUpdate={onEventUpdate}
+            onDeleteEvent={() => onEventDelete(series.id, selectedEvent.id)}
             onRequestNavigation={handleRequestNavigation}
             disabled={!canEditSelectedObject}
+            canDelete={canDeleteSelectedObject}
           />
         ) : (
           <div className={styles.placeholder}>

@@ -259,7 +259,11 @@ export interface paths {
          */
         put: operations["apiv1_routers_proposals_update_proposal"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete Proposal
+         * @description Delete a proposal when the current user has object-level permission.
+         */
+        delete: operations["apiv1_routers_proposals_delete_proposal"];
         options?: never;
         head?: never;
         patch?: never;
@@ -551,7 +555,11 @@ export interface paths {
          */
         put: operations["apiv1_routers_series_update_series"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete Series
+         * @description Delete a series and all of its events.
+         */
+        delete: operations["apiv1_routers_series_delete_series"];
         options?: never;
         head?: never;
         patch?: never;
@@ -591,7 +599,11 @@ export interface paths {
          */
         put: operations["apiv1_routers_series_update_event"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete Event
+         * @description Delete an event from a series.
+         */
+        delete: operations["apiv1_routers_series_delete_event"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2000,6 +2012,53 @@ export interface operations {
             };
         };
     };
+    apiv1_routers_proposals_delete_proposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     apiv1_routers_proposals_accept_proposal: {
         parameters: {
             query?: never;
@@ -2880,6 +2939,53 @@ export interface operations {
             };
         };
     };
+    apiv1_routers_series_delete_series: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     apiv1_routers_series_create_event: {
         parameters: {
             query?: never;
@@ -2957,6 +3063,54 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Event"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_series_delete_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Unauthorized */
             401: {
