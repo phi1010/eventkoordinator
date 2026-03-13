@@ -36,8 +36,16 @@ jobs:
         env:
           IMAGE_REPO: ${{ steps.meta.outputs.image_repo }}
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          # On manual dispatch always build; age check only applies to scheduled runs.
+          FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           set -euo pipefail
+
+          if [[ "${FORCE_BUILD}" == "true" ]]; then
+            echo "Manual trigger – forcing build."
+            echo "needs_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           image_ref="${IMAGE_REPO}:${IMAGE_TAG}"
           week_seconds=$((7 * 24 * 60 * 60))
