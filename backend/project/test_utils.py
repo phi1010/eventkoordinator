@@ -146,11 +146,17 @@ class SnapshotMixin:
 
     @staticmethod
     def _normalize_snapshot_for_compare(content: str) -> str:
-        """Replace volatile datetime strings with stable placeholders."""
+        """Replace volatile datetime strings and UUIDs with stable placeholders."""
+        # Normalize UUIDs (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).
+        normalized = re.sub(
+            r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
+            "<uuid>",
+            content,
+        )
         normalized = re.sub(
             r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?\b",
             "<iso-datetime>",
-            content,
+            normalized,
         )
         # Normalize labels like "09:31-10:31" and "09:31–10:31".
         normalized = re.sub(
@@ -174,6 +180,12 @@ class SnapshotMixin:
         normalized = re.sub(
             r"Last synced:\s*\d{1,2}\.\s+\S+,\s*\d{2}:\d{2}",
             "Last synced: <localized-datetime>",
+            normalized,
+        )
+        # "14. März 2026, 20:30" – year present, comma before time.
+        normalized = re.sub(
+            r"\b\d{1,2}\.\s+\S+\s+\d{2,4},\s+\d{2}:\d{2}\b",
+            "<localized-datetime>",
             normalized,
         )
         normalized = re.sub(

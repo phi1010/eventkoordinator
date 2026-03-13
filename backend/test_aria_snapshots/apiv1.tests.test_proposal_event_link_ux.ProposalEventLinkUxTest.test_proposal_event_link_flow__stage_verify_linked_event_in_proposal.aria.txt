@@ -67,8 +67,8 @@
       - list:
         - listitem:
           - link "Test Event Link Session":
-            - /url: /proposal/deca20c2-35f6-4208-a946-4c1f60dc9c12/event/fe0ac968-8350-4ab1-a8c0-3d6ab94f0b45
-          - text: "Series: Test Workshop Series 14. März 2026, 20:25 – 14. März 2026, 21:25"
+            - /url: /proposal/<uuid>/event/<uuid>
+          - text: "Series: Test Workshop Series <localized-datetime> – <localized-datetime>"
       - text: Series
       - textbox "Series":
         - /placeholder: Filter series...
