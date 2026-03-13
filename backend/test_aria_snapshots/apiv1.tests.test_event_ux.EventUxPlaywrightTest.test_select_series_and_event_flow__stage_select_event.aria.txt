@@ -43,7 +43,7 @@
       - heading "Pick Time in Calendar" [level=3]
       - paragraph: Displayed in local time. Stored in UTC. Drag on the calendar to update start and end.
       - button "Previous week": ‹
-      - text: Mar 16–22, 2026
+      - text: <week-range>
       - button "Next week": ›
       - text: "New events for:"
       - combobox "New events for:":

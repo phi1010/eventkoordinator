@@ -129,7 +129,6 @@ def search_users(request: HttpRequest, q: str = ""):
 @router.get(
     "/series/search", response={200: list[Series], 401: ErrorOut, 403: ErrorOut}
 )
-@api_permission_required((apiv1, "browse", SeriesModel))
 @api_permission_required((apiv1, "view", SeriesModel))
 def search_series(request, q: str = ""):
     """Search series by name for autocomplete dropdowns."""

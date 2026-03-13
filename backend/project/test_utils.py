@@ -186,6 +186,12 @@ class SnapshotMixin:
             "<localized-datetime>",
             normalized,
         )
+        # Normalize week range labels like "Mar 9–15, 2026" or "Mar 16–22, 2026".
+        normalized = re.sub(
+            r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}[\u2013-]\d{1,2},\s+\d{4}\b",
+            "<week-range>",
+            normalized,
+        )
         return normalized
 
     def assert_snapshot(self, content: str) -> None:

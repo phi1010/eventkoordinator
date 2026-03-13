@@ -210,7 +210,9 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         # Should navigate to the event editor page
                         page.get_by_text("Edit Event").wait_for(timeout=5000)
                         # Should show proposal info on the left
-                        page.get_by_text("Test Event Link").wait_for(timeout=5000)
+                        page.get_by_role(
+                            "heading", name="Test Event Link", exact=True
+                        ).wait_for(timeout=5000)
                         page.get_by_text("Duration Days").wait_for(timeout=5000)
                         self.assert_snapshot(
                             page.locator("body").aria_snapshot()

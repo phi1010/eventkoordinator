@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   fetchProposal,
@@ -14,6 +14,7 @@ import {
   fetchProposalTransitions,
   createEvent,
   searchSeriesAutocomplete,
+  type ProposalDetail,
   type ProposalChecklistItem,
   type ProposalHistoryEntry,
   type ProposalSpeakerOut,
@@ -77,6 +78,35 @@ const DEFAULT_FORM_DATA: ProposalFormData = {
 
   is_regular_member: false,
   has_building_access: false,
+}
+
+function proposalToFormData(data: ProposalDetail): ProposalFormData {
+  return {
+    title: data.title,
+    submission_type: data.submission_type,
+    area: data.area || '',
+    language: data.language || '',
+    abstract: data.abstract,
+    description: data.description,
+    internal_notes: data.internal_notes,
+    occurrence_count: data.occurrence_count,
+    duration_days: data.duration_days,
+    duration_time_per_day: data.duration_time_per_day,
+    is_basic_course: data.is_basic_course,
+    max_participants: data.max_participants,
+    material_cost_eur: data.material_cost_eur,
+    preferred_dates: data.preferred_dates,
+    is_regular_member: data.is_regular_member,
+    has_building_access: data.has_building_access,
+  }
+}
+
+function copyProposalField<K extends keyof ProposalFormData>(
+  target: ProposalFormData,
+  source: ProposalFormData,
+  fieldName: K,
+) {
+  target[fieldName] = source[fieldName]
 }
 
 function pad2(value: number): string {
@@ -146,6 +176,7 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
   const navigate = useNavigate()
   const [formData, setFormData] = useState<ProposalFormData>(DEFAULT_FORM_DATA)
   const [changedFields, setChangedFields] = useState<Set<string>>(new Set())
+  const changedFieldsRef = useRef(changedFields)
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -180,6 +211,38 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
     ? `last changed ${formatRelativeTime(latestHistoryEntry.timestamp)}`
     : 'no recent changes'
 
+  useEffect(() => {
+    changedFieldsRef.current = changedFields
+  }, [changedFields])
+
+  const applyProposalData = (data: ProposalDetail, resetChangedFields: boolean) => {
+    const nextFormData = proposalToFormData(data)
+
+    setFormData((previous) => {
+      if (resetChangedFields || changedFieldsRef.current.size === 0) {
+        return nextFormData
+      }
+
+      const merged: ProposalFormData = { ...previous }
+      for (const fieldName of Object.keys(nextFormData) as Array<keyof ProposalFormData>) {
+        if (!changedFieldsRef.current.has(fieldName)) {
+          copyProposalField(merged, nextFormData, fieldName)
+        }
+      }
+      return merged
+    })
+
+    setOwner(data.owner || null)
+
+    if (resetChangedFields || !changedFieldsRef.current.has('editors')) {
+      setEditors(data.editors || [])
+    }
+
+    if (resetChangedFields) {
+      setChangedFields(new Set())
+    }
+  }
+
   // Load proposal data when proposalId changes
   useEffect(() => {
     if (_proposalId && _proposalId.trim()) {
@@ -188,27 +251,7 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
           setIsLoading(true)
           setError(null)
           const data = await fetchProposal(_proposalId)
-          setFormData({
-            title: data.title,
-            submission_type: data.submission_type,
-            area: data.area || '',
-            language: data.language || '',
-            abstract: data.abstract,
-            description: data.description,
-            internal_notes: data.internal_notes,
-            occurrence_count: data.occurrence_count,
-            duration_days: data.duration_days,
-            duration_time_per_day: data.duration_time_per_day,
-            is_basic_course: data.is_basic_course,
-            max_participants: data.max_participants,
-            material_cost_eur: data.material_cost_eur,
-            preferred_dates: data.preferred_dates,
-            is_regular_member: data.is_regular_member,
-            has_building_access: data.has_building_access,
-          })
-          setOwner(data.owner || null)
-          setEditors(data.editors || [])
-          setChangedFields(new Set())
+          applyProposalData(data, false)
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to load proposal')
           console.error('Failed to load proposal:', err)
@@ -300,6 +343,12 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
 
   // Debounced series search for event creation
   useEffect(() => {
+    if (!_proposalId || !_proposalId.trim() || currentStatus !== 'accepted') {
+      setSeriesSearchResults([])
+      setSelectedSeriesId('')
+      return
+    }
+
     const timer = setTimeout(async () => {
       try {
         const results = await searchSeriesAutocomplete(seriesSearchQuery)
@@ -309,7 +358,7 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [seriesSearchQuery])
+  }, [_proposalId, currentStatus, seriesSearchQuery])
 
   const handleCreateEvent = async () => {
     if (!selectedSeriesId || !_proposalId) return
@@ -353,6 +402,7 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
 
   // Track unsaved changes
   const hasChanges = changedFields.size > 0
+  const canLinkEvents = Boolean(_proposalId && _proposalId.trim()) && currentStatus === 'accepted'
   const { confirmNavigation } = useUnsavedChanges(hasChanges)
 
   // Expose confirmation function to parent
@@ -455,26 +505,7 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
 
       // Reload proposal data to get fresh state from server
       const freshData = await fetchProposal(_proposalId)
-      setFormData({
-        title: freshData.title,
-        submission_type: freshData.submission_type,
-        area: freshData.area || '',
-        language: freshData.language || '',
-        abstract: freshData.abstract,
-        description: freshData.description,
-        internal_notes: freshData.internal_notes,
-        occurrence_count: freshData.occurrence_count,
-        duration_days: freshData.duration_days,
-        duration_time_per_day: freshData.duration_time_per_day,
-        is_basic_course: freshData.is_basic_course,
-        max_participants: freshData.max_participants,
-        material_cost_eur: freshData.material_cost_eur,
-        preferred_dates: freshData.preferred_dates,
-        is_regular_member: freshData.is_regular_member,
-        has_building_access: freshData.has_building_access,
-      })
-      setOwner(freshData.owner || null)
-      setEditors(freshData.editors || [])
+      applyProposalData(freshData, true)
 
       // Reload checklist
       const freshChecklist = await fetchProposalChecklist(_proposalId)
@@ -483,9 +514,6 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
       // Reload speakers
       const freshSpeakers = await fetchProposalSpeakers(_proposalId)
       setSpeakers(freshSpeakers)
-
-      setChangedFields(new Set())
-
       if (onProposalSave) {
         onProposalSave(formData)
       }
@@ -1156,24 +1184,7 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
           proposalId={_proposalId}
           onTransitionSuccess={(updatedProposal) => {
             // Reload form data with updated proposal
-            setFormData({
-              title: updatedProposal.title,
-              submission_type: updatedProposal.submission_type,
-              area: updatedProposal.area || '',
-              language: updatedProposal.language || '',
-              abstract: updatedProposal.abstract,
-              description: updatedProposal.description,
-              internal_notes: updatedProposal.internal_notes,
-              occurrence_count: updatedProposal.occurrence_count,
-              duration_days: updatedProposal.duration_days,
-              duration_time_per_day: updatedProposal.duration_time_per_day,
-              is_basic_course: updatedProposal.is_basic_course,
-              max_participants: updatedProposal.max_participants,
-              material_cost_eur: updatedProposal.material_cost_eur,
-              preferred_dates: updatedProposal.preferred_dates,
-              is_regular_member: updatedProposal.is_regular_member,
-              has_building_access: updatedProposal.has_building_access,
-            })
+            applyProposalData(updatedProposal, true)
             // Reload history to show the status change
             if (_proposalId && _proposalId.trim()) {
               const loadHistory = async () => {
@@ -1199,7 +1210,7 @@ export function ProposalEditor({ proposalId: _proposalId, canEdit = false, onPro
       )}
 
       {/* Linked Events Section */}
-      {_proposalId && _proposalId.trim() && currentStatus === 'accepted' && (
+      {canLinkEvents && (
         <details
           className={styles.fieldset}
           style={{ marginTop: '1.5rem' }}

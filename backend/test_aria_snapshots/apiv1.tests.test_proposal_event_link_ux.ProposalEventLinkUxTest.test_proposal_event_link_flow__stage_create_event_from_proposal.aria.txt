@@ -1,0 +1,74 @@
+- navigation "Main navigation":
+  - link "Event Coordinator – go to home":
+    - /url: /
+    - heading "Event Coordinator" [level=1]
+  - list:
+    - listitem: Coordinator
+    - listitem: Proposal Editor
+  - button "User menu": proposaleventux-user
+- main:
+  - link "← Back to Proposal":
+    - /url: /proposal-editor/fc5f6928-5b9c-46de-9505-ce0d540e4daf
+  - heading "Test Event Link" [level=2]
+  - text: Duration Days 1 Time per Day 02:00 Occurrences 1 Submission Type workshop
+  - heading "Preferred Dates" [level=3]
+  - paragraph: 2026-08-10 to 2026-08-11
+  - heading "Linked Events (1)" [level=3]
+  - list:
+    - listitem:
+      - strong: Test Event Link Session
+      - text: Test Workshop Series 14. März 2026, 17:35 – 14. März 2026, 18:35
+  - text: Series Test Workshop Series
+  - heading "Edit Event" [level=2]
+  - paragraph: Test Event Link Session
+  - heading "Event Details" [level=3]
+  - form "Edit event details":
+    - text: Name
+    - textbox "Name": Test Event Link Session
+    - text: Start Time
+    - textbox "Start Time": <iso-datetime>
+    - text: End Time
+    - textbox "End Time": <iso-datetime>
+    - text: Tag
+    - textbox "Tag":
+      - /placeholder: e.g., workshop, keynote, break
+    - checkbox "Span full days"
+    - text: Span full days
+    - paragraph: When checked, the event spans continuously over midnight (e.g. Mon 08:00 → Tue 16:00 shows as one block). When unchecked, multi-day events are split into daily blocks using the same daily start/end hours (e.g. Mon <time-range> and Tue <time-range>).
+    - button "Save Changes" [disabled]
+  - heading "Pick Time in Calendar" [level=3]
+  - paragraph: Displayed in local time. Stored in UTC. Drag on the calendar to update start and end.
+  - button "Previous week": ‹
+  - text: <week-range>
+  - button "Next week": ›
+  - text: "New events for:"
+  - combobox "New events for:":
+    - option "Event Schedule" [selected]
+  - text: Event Schedule
+  - grid:
+    - text: Mon 9 Mar <hour-grid> Tue 10 Mar <hour-grid> Wed 11 Mar <hour-grid> Thu 12 Mar <hour-grid> Fri 13 Mar <hour-grid> Sat 14 Mar <hour-grid>
+    - button "Test Event Link Session (internal-calendar), <time-range>": Test Event Link Session (internal-calendar)
+    - button "Test Event Link Session, <time-range>": Test Event Link Session
+    - text: Sun 15 Mar <hour-grid>
+  - heading "Synchronization Status" [level=3]
+  - heading "pretalx" [level=4]
+  - text: "✓ Up to date Last synced: <localized-datetime>"
+  - button "Push or update event to pretalx": Push/Update
+  - button "View differences for pretalx": View Diff
+  - heading "pretix" [level=4]
+  - text: "⚠ Differs Last synced: <localized-datetime>"
+  - button "Push or update event to pretix": Push/Update
+  - button "View differences for pretix": View Diff
+  - heading "Stadt Erlangen Kalender" [level=4]
+  - text: ⊘ No entry
+  - button "Push or update event to Stadt Erlangen Kalender": Push/Update
+  - button "View differences for Stadt Erlangen Kalender": View Diff
+  - heading "nextcloud calendar" [level=4]
+  - text: "⚠ Differs Last synced: <localized-datetime> Error: Connection timeout"
+  - button "Push or update event to nextcloud calendar": Push/Update
+  - button "View differences for nextcloud calendar": View Diff
+  - heading "Wordpress calendar" [level=4]
+  - text: "✓ Up to date Last synced: <localized-datetime>"
+  - button "Push or update event to Wordpress calendar": Push/Update
+  - button "View differences for Wordpress calendar": View Diff
+  - paragraph: Changes to this event will be synchronized across all platforms.
