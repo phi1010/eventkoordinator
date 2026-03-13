@@ -43,7 +43,7 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
-@router.get("/flow-chart", response={200: bytes, 401 : ErrorOut, 403: ErrorOut})
+@router.get("/flow-chart", response={200: bytes, 401: ErrorOut, 403: ErrorOut})
 def flow_chart_image(request):
     dot_graph = chart(ProposalFlow.state)
 
@@ -51,7 +51,8 @@ def flow_chart_image(request):
     graph = graphs[0]
     png_data = graph.create(format="svg")
 
-    return HttpResponse(png_data, content_type='image/svg+xml')
+    return HttpResponse(png_data, content_type="image/svg+xml")
+
 
 @router.get(
     "/search", response={200: list[ProposalSummary], 401: ErrorOut, 403: ErrorOut}
@@ -100,7 +101,9 @@ def create_proposal(
             payload.duration_days if payload.duration_days is not None else 1
         )
         duration_time_per_day = (
-            payload.duration_time_per_day if payload.duration_time_per_day is not None else "00:00"
+            payload.duration_time_per_day
+            if payload.duration_time_per_day is not None
+            else "00:00"
         )
         max_participants = (
             payload.max_participants if payload.max_participants is not None else 0
@@ -223,7 +226,13 @@ def get_proposal(
 
 @router.put(
     "/{proposal_id}",
-    response={200: ProposalDetail, 400: ErrorOut, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+    response={
+        200: ProposalDetail,
+        400: ErrorOut,
+        404: ErrorOut,
+        401: ErrorOut,
+        403: ErrorOut,
+    },
 )
 @api_permission_mandatory()
 def update_proposal(
@@ -410,7 +419,7 @@ def get_proposal_history(
     ):
         return 401, ErrorOut(error="Unauthorized to view this proposal")
 
-    safe_days = max(1, days)
+    safe_days = max(1, min(30, days))  # Limit to 1-30 days for safety
     cutoff_date = timezone.now() - timedelta(days=safe_days)
 
     history_records = (
@@ -461,7 +470,9 @@ def get_proposal_history(
             )
             continue
 
-        summary = "Proposal created" if record.history_type == "+" else "Proposal deleted"
+        summary = (
+            "Proposal created" if record.history_type == "+" else "Proposal deleted"
+        )
         entries.append(
             ProposalHistoryEntry(
                 timestamp=record.history_date.isoformat(),
@@ -549,7 +560,9 @@ def _execute_proposal_transition(
 
     # Check if transition is enabled
     if not transition.enabled:
-        return 400, ErrorOut(error=f"Cannot perform this action: {transition.disable_reason}")
+        return 400, ErrorOut(
+            error=f"Cannot perform this action: {transition.disable_reason}"
+        )
 
     # Execute the transition
     try:
@@ -598,7 +611,13 @@ def _execute_proposal_transition(
 
 @router.post(
     "/{proposal_id}/submit",
-    response={200: ProposalDetail, 400: ErrorOut, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+    response={
+        200: ProposalDetail,
+        400: ErrorOut,
+        404: ErrorOut,
+        401: ErrorOut,
+        403: ErrorOut,
+    },
 )
 @api_permission_mandatory()
 def submit_proposal(
@@ -610,7 +629,13 @@ def submit_proposal(
 
 @router.post(
     "/{proposal_id}/accept",
-    response={200: ProposalDetail, 400: ErrorOut, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+    response={
+        200: ProposalDetail,
+        400: ErrorOut,
+        404: ErrorOut,
+        401: ErrorOut,
+        403: ErrorOut,
+    },
 )
 @api_permission_mandatory()
 def accept_proposal(
@@ -622,7 +647,13 @@ def accept_proposal(
 
 @router.post(
     "/{proposal_id}/reject",
-    response={200: ProposalDetail, 400: ErrorOut, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+    response={
+        200: ProposalDetail,
+        400: ErrorOut,
+        404: ErrorOut,
+        401: ErrorOut,
+        403: ErrorOut,
+    },
 )
 @api_permission_mandatory()
 def reject_proposal(
@@ -634,7 +665,13 @@ def reject_proposal(
 
 @router.post(
     "/{proposal_id}/revise",
-    response={200: ProposalDetail, 400: ErrorOut, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+    response={
+        200: ProposalDetail,
+        400: ErrorOut,
+        404: ErrorOut,
+        401: ErrorOut,
+        403: ErrorOut,
+    },
 )
 @api_permission_mandatory()
 def revise_proposal(
@@ -642,4 +679,3 @@ def revise_proposal(
 ) -> tuple[int, ProposalDetail | ErrorOut]:
     """Request revision for a submitted or rejected proposal."""
     return _execute_proposal_transition(request, proposal_id, "revise")
-

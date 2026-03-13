@@ -18,7 +18,10 @@ import logging.config
 from urllib.error import URLError
 from urllib.request import urlopen
 
-from django.conf.global_settings import LOGGING_CONFIG, EMAIL_BACKEND
+from django.conf.global_settings import (
+    LOGGING_CONFIG,
+    EMAIL_BACKEND,
+)
 from jwt import PyJWT
 
 logging.info(f"Loading {__name__}")
@@ -207,3 +210,5 @@ SECURE_CSP = {
     ],
     "style-src": ["'self'", "https://cdn.jsdelivr.net"],
 }
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB limit for file uploads
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024

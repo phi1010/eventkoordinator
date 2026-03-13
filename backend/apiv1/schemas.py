@@ -8,6 +8,7 @@ import uuid
 
 from ninja import Schema
 from typing import Optional, Literal
+from pydantic import Field
 
 
 class UserIn(Schema):
@@ -143,7 +144,7 @@ class ProposalChecklist(Schema):
 
 
 class ProposalCreateIn(Schema):
-    title: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=30)
     submission_type: Optional[str] = None
     area: Optional[str] = None
     language: Optional[str] = None
@@ -162,7 +163,7 @@ class ProposalCreateIn(Schema):
 
 
 class ProposalUpdateIn(Schema):
-    title: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=30)
     submission_type: Optional[str] = None
     area: Optional[str] = None
     language: Optional[str] = None
@@ -236,7 +237,7 @@ class ProposalSpeakerOut(Schema):
 
 # Unified schemas with all optional fields
 class ProposalIn(Schema):
-    title: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=30)
     submission_type: Optional[str] = None
     area: Optional[str] = None
     language: Optional[str] = None

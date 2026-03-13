@@ -51,13 +51,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
          * Get Csrf Token
          * @description Get CSRF token for the session
          */
-        post: operations["apiv1_routers_auth_get_csrf_token"];
+        get: operations["apiv1_routers_auth_get_csrf_token"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -657,28 +657,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/user/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Login User
-         * @description Authenticate a user with username and password.
-         *
-         *     Returns user information if credentials are valid, 401 if authentication fails.
-         */
-        post: operations["openid_user_management_api_login_user"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/user/me": {
         parameters: {
             query?: never;
@@ -813,22 +791,9 @@ export interface paths {
          *     Returns user information if found, 404 if user does not exist.
          */
         get: operations["openid_user_management_api_get_user"];
-        /**
-         * Update User
-         * @description Update a user's profile information.
-         *
-         *     Updates the provided fields. Returns 404 if user not found, 400 if validation fails.
-         */
-        put: operations["openid_user_management_api_update_user"];
+        put?: never;
         post?: never;
-        /**
-         * Delete User
-         * @description Delete a user by UUID.
-         *
-         *     Returns 204 if deletion is successful, 404 if user not found.
-         *     Warning: This operation is permanent.
-         */
-        delete: operations["openid_user_management_api_delete_user"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -915,6 +880,21 @@ export interface components {
              */
             useFullDays: boolean;
         };
+        /** EventSyncInfo */
+        EventSyncInfo: {
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Series Id
+             * Format: uuid
+             */
+            series_id: string;
+            /** Sync Statuses */
+            sync_statuses: components["schemas"]["SyncStatus"][];
+        };
         /** ExternalCalendarEvent */
         ExternalCalendarEvent: {
             /** Endutc */
@@ -949,16 +929,6 @@ export interface components {
              * @default 0
              */
             sort_order: number;
-        };
-        /**
-         * OpenIDUserLogin
-         * @description Schema for user login requests.
-         */
-        OpenIDUserLogin: {
-            /** Password */
-            password: string;
-            /** Username */
-            username: string;
         };
         /**
          * OpenIDUserOut
@@ -1022,28 +992,6 @@ export interface components {
             username: string;
         };
         /**
-         * OpenIDUserUpdate
-         * @description Schema for updating OpenID users.
-         */
-        OpenIDUserUpdate: {
-            /** Email */
-            email?: string | null;
-            /** Is Active */
-            is_active?: boolean | null;
-            /** Locale */
-            locale?: string | null;
-            /** Openid Provider */
-            openid_provider?: string | null;
-            /** Openid Subject */
-            openid_subject?: string | null;
-            /** Phone Number */
-            phone_number?: string | null;
-            /** Picture */
-            picture?: string | null;
-            /** Username */
-            username?: string | null;
-        };
-        /**
          * PermissionIn
          * @description Schema for user permissions request.
          */
@@ -1081,6 +1029,17 @@ export interface components {
             is_superuser: boolean;
             /** Permissions */
             permissions: string[];
+        };
+        /** PropertyDiff */
+        PropertyDiff: {
+            /** File Type */
+            file_type: string;
+            /** Local Value */
+            local_value: string;
+            /** Property Name */
+            property_name: string;
+            /** Remote Value */
+            remote_value: string;
         };
         /** ProposalCreateIn */
         ProposalCreateIn: {
@@ -1343,6 +1302,58 @@ export interface components {
             profile_picture?: string | null;
             /** Use Gravatar */
             use_gravatar: boolean;
+        };
+        /** SyncDiffData */
+        SyncDiffData: {
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Platform */
+            platform: string;
+            /** Properties */
+            properties: components["schemas"]["PropertyDiff"][];
+            /**
+             * Series Id
+             * Format: uuid
+             */
+            series_id: string;
+        };
+        /** SyncPushResult */
+        SyncPushResult: {
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Message */
+            message: string;
+            /** Platform */
+            platform: string;
+            /**
+             * Series Id
+             * Format: uuid
+             */
+            series_id: string;
+            /** Success */
+            success: boolean;
+            /** Timestamp */
+            timestamp: string;
+        };
+        /** SyncStatus */
+        SyncStatus: {
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Synced */
+            last_synced?: string | null;
+            /** Platform */
+            platform: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "no entry exists" | "entry up-to-date" | "entry differs";
         };
         /** UpdateEventIn */
         UpdateEventIn: {
@@ -2927,7 +2938,27 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["SyncDiffData"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
             };
         };
     };
@@ -2949,7 +2980,27 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["SyncPushResult"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
             };
         };
     };
@@ -2970,34 +3021,21 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
-            };
-        };
-    };
-    openid_user_management_api_login_user: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OpenIDUserLogin"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
                 content: {
-                    "application/json": components["schemas"]["OpenIDUserOut"];
+                    "application/json": components["schemas"]["EventSyncInfo"];
                 };
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3240,119 +3278,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OpenIDUserOut"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-        };
-    };
-    openid_user_management_api_update_user: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OpenIDUserUpdate"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OpenIDUserOut"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-        };
-    };
-    openid_user_management_api_delete_user: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
                 };
             };
             /** @description Unauthorized */

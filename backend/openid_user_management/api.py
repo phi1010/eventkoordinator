@@ -165,6 +165,9 @@ def get_current_user_object_permissions(request: HttpRequest, permission:Permiss
         user : OpenIDUser = request.user
         objtypename = permission.object_type.lower()
         appname = permission.app.lower()
+        action = permission.action.lower()
+        if not action.replace("_","").isalpha():
+            return 400, ErrorOut(error="Invalid action")
         if not objtypename.isalpha():
             return 400, ErrorOut(error="Invalid object type")
         # Dynamically get the model class based on the object type
@@ -175,7 +178,7 @@ def get_current_user_object_permissions(request: HttpRequest, permission:Permiss
             return 400, ErrorOut(error="Invalid object type")
         if not issubclass(objtype, Model):
             return 400, ErrorOut(error="Invalid object type")
-        permname = f"{appname}.{permission.action}_{objtypename}"
+        permname = f"{appname}.{action}_{objtypename}"
         objs : objtype = objtype.objects.filter(pk=permission.object_id).only()
         if len (objs) == 0:
             return 403, ErrorOut(error="Permission denied", detail=permname)
