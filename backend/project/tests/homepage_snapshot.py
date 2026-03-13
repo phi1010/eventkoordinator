@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class SpaAriaSnapshotTests(SnapshotMixin, ViteStaticLiveServerTestCase):
     """Open the SPA and capture an ARIA accessibility snapshot."""
 
-    vite_force_rebuild = False
+    vite_force_rebuild = True
 
     def test_homepage_aria_snapshot(self) -> None:
         """Navigate to the root URL and write an ARIA snapshot to disk."""
@@ -39,6 +39,7 @@ class SpaAriaSnapshotTests(SnapshotMixin, ViteStaticLiveServerTestCase):
                 page.locator("main").is_visible(timeout=1000)
                 page.locator("nav").is_visible(timeout=1000)
                 page.wait_for_load_state("networkidle")
+                page.locator("body").screenshot(path=self._snapshot_path().with_suffix(".homepage.png"))
                 snapshot: str = page.locator("body").aria_snapshot()
                 self.assert_snapshot(snapshot)
             finally:

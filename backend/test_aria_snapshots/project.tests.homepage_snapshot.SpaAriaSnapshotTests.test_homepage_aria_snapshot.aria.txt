@@ -1,0 +1,9 @@
+- navigation "Main navigation":
+  - link "Event Coordinator – go to home":
+    - /url: /
+    - heading "Event Coordinator" [level=1]
+  - list
+  - button "User menu": Guest
+- main:
+  - heading "Welcome to Event Coordinator" [level=1]
+  - paragraph: You don't have permission to access any features. Please log in or -- if that didn't work -- contact an administrator for access.
