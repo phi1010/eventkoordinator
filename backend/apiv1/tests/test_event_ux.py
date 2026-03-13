@@ -241,7 +241,7 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=False)
             page = browser.new_page()
-            page.set_viewport_size({"width": 1280, "height": 900})
+            page.set_viewport_size({"width": 1600, "height": 900})
             try:
                 with print_aria_on_timeout(page):
                     base_url = self.live_server_url
@@ -372,7 +372,7 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=False)
             page = browser.new_page()
-            page.set_viewport_size({"width": 1280, "height": 900})
+            page.set_viewport_size({"width": 1600, "height": 900})
             try:
                 with print_aria_on_timeout(page):
                     base_url = self.live_server_url

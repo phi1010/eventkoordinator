@@ -1,0 +1,32 @@
+- navigation "Main navigation":
+  - link "Event Coordinator – go to home":
+    - /url: /
+    - heading "Event Coordinator" [level=1]
+  - list:
+    - listitem: Coordinator
+  - button "User menu": eventux-user
+- main:
+  - complementary "Series":
+    - heading "Series" [level=2]
+    - button "Create new series"
+    - listbox "Series":
+      - option "Ux Test Series A series created for UX testing A series created for UX testing" [selected]:
+        - button "Ux Test Series A series created for UX testing A series created for UX testing":
+          - text: Ux Test Series A series created for UX testing
+          - tooltip "A series created for UX testing":
+            - paragraph: A series created for UX testing
+  - main "Series content":
+    - complementary "Events":
+      - heading "Events" [level=2]
+      - button "Create new event"
+      - listbox "Events":
+        - option "General Information" [selected]
+        - option "Ux Test Event 16. März 26 10:00 draft"
+    - main "Events content":
+      - heading "Ux Test Series" [level=1]
+      - form "Edit series":
+        - text: Series Name
+        - textbox "Series Name": Ux Test Series
+        - text: Description
+        - textbox "Description": A series created for UX testing
+        - button "Save Changes" [disabled]
