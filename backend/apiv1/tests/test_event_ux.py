@@ -571,7 +571,9 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.get_by_role("button", name="Delete Series").click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(300)
-                        page.get_by_text("No series yet").wait_for(timeout=1000)
+                        page.get_by_role("main", name="Series content").get_by_text(
+                            "No series yet"
+                        ).wait_for(timeout=1000)
                         self.assertTrue(
                             delete_series_msgs, "No dialog was shown for delete series"
                         )

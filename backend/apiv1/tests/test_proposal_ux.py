@@ -247,21 +247,33 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                     self._login_via_navbar(page, base_url)
                     page.get_by_role("button", name="Create a Proposal").click()
                     page.get_by_role("main", name="Proposals content").wait_for(timeout=5000)
-                    page.get_by_text("Delete Me Proposal", exact=True).click()
+                    page.get_by_role("listbox", name="Proposals").get_by_role(
+                        "option", name=re.compile(r"^Delete Me Proposal\b")
+                    ).click()
                     page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
 
                     with self.subTest(stage="before_delete"):
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
                     with self.subTest(stage="after_delete"):
-                        with page.expect_event("dialog") as dialog_info:
-                            page.get_by_role("button", name="Delete Proposal").click()
-                        dialog = dialog_info.value
-                        self.assertIn("Delete the proposal", dialog.message)
-                        dialog.accept()
+                        delete_proposal_msgs: list[str] = []
+
+                        def _handle_delete_proposal_dialog(d) -> None:
+                            delete_proposal_msgs.append(d.message)
+                            d.accept()
+
+                        page.once("dialog", _handle_delete_proposal_dialog)
+                        page.get_by_role("button", name="Delete Proposal").click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(300)
-                        page.get_by_text("No proposals yet").wait_for(timeout=1000)
+                        page.get_by_role("main", name="Proposals content").get_by_text(
+                            "No proposals yet"
+                        ).wait_for(timeout=1000)
+                        self.assertTrue(
+                            delete_proposal_msgs,
+                            "No dialog was shown for delete proposal",
+                        )
+                        self.assertIn("Delete the proposal", delete_proposal_msgs[0])
                         self.assert_snapshot(page.locator("body").aria_snapshot())
             finally:
                 browser.close()
