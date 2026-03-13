@@ -120,10 +120,10 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
 
                     with self.subTest(stage="create"):
                         self.assert_snapshot(page.locator("body").aria_snapshot())
-
                     with self.subTest(stage="save"):
                         self._log_field_step("title")
                         page.get_by_label("Title (max 30 characters)").fill("Intro to wood joints")
+                        page.locator("body").screenshot(path=self._snapshot_path().with_suffix(".create.png"))
                         self._log_field_step("submission type")
                         page.get_by_label("Submission Type").select_option("workshop")
                         self._log_field_step("area")
@@ -168,12 +168,14 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.get_by_role("button", name="+ Add Speaker").click()
                         page.get_by_text("Added Speakers (1)").wait_for(timeout=5000)
 
+                        page.wait_for_timeout(500)
                         self._log_field_step("save proposal")
                         page.get_by_role("button", name="Save Proposal").click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(500)
                         page.get_by_label("Loading proposal").is_hidden()
                         page.get_by_label("Loading transitions").is_hidden()
+                        page.locator("body").screenshot(path=self._snapshot_path().with_suffix(".save.png"))
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
                     with self.subTest(stage="submit"):
@@ -187,6 +189,7 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.wait_for_timeout(500)
                         page.get_by_label("Loading proposal").is_hidden()
                         page.get_by_label("Loading transitions").is_hidden()
+                        page.locator("body").screenshot(path=self._snapshot_path().with_suffix(".submit.png"))
                         self.assert_snapshot(page.locator("body").aria_snapshot())
             finally:
                 browser.close()
