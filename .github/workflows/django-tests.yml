@@ -1,0 +1,55 @@
+name: Django tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  resolve-image:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - name: Resolve CI image name
+        id: meta
+        run: |
+          owner="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          echo "image=ghcr.io/${owner}/htmlplayground1-ci-tools:latest" >> "$GITHUB_OUTPUT"
+
+  django-tests:
+    runs-on: ubuntu-latest
+    needs: resolve-image
+    container:
+      image: ${{ needs.resolve-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+          python --version
+          uv --version
+
+      - name: Install Python dependencies
+        run: uv sync --frozen --dev
+
+      - name: Run Django tests
+        env:
+          DJANGO_DEBUG: "1"
+          DJANGO_SECRET_KEY: ci-secret-key
+        run: |
+          cd backend
+          uv run python manage.py test
+
