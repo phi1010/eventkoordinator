@@ -18,7 +18,7 @@
       - button "Create new event"
       - listbox "Events":
         - option "General Information"
-        - option "Ux Test Event 16. März 26 10:00 draft" [selected]
+        - option "Ux Test Event <localized-datetime> draft" [selected]
     - main "Events content":
       - heading "Ux Test Series" [level=1]
       - heading "Edit Event" [level=2]
@@ -28,16 +28,16 @@
         - text: Name●
         - textbox "Nameunsaved change": Updated Event Name
         - text: Start Time
-        - textbox "Start Time": 2026-03-16T10:00
+        - textbox "Start Time": <iso-datetime>
         - text: End Time
-        - textbox "End Time": 2026-03-16T12:00
+        - textbox "End Time": <iso-datetime>
         - text: Tag●
         - textbox "Tagunsaved change":
           - /placeholder: e.g., workshop, keynote, break
           - text: updated-tag
         - checkbox "Span full days"
         - text: Span full days
-        - paragraph: When checked, the event spans continuously over midnight (e.g. Mon 08:00 → Tue 16:00 shows as one block). When unchecked, multi-day events are split into daily blocks using the same daily start/end hours (e.g. Mon 08:00–16:00 and Tue 08:00–16:00).
+        - paragraph: When checked, the event spans continuously over midnight (e.g. Mon 08:00 → Tue 16:00 shows as one block). When unchecked, multi-day events are split into daily blocks using the same daily start/end hours (e.g. Mon <time-range> and Tue <time-range>).
         - button "Save Changes"
         - button "Cancel"
       - heading "Pick Time in Calendar" [level=3]
@@ -50,16 +50,16 @@
         - option "Event Schedule" [selected]
       - text: Event Schedule
       - grid:
-        - text: Mon 16 Mar Tue 17 Mar Wed 18 Mar Thu 19 Mar Fri 20 Mar Sat 21 Mar Sun 22 Mar 00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00
-        - button "Ux Test Event (internal-calendar), 10:00–12:00": Ux Test Event (internal-calendar)
-        - button "Updated Event Name, 10:00–12:00": Updated Event Name
+        - text: <week-days> <hour-grid>
+        - button "Ux Test Event (internal-calendar), <time-range>": Ux Test Event (internal-calendar)
+        - button "Updated Event Name, <time-range>": Updated Event Name
       - heading "Synchronization Status" [level=3]
       - heading "pretalx" [level=4]
-      - text: "✓ Up to date Last synced: 10. März, 14:30"
+      - text: "✓ Up to date Last synced: <localized-datetime>"
       - button "Push or update event to pretalx": Push/Update
       - button "View differences for pretalx": View Diff
       - heading "pretix" [level=4]
-      - text: "⚠ Differs Last synced: 8. März, 09:15"
+      - text: "⚠ Differs Last synced: <localized-datetime>"
       - button "Push or update event to pretix": Push/Update
       - button "View differences for pretix": View Diff
       - heading "Stadt Erlangen Kalender" [level=4]
@@ -67,11 +67,11 @@
       - button "Push or update event to Stadt Erlangen Kalender": Push/Update
       - button "View differences for Stadt Erlangen Kalender": View Diff
       - heading "nextcloud calendar" [level=4]
-      - text: "⚠ Differs Last synced: 5. März, 16:45 Error: Connection timeout"
+      - text: "⚠ Differs Last synced: <localized-datetime> Error: Connection timeout"
       - button "Push or update event to nextcloud calendar": Push/Update
       - button "View differences for nextcloud calendar": View Diff
       - heading "Wordpress calendar" [level=4]
-      - text: "✓ Up to date Last synced: 12. März, 11:00"
+      - text: "✓ Up to date Last synced: <localized-datetime>"
       - button "Push or update event to Wordpress calendar": Push/Update
       - button "View differences for Wordpress calendar": View Diff
       - paragraph: Changes to this event will be synchronized across all platforms.

@@ -20,8 +20,8 @@
       - button "Create new event"
       - listbox "Events":
         - option "General Information"
-        - option "New Series Session 13. März 26 09:31 draft"
-        - option "New Event 14. März 26 09:31" [selected]
+        - option "New Series Session <localized-datetime> draft"
+        - option "New Event <localized-datetime>" [selected]
     - main "Events content":
       - heading "New Series" [level=1]
       - heading "Edit Event" [level=2]
@@ -31,16 +31,16 @@
         - text: Name●
         - textbox "Nameunsaved change": My New Workshop
         - text: Start Time●
-        - textbox "Start Timeunsaved change": 2026-03-10T08:55
+        - textbox "Start Timeunsaved change": <iso-datetime>
         - text: End Time●
-        - textbox "End Timeunsaved change": 2026-03-10T10:55
+        - textbox "End Timeunsaved change": <iso-datetime>
         - text: Tag●
         - textbox "Tagunsaved change":
           - /placeholder: e.g., workshop, keynote, break
           - text: workshop
         - checkbox "Span full days"
         - text: Span full days
-        - paragraph: When checked, the event spans continuously over midnight (e.g. Mon 08:00 → Tue 16:00 shows as one block). When unchecked, multi-day events are split into daily blocks using the same daily start/end hours (e.g. Mon 08:00–16:00 and Tue 08:00–16:00).
+        - paragraph: When checked, the event spans continuously over midnight (e.g. Mon 08:00 → Tue 16:00 shows as one block). When unchecked, multi-day events are split into daily blocks using the same daily start/end hours (e.g. Mon <time-range> and Tue <time-range>).
         - button "Save Changes"
         - button "Cancel"
       - heading "Pick Time in Calendar" [level=3]
@@ -53,17 +53,17 @@
         - option "Event Schedule" [selected]
       - text: Event Schedule
       - grid:
-        - text: Mon 9 Mar Tue 10 Mar Wed 11 Mar Thu 12 Mar Fri 13 Mar Sat 14 Mar Sun 15 Mar 00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00
-        - button "My New Workshop, 08:55–10:55": My New Workshop
-        - button "New Series Session (internal-calendar), 09:31–10:31": New Series Session (internal-calendar)
-        - button "New Event (internal-calendar), 09:31–10:31": New Event (internal-calendar)
+        - text: <week-days> <hour-grid>
+        - button "My New Workshop, <time-range>": My New Workshop
+        - button "New Series Session (internal-calendar), <time-range>": New Series Session (internal-calendar)
+        - button "New Event (internal-calendar), <time-range>": New Event (internal-calendar)
       - heading "Synchronization Status" [level=3]
       - heading "pretalx" [level=4]
-      - text: "✓ Up to date Last synced: 10. März, 14:30"
+      - text: "✓ Up to date Last synced: <localized-datetime>"
       - button "Push or update event to pretalx": Push/Update
       - button "View differences for pretalx": View Diff
       - heading "pretix" [level=4]
-      - text: "⚠ Differs Last synced: 8. März, 09:15"
+      - text: "⚠ Differs Last synced: <localized-datetime>"
       - button "Push or update event to pretix": Push/Update
       - button "View differences for pretix": View Diff
       - heading "Stadt Erlangen Kalender" [level=4]
@@ -71,11 +71,11 @@
       - button "Push or update event to Stadt Erlangen Kalender": Push/Update
       - button "View differences for Stadt Erlangen Kalender": View Diff
       - heading "nextcloud calendar" [level=4]
-      - text: "⚠ Differs Last synced: 5. März, 16:45 Error: Connection timeout"
+      - text: "⚠ Differs Last synced: <localized-datetime> Error: Connection timeout"
       - button "Push or update event to nextcloud calendar": Push/Update
       - button "View differences for nextcloud calendar": View Diff
       - heading "Wordpress calendar" [level=4]
-      - text: "✓ Up to date Last synced: 12. März, 11:00"
+      - text: "✓ Up to date Last synced: <localized-datetime>"
       - button "Push or update event to Wordpress calendar": Push/Update
       - button "View differences for Wordpress calendar": View Diff
       - paragraph: Changes to this event will be synchronized across all platforms.
