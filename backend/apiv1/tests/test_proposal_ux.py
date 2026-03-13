@@ -172,6 +172,8 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.get_by_role("button", name="Save Proposal").click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(500)
+                        page.get_by_label("Loading proposal").is_hidden()
+                        page.get_by_label("Loading transitions").is_hidden()
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
                     with self.subTest(stage="submit"):
@@ -183,6 +185,8 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         submit_button.click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(500)
+                        page.get_by_label("Loading proposal").is_hidden()
+                        page.get_by_label("Loading transitions").is_hidden()
                         self.assert_snapshot(page.locator("body").aria_snapshot())
             finally:
                 browser.close()
