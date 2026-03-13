@@ -78,7 +78,7 @@ jobs:
         env:
           DJANGO_DEBUG: "1"
           DJANGO_SECRET_KEY: ci-secret-key
-          DJANGO_PLAYWRIGHT_HEADLESS: "1"
+          DJANGO_PLAYWRIGHT_HEADLESS: true
           DJANGO_OIDC_DISCOVERY_URL: ""
           DJANGO_OIDC_OP_AUTHORIZATION_ENDPOINT: "http://localhost/oidc/authorize"
           DJANGO_OIDC_OP_TOKEN_ENDPOINT: "http://localhost/oidc/token"
