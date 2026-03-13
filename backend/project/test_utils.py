@@ -8,7 +8,7 @@ Usage in a test file::
     class MyPlaywrightTest(ViteStaticLiveServerTestCase):
         def test_homepage(self):
             with sync_playwright() as p:
-                browser = p.chromium.launch()
+                browser = p.chromium.launch(**playwright_launch_options())
                 page = browser.new_page()
                 page.goto(self.live_server_url)
                 ...
@@ -53,6 +53,15 @@ logger = logging.getLogger(__name__)
 # Two levels above backend/ → repo root, then into backend/test_aria_snapshots
 _BACKEND_DIR: Path = Path(__file__).resolve().parents[1]
 SNAPSHOT_DIR: Path = _BACKEND_DIR / "test_aria_snapshots"
+
+
+def playwright_launch_options() -> dict:
+    """Return Playwright launch kwargs derived from Django settings.
+
+    Reads ``settings.PLAYWRIGHT_HEADLESS`` so the same test code runs
+    headless in CI and with a visible browser window in development.
+    """
+    return {"headless": getattr(settings, "PLAYWRIGHT_HEADLESS", True)}
 
 
 def _git_show_committed(path: Path) -> str | None:

@@ -17,7 +17,7 @@ import logging
 
 from playwright.sync_api import sync_playwright
 
-from project.test_utils import SnapshotMixin, ViteStaticLiveServerTestCase
+from project.test_utils import SnapshotMixin, ViteStaticLiveServerTestCase, playwright_launch_options
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class SpaAriaSnapshotTests(SnapshotMixin, ViteStaticLiveServerTestCase):
     def test_homepage_aria_snapshot(self) -> None:
         """Navigate to the root URL and write an ARIA snapshot to disk."""
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.chromium.launch(**playwright_launch_options())
             try:
                 page = browser.new_page()
                 logger.debug(f"Navigating to {self.live_server_url}/ and capturing ARIA snapshot")

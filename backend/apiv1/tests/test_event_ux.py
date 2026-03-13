@@ -21,6 +21,7 @@ from apiv1.models.basedata import Event, Series
 from project.test_utils import (
     SnapshotMixin,
     ViteStaticLiveServerTestCase,
+    playwright_launch_options,
     print_aria_on_timeout,
 )
 
@@ -239,7 +240,7 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
     def test_select_series_and_event_flow(self) -> None:
         """Select pre-seeded series/event, edit fields, drag-select time, save."""
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=False)
+            browser = playwright.chromium.launch(**playwright_launch_options())
             page = browser.new_page()
             page.set_viewport_size({"width": 1600, "height": 900})
             try:
@@ -370,7 +371,7 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
     def test_create_series_and_event_via_ui(self) -> None:
         """Create a series and an event via the UI, edit the event, drag, save."""
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=False)
+            browser = playwright.chromium.launch(**playwright_launch_options())
             page = browser.new_page()
             page.set_viewport_size({"width": 1600, "height": 900})
             try:

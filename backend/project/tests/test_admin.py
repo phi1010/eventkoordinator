@@ -7,7 +7,7 @@ on a single port, eliminating the need for separate dev servers.
 """
 
 from django.contrib.auth import get_user_model
-from project.test_utils import ViteStaticLiveServerTestCase, SnapshotMixin
+from project.test_utils import ViteStaticLiveServerTestCase, SnapshotMixin, playwright_launch_options
 from playwright.sync_api import sync_playwright
 
 
@@ -47,7 +47,7 @@ class AdminPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                 )
 
                 with sync_playwright() as p:
-                    browser = p.chromium.launch()
+                    browser = p.chromium.launch(**playwright_launch_options())
                     page = browser.new_page()
 
                     try:
