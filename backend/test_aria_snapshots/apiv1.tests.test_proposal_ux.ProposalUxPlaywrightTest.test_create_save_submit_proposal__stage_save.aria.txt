@@ -4,7 +4,7 @@
     - heading "Event Coordinator" [level=1]
   - list:
     - listitem: Proposal Editor
-  - button "User menu": proposalux-user6120118
+  - button "User menu": proposalux-user
 - main:
   - complementary "Proposals":
     - heading "Proposals" [level=2]

@@ -29,8 +29,8 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
     def setUp(self) -> None:
         super().setUp()
 
-        self.username = f"proposalux-user{random.randint(0,10000000)}"
-        self.password = "2uf092nuf094nuf09u04"
+        self.username = "proposalux-user"
+        self.password = "password123"
 
         User = get_user_model()
         User.objects.filter(username=self.username).delete()
@@ -111,6 +111,10 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                     page.get_by_role("main", name="Proposals content").wait_for(timeout=5000)
                     page.get_by_role("button", name="Create New Proposal").click()
                     page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
+
+                    page.get_by_label("Submission Type").is_enabled()
+                    page.get_by_label("Area").is_enabled()
+                    page.get_by_label("Language").is_enabled()
 
                     page.wait_for_load_state("networkidle")
 
