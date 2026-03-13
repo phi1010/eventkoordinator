@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Django Runserver" type="Python.DjangoServer" factoryName="Django server">
-    <module name="htmlplayground1" />
+    <module name="zameventkoordination" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -9,7 +9,7 @@
       <env name="DJANGO_SETTINGS_MODULE" value="project.settings" />
     </envs>
     <option name="SDK_HOME" value="" />
-    <option name="SDK_NAME" value="uv (htmlplayground1)" />
+    <option name="SDK_NAME" value="uv (zameventkoordination)" />
     <option name="WORKING_DIRECTORY" value="" />
     <option name="IS_MODULE_SDK" value="false" />
     <option name="ADD_CONTENT_ROOTS" value="true" />

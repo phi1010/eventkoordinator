@@ -113,11 +113,13 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                     page.get_by_role("button", name="Create New Proposal").click()
                     page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
 
+                    page.wait_for_load_state("networkidle")
                     page.get_by_label("Submission Type").is_enabled()
                     page.get_by_label("Area").is_enabled()
                     page.get_by_label("Language").is_enabled()
-
                     page.wait_for_load_state("networkidle")
+                    page.wait_for_timeout(100)
+
 
                     with self.subTest(stage="create"):
                         self._log_field_step("submission type")
@@ -180,14 +182,12 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.get_by_role("button", name="Save Proposal").click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(500)
-                        page.get_by_label("Loading proposal").is_hidden()
-                        page.get_by_label("Loading transitions").is_hidden()
-                        self._log_field_step("submission type")
                         page.get_by_label("Submission Type").is_enabled()
-                        self._log_field_step("area")
-                        page.get_by_label("Area (optional)").is_enabled()
-                        self._log_field_step("language")
+                        page.get_by_label("Area").is_enabled()
                         page.get_by_label("Language").is_enabled()
+                        page.wait_for_load_state("networkidle")
+                        page.wait_for_timeout(100)
+
                         page.locator("body").screenshot(path=self._snapshot_path().with_suffix(".save.png"))
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
@@ -202,12 +202,13 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.wait_for_timeout(500)
                         page.get_by_label("Loading proposal").is_hidden()
                         page.get_by_label("Loading transitions").is_hidden()
-                        self._log_field_step("submission type")
+                        page.wait_for_load_state("networkidle")
                         page.get_by_label("Submission Type").is_enabled()
-                        self._log_field_step("area")
-                        page.get_by_label("Area (optional)").is_enabled()
-                        self._log_field_step("language")
+                        page.get_by_label("Area").is_enabled()
                         page.get_by_label("Language").is_enabled()
+                        page.wait_for_load_state("networkidle")
+                        page.wait_for_timeout(100)
+
                         page.locator("body").screenshot(path=self._snapshot_path().with_suffix(".submit.png"))
                         self.assert_snapshot(page.locator("body").aria_snapshot())
             finally:
