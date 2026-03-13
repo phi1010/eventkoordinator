@@ -10,7 +10,7 @@ ENV UV_PYTHON_INSTALL_DIR=/opt/python
 ENV PATH=/root/.local/bin:/opt/python/cpython-${PYTHON_VERSION}-linux-x86_64-gnu/bin:/opt/venv/bin:${PATH}
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates git \
+    && apt-get install -y --no-install-recommends ca-certificates git postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy uv binaries from the pinned official image.
