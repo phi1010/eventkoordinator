@@ -21,6 +21,7 @@ from apiv1.helpers import (
 )
 from apiv1.models import Event as EventModel
 from apiv1.models import Series as SeriesModel
+from apiv1.models import Proposal as ProposalModel
 from apiv1.schemas import (
     CreateEventIn,
     CreateEventOut,
@@ -120,6 +121,7 @@ def create_event(request, series_id: str, payload: CreateEventIn) -> tuple[int, 
         end_time=end_dt,
         tag=payload.tag,
         use_full_days=payload.useFullDays or False,
+        proposal_id=payload.proposal_id,
     )
 
     return 201, CreateEventOut(series_id=series_model.id, event=model_event_to_schema(event_model))
@@ -176,6 +178,18 @@ def update_event(request, series_id: str, event_id: str, payload: UpdateEventIn)
         event_model.tag = payload.tag
     if payload.useFullDays is not None:
         event_model.use_full_days = payload.useFullDays
+    if payload.proposal_id is not None:
+        try:
+            proposal = ProposalModel.objects.get(id=payload.proposal_id)
+            event_model.proposal = proposal
+        except ProposalModel.DoesNotExist:
+            return 404, ErrorOut(error="Proposal not found")
+    if payload.series_id is not None:
+        try:
+            new_series = SeriesModel.objects.get(id=payload.series_id)
+            event_model.series = new_series
+        except SeriesModel.DoesNotExist:
+            return 404, ErrorOut(error="Target series not found")
 
     event_model.save()
     return 200, model_event_to_schema(event_model)

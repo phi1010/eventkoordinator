@@ -65,6 +65,13 @@ class Event(HistoricalMetaBase):
     """An event is an individual time-bound item within a series."""
 
     series = models.ForeignKey(Series, on_delete=models.CASCADE, related_name="events")
+    proposal = models.ForeignKey(
+        "Proposal",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="events",
+    )
     name = models.CharField(max_length=255)
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()

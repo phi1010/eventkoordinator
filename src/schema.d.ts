@@ -305,6 +305,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/proposals/{proposal_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Proposal Events
+         * @description List all events linked to a proposal.
+         */
+        get: operations["apiv1_routers_proposals_get_proposal_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/proposals/{proposal_id}/history": {
         parameters: {
             query?: never;
@@ -829,6 +849,8 @@ export interface components {
             endTime?: string | null;
             /** Name */
             name?: string | null;
+            /** Proposal Id */
+            proposal_id?: string | null;
             /** Starttime */
             startTime?: string | null;
             /** Tag */
@@ -870,6 +892,12 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /** Proposal Id */
+            proposal_id?: string | null;
+            /** Series Id */
+            series_id?: string | null;
+            /** Series Name */
+            series_name?: string | null;
             /** Starttime */
             startTime: string;
             /** Tag */
@@ -1123,6 +1151,30 @@ export interface components {
             title: string;
         };
         /**
+         * ProposalEventSummary
+         * @description Summary of an event linked to a proposal.
+         */
+        ProposalEventSummary: {
+            /** Endtime */
+            endTime: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Series Id
+             * Format: uuid
+             */
+            series_id: string;
+            /** Series Name */
+            series_name: string;
+            /** Starttime */
+            startTime: string;
+        };
+        /**
          * ProposalHistory
          * @description List of historical changes for a proposal.
          */
@@ -1361,6 +1413,10 @@ export interface components {
             endTime?: string | null;
             /** Name */
             name?: string | null;
+            /** Proposal Id */
+            proposal_id?: string | null;
+            /** Series Id */
+            series_id?: string | null;
             /** Starttime */
             startTime?: string | null;
             /** Tag */
@@ -2022,6 +2078,55 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_proposals_get_proposal_events: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalEventSummary"][];
                 };
             };
             /** @description Unauthorized */

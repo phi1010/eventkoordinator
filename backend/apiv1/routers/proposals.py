@@ -24,11 +24,13 @@ from apiv1.flows import ProposalFlow
 from apiv1.helpers import model_proposal_to_schema
 from apiv1.models import check_proposal_required_fields
 from apiv1.models import Proposal as ProposalModel
+from apiv1.models import Event as EventModel
 from apiv1.models import ProposalArea, ProposalLanguage, SubmissionType
 from apiv1.schemas import (
     ErrorOut,
     ProposalCreateIn,
     ProposalDetail,
+    ProposalEventSummary,
     ProposalHistory,
     ProposalHistoryEntry,
     ProposalSummary,
@@ -679,3 +681,42 @@ def revise_proposal(
 ) -> tuple[int, ProposalDetail | ErrorOut]:
     """Request revision for a submitted or rejected proposal."""
     return _execute_proposal_transition(request, proposal_id, "revise")
+
+
+@router.get(
+    "/{proposal_id}/events",
+    response={200: list[ProposalEventSummary], 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+)
+@api_permission_mandatory()
+def get_proposal_events(
+    request, proposal_id: uuid.UUID
+) -> tuple[int, list[ProposalEventSummary]] | tuple[int, ErrorOut]:
+    """List all events linked to a proposal."""
+    try:
+        proposal = ProposalModel.objects.get(pk=proposal_id)
+    except ProposalModel.DoesNotExist:
+        return 404, ErrorOut(error="Proposal not found")
+
+    if not request.user.has_perm(
+        f"{apiv1.__name__}.view_{ProposalModel.__name__.lower()}", proposal
+    ):
+        return 401, ErrorOut(error="Unauthorized to view this proposal")
+
+    events = (
+        EventModel.objects.filter(proposal=proposal)
+        .select_related("series")
+        .order_by("start_time")
+    )
+
+    return 200, [
+        ProposalEventSummary(
+            id=event.id,
+            name=event.name,
+            startTime=event.start_time.isoformat(),
+            endTime=event.end_time.isoformat(),
+            series_id=event.series_id,
+            series_name=event.series.name,
+        )
+        for event in events
+    ]
+

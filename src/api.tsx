@@ -22,7 +22,7 @@ function getCsrfTokenFromCookie(): string | null {
 export async function initializeCsrfToken(): Promise<string> {
   try {
     const response = await fetch('/api/v1/csrf', {
-      method: 'POST',
+      method: 'GET',
       credentials: 'include',
     })
 
@@ -119,6 +119,9 @@ interface ApiEvent {
   endTime: string
   tag?: string
   useFullDays?: boolean
+  proposal_id?: string | null
+  series_id?: string | null
+  series_name?: string | null
 }
 
 interface ApiSeries {
@@ -153,6 +156,9 @@ export interface Event {
   endTime: Date
   tag?: string
   useFullDays?: boolean
+  proposal_id?: string | null
+  series_id?: string | null
+  series_name?: string | null
   [key: string]: unknown
 }
 
@@ -456,6 +462,7 @@ export interface CreateEventRequest {
   startTime?: string
   endTime?: string
   tag?: string
+  proposal_id?: string
 }
 
 export async function createEvent(request: CreateEventRequest): Promise<Event> {
@@ -470,6 +477,7 @@ export async function createEvent(request: CreateEventRequest): Promise<Event> {
       startTime: request.startTime,
       endTime: request.endTime,
       tag: request.tag,
+      proposal_id: request.proposal_id,
     },
   })
 
@@ -515,6 +523,8 @@ export interface UpdateEventRequest {
   endTime?: string
   tag?: string | null
   useFullDays?: boolean
+  proposal_id?: string | null
+  series_id?: string | null
 }
 
 export async function updateEvent(request: UpdateEventRequest): Promise<Event> {
@@ -531,6 +541,8 @@ export async function updateEvent(request: UpdateEventRequest): Promise<Event> {
       endTime: request.endTime,
       tag: request.tag,
       useFullDays: request.useFullDays,
+      proposal_id: request.proposal_id,
+      series_id: request.series_id,
     },
   })
 
@@ -1032,3 +1044,29 @@ export async function fetchExternalCalendarEvents(
 
   return (data as unknown as ExternalCalendarEvent[]) || []
 }
+
+export interface ProposalEventSummary {
+  id: string
+  name: string
+  startTime: string
+  endTime: string
+  series_id: string
+  series_name: string
+}
+
+export async function fetchProposalEvents(proposalId: string): Promise<ProposalEventSummary[]> {
+  const { data, error, response } = await client.GET('/api/v1/proposals/{proposal_id}/events', {
+    params: {
+      path: {
+        proposal_id: proposalId,
+      },
+    },
+  })
+
+  if (error || !response.ok) {
+    throw new Error(`Failed to fetch proposal events: ${response.statusText}`)
+  }
+
+  return (data as unknown as ProposalEventSummary[]) || []
+}
+

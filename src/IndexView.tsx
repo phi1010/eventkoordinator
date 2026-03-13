@@ -4,6 +4,7 @@ import { Navbar } from './Navbar'
 import { DefaultScreen } from './DefaultScreen'
 import { MainView } from './MainView'
 import { ProposalSelectionPanel } from './SelectionPanel'
+import { ProposalEventView } from './ProposalEventView'
 import { SyncDiff } from './SyncDiff'
 import { getCurrentUser, initializeCsrfToken, type User } from './api'
 import { usePermissions, notifyAuthChanged } from './usePermissions'
@@ -67,6 +68,17 @@ export function IndexView() {
           <Route
             path="/sync/diff/:seriesId/:eventId/:platform"
             element={<SyncDiff />}
+          />
+          <Route
+            path="/proposal/:proposalId/event/:eventId"
+            element={
+              permissionsLoading ? null : canBrowse('proposal') ? <ProposalEventView /> : (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Access Denied</p>
+                  <p>You don't have permission to browse proposals</p>
+                </div>
+              )
+            }
           />
         </Routes>
       </main>

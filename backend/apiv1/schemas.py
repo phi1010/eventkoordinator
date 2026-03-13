@@ -38,6 +38,9 @@ class Event(Schema):
     endTime: str    # ISO format string
     tag: Optional[str] = None
     useFullDays: bool = False
+    proposal_id: Optional[uuid.UUID] = None
+    series_id: Optional[uuid.UUID] = None
+    series_name: Optional[str] = None
 
 
 class Series(Schema):
@@ -64,6 +67,7 @@ class CreateEventIn(Schema):
     endTime: Optional[str] = None
     tag: Optional[str] = None
     useFullDays: Optional[bool] = None
+    proposal_id: Optional[uuid.UUID] = None
 
 
 class CreateEventOut(Schema):
@@ -126,6 +130,8 @@ class UpdateEventIn(Schema):
     endTime: Optional[str] = None
     tag: Optional[str] = None
     useFullDays: Optional[bool] = None
+    proposal_id: Optional[uuid.UUID] = None
+    series_id: Optional[uuid.UUID] = None
 
 
 class ProposalSummary(Schema):
@@ -310,4 +316,15 @@ class ProposalTransitions(Schema):
     proposal_id: uuid.UUID
     current_status: str
     transitions: list[ProposalTransitionOut]
+
+
+class ProposalEventSummary(Schema):
+    """Summary of an event linked to a proposal."""
+    id: uuid.UUID
+    name: str
+    startTime: str
+    endTime: str
+    series_id: uuid.UUID
+    series_name: str
+
 

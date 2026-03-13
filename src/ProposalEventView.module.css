@@ -1,0 +1,162 @@
+.container {
+  display: flex;
+  flex-direction: row;
+  gap: 1.5rem;
+  padding: 1rem;
+  height: 100%;
+}
+
+.proposalInfoPanel {
+  flex: 1;
+  min-width: 0;
+  max-width: 400px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.25rem;
+  background: #fafafa;
+  overflow-y: auto;
+}
+
+.eventEditorPanel {
+  flex: 2;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.proposalInfoPanel h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.proposalInfoPanel h3 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+  color: #555;
+}
+
+.infoRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  font-size: 0.9rem;
+  border-bottom: 1px solid #eee;
+}
+
+.infoLabel {
+  color: #666;
+  font-weight: 500;
+}
+
+.infoValue {
+  color: #333;
+  text-align: right;
+}
+
+.timeslotsList {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+
+.timeslotsList li {
+  padding: 0.4rem 0.6rem;
+  margin: 0.25rem 0;
+  background: #e3f2fd;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #1565c0;
+}
+
+.linkedEventItem {
+  padding: 0.4rem 0.6rem;
+  margin: 0.25rem 0;
+  background: #fff3e0;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #e65100;
+}
+
+.seriesSelector {
+  margin-bottom: 1rem;
+}
+
+.seriesLabel {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.seriesValue {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: #333;
+  background: #f5f5f5;
+  box-sizing: border-box;
+}
+
+.backLink {
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: #1976d2;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}
+
+.createForm {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.createButton {
+  padding: 0.6rem 1.2rem;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.createButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #d32f2f;
+  font-size: 0.9rem;
+  padding: 0.5rem;
+  background: #ffebee;
+  border-radius: 4px;
+}
+
+.loading {
+  padding: 2rem;
+  text-align: center;
+  color: #666;
+}
+
+/* Mobile responsive layout */
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+  }
+
+  .proposalInfoPanel {
+    max-width: 100%;
+  }
+}
+
