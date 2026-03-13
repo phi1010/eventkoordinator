@@ -119,6 +119,12 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                     page.wait_for_load_state("networkidle")
 
                     with self.subTest(stage="create"):
+                        self._log_field_step("submission type")
+                        page.get_by_label("Submission Type").is_enabled()
+                        self._log_field_step("area")
+                        page.get_by_label("Area (optional)").is_enabled()
+                        self._log_field_step("language")
+                        page.get_by_label("Language").is_enabled()
                         self.assert_snapshot(page.locator("body").aria_snapshot())
                     with self.subTest(stage="save"):
                         self._log_field_step("title")
@@ -175,6 +181,12 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.wait_for_timeout(500)
                         page.get_by_label("Loading proposal").is_hidden()
                         page.get_by_label("Loading transitions").is_hidden()
+                        self._log_field_step("submission type")
+                        page.get_by_label("Submission Type").is_enabled()
+                        self._log_field_step("area")
+                        page.get_by_label("Area (optional)").is_enabled()
+                        self._log_field_step("language")
+                        page.get_by_label("Language").is_enabled()
                         page.locator("body").screenshot(path=self._snapshot_path().with_suffix(".save.png"))
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
@@ -189,6 +201,12 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.wait_for_timeout(500)
                         page.get_by_label("Loading proposal").is_hidden()
                         page.get_by_label("Loading transitions").is_hidden()
+                        self._log_field_step("submission type")
+                        page.get_by_label("Submission Type").is_enabled()
+                        self._log_field_step("area")
+                        page.get_by_label("Area (optional)").is_enabled()
+                        self._log_field_step("language")
+                        page.get_by_label("Language").is_enabled()
                         page.locator("body").screenshot(path=self._snapshot_path().with_suffix(".submit.png"))
                         self.assert_snapshot(page.locator("body").aria_snapshot())
             finally:

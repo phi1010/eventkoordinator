@@ -5,9 +5,13 @@ Handles automatic group assignments and other post-save/post-create actions.
 """
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
-from django.db.models.signals import post_save
+from django.db.models.signals import post_migrate, post_save
 from django.dispatch import receiver
+
+from apiv1.auth_groups import (
+    assign_authenticated_group_to_all_users,
+    ensure_authenticated_users_group,
+)
 
 User = get_user_model()
 
@@ -21,10 +25,14 @@ def add_user_to_authenticated_group(sender, instance, created, **kwargs):
     view lookup data.
     """
     if created:
-        try:
-            group = Group.objects.get(name='Authenticated Users')
-            instance.groups.add(group)
-        except Group.DoesNotExist:
-            # Group doesn't exist yet, skip (will be created by migration)
-            pass
+        group = ensure_authenticated_users_group()
+        instance.groups.add(group)
+
+
+@receiver(post_migrate)
+def ensure_authenticated_group_on_migrate(sender, **kwargs):
+    """Recreate default group data after migrate/flush based test DB setup."""
+    if sender.name != "apiv1":
+        return
+    assign_authenticated_group_to_all_users()
 

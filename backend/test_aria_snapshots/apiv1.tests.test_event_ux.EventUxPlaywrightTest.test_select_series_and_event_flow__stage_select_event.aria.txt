@@ -4,6 +4,7 @@
     - heading "Event Coordinator" [level=1]
   - list:
     - listitem: Coordinator
+    - listitem: Proposal Editor
   - button "User menu": eventux-user
 - main:
   - complementary "Series":
