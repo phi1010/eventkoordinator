@@ -1,4 +1,17 @@
 services:
+  db:
+    #image: postgres
+    image: docker.io/postgres:18
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=db
+    restart: no
+    volumes:
+      - postgres_db:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:5432:5432"
+
   backend:
     build:
       context: .
@@ -55,6 +68,8 @@ services:
     expose:
       - "8000"
     restart: no
+    depends_on:
+      - db
 
   nginx:
     build:
@@ -162,3 +177,4 @@ volumes:
   prometheus_data:
   grafana_data:
   loki_data:
+  postgres_db:

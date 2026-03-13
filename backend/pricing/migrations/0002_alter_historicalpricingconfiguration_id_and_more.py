@@ -10,12 +10,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
+        migrations.RemoveField(model_name='pricingconfiguration', name="id"),
+        migrations.RemoveField(model_name='historicalpricingconfiguration', name="id"),
+        migrations.AddField(
             model_name='historicalpricingconfiguration',
             name='id',
             field=models.BigIntegerField(auto_created=True, blank=True, db_index=True, verbose_name='ID'),
         ),
-        migrations.AlterField(
+        migrations.AddField(
             model_name='pricingconfiguration',
             name='id',
             field=models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID'),

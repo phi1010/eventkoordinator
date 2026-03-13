@@ -134,10 +134,14 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         )
                         self._log_field_step("Number of Days")
                         page.get_by_label("Number of Days").fill("1")
-                        self._log_field_step("duration per day")
-                        page.get_by_label("Duration per day").fill("02:00")
-                        self._log_field_step("occurrence count")
-                        page.get_by_label("Occurrence Count").fill("1")
+                        self._log_field_step("Time per Day")
+                        page.get_by_label("Time per Day").fill("02:00")
+                        self._log_field_step("How often")
+                        page.get_by_label("How often").fill("1")
+
+                        self._log_field_step("Additional Information")
+                        page.get_by_label("Additional Information").click()
+
                         self._log_field_step("max participants")
                         page.get_by_label("Max Participants").fill("10")
                         self._log_field_step("preferred dates")

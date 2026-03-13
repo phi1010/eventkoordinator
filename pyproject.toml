@@ -25,6 +25,7 @@ dependencies = [
     "icalendar>=7.0.3",
     "recurring-ical-events>=3.8.1",
     "pillow>=12.1.1",
+    "psycopg2-binary>=2.9.11",
 ]
 
 [dependency-groups]
