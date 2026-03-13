@@ -534,13 +534,25 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
                     with self.subTest(stage="after_delete_event"):
-                        with page.expect_event("dialog") as dialog_info:
-                            page.get_by_role("button", name="Delete Event").click()
-                        dialog = dialog_info.value
-                        self.assertIn("Delete the event", dialog.message)
-                        dialog.accept()
+                        # Register the handler BEFORE the click so it is in place
+                        # when window.confirm() fires and blocks JS execution.
+                        # Using expect_event() and calling dialog.accept() after
+                        # the with-block causes a deadlock because the click never
+                        # returns while the native confirm dialog is open.
+                        delete_event_msgs: list[str] = []
+
+                        def _handle_delete_event_dialog(d) -> None:
+                            delete_event_msgs.append(d.message)
+                            d.accept()
+
+                        page.once("dialog", _handle_delete_event_dialog)
+                        page.get_by_role("button", name="Delete Event").click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(300)
+                        self.assertTrue(
+                            delete_event_msgs, "No dialog was shown for delete event"
+                        )
+                        self.assertIn("Delete the event", delete_event_msgs[0])
                         self.assertEqual(
                             events_listbox.get_by_text(self.event.name).count(),
                             0,
@@ -549,14 +561,21 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
                     with self.subTest(stage="after_delete_series"):
-                        with page.expect_event("dialog") as dialog_info:
-                            page.get_by_role("button", name="Delete Series").click()
-                        dialog = dialog_info.value
-                        self.assertIn("Delete the series", dialog.message)
-                        dialog.accept()
+                        delete_series_msgs: list[str] = []
+
+                        def _handle_delete_series_dialog(d) -> None:
+                            delete_series_msgs.append(d.message)
+                            d.accept()
+
+                        page.once("dialog", _handle_delete_series_dialog)
+                        page.get_by_role("button", name="Delete Series").click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(300)
                         page.get_by_text("No series yet").wait_for(timeout=1000)
+                        self.assertTrue(
+                            delete_series_msgs, "No dialog was shown for delete series"
+                        )
+                        self.assertIn("Delete the series", delete_series_msgs[0])
                         self.assert_snapshot(page.locator("body").aria_snapshot())
             finally:
                 browser.close()

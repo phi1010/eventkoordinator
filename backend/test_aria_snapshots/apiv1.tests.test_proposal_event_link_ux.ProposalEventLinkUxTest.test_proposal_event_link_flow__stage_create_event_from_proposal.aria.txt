@@ -8,7 +8,7 @@
   - button "User menu": proposaleventux-user
 - main:
   - link "← Back to Proposal":
-    - /url: /proposal-editor/fc5f6928-5b9c-46de-9505-ce0d540e4daf
+    - /url: /proposal-editor/deca20c2-35f6-4208-a946-4c1f60dc9c12
   - heading "Test Event Link" [level=2]
   - text: Duration Days 1 Time per Day 02:00 Occurrences 1 Submission Type workshop
   - heading "Preferred Dates" [level=3]
@@ -17,7 +17,7 @@
   - list:
     - listitem:
       - strong: Test Event Link Session
-      - text: Test Workshop Series 14. März 2026, 17:35 – 14. März 2026, 18:35
+      - text: Test Workshop Series 14. März 2026, 20:25 – 14. März 2026, 21:25
   - text: Series Test Workshop Series
   - heading "Edit Event" [level=2]
   - paragraph: Test Event Link Session

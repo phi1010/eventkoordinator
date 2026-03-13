@@ -46,6 +46,7 @@
       - group: Additional Information
       - group: About Yourself
       - button "Save Proposal" [disabled]
+      - button "Delete Proposal"
     - heading "Submission Checklist" [level=3]
     - list:
       - listitem: ⚠ Title (max 30 characters)
