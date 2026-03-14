@@ -1,13 +1,16 @@
 from django.db import models
 
 from apiv1.models import Event
-from project.basemodels import HistoricalMetaBase
+from project.basemodels import HistoricalMetaBase, PolymorphicMetaBase
 
 
-class SyncBaseTarget(HistoricalMetaBase):
-    pass
+class SyncBaseTarget(PolymorphicMetaBase):
 
-class SyncBaseItem(HistoricalMetaBase):
+    @property
+    def type(self):
+        return self.get_real_instance().__class__.__name__
+
+class SyncBaseItem(PolymorphicMetaBase):
     flag_push = models.BooleanField(default=False)
     related_event = models.ForeignKey(Event, on_delete=models.CASCADE)
     def push_update(self):

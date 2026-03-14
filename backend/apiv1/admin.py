@@ -1,11 +1,12 @@
 from django.contrib import admin
 from django.contrib.admin import ModelAdmin
+from polymorphic.admin import PolymorphicParentModelAdmin
 from simple_history.admin import SimpleHistoryAdmin
 from viewflow import fsm
 
 from . import models
 from .flows import ProposalFlow
-from sync_pretix.models import PretixSyncTargetAreaAssociation
+from sync_pretix.models import PretixSyncTargetAreaAssociation, PretixSyncTarget
 from .models import SyncBaseTarget, SyncBaseItem
 
 
@@ -68,7 +69,14 @@ class ProposalAreaAdmin(SimpleHistoryAdmin):
 
 @admin.register(models.Speaker)
 class SpeakerAdmin(SimpleHistoryAdmin):
-    list_display = ("display_name", "email", "proposal", "role", "use_gravatar", "created_at")
+    list_display = (
+        "display_name",
+        "email",
+        "proposal",
+        "role",
+        "use_gravatar",
+        "created_at",
+    )
     search_fields = ("display_name", "email", "proposal__title")
     readonly_fields = ("created_at", "updated_at")
     list_filter = ("use_gravatar", "role")
@@ -132,13 +140,12 @@ class ProposalAdmin(fsm.FlowAdminMixin, SimpleHistoryAdmin):
 
 
 @admin.register(SyncBaseTarget)
-class SyncBaseTargetAdmin(SimpleHistoryAdmin):
-
+class SyncBaseTargetAdmin(PolymorphicParentModelAdmin, SimpleHistoryAdmin):
     list_display = (
         "id",
         "type",
         "created_at",
     )
-    list_filter = ("type")
-    readonly_fields = ("id","type", "created_at")
-    fields = ("id","type", "created_at")
+    child_models = (PretixSyncTarget,)
+    readonly_fields = ("id", "type", "created_at")
+    fields = ("id", "type", "created_at")

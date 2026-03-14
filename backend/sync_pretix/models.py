@@ -34,6 +34,13 @@ class PretixSyncTarget(SyncBaseTarget):
 
 
 class PretixSyncTargetAreaAssociation(HistoricalMetaBase):
+    sync_target = models.ForeignKey(
+        PretixSyncTarget,
+        on_delete=models.CASCADE,
+        related_name="area_associations",
+        null=True,
+        blank=True,
+    )
     area = models.ForeignKey(
         ProposalArea, on_delete=models.CASCADE, related_name="pretix_sync_associations"
     )

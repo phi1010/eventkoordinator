@@ -1,4 +1,5 @@
 from django.contrib import admin
+from polymorphic.admin import PolymorphicChildModelAdmin
 from simple_history.admin import SimpleHistoryAdmin
 
 from sync_pretix import models
@@ -18,11 +19,28 @@ class CalculatedPricesInline(admin.TabularInline):
 	readonly_fields = ("created_at", "updated_at")
 
 
+class PretixSyncTargetAreaAssociationInline(admin.StackedInline):
+	model = models.PretixSyncTargetAreaAssociation
+	fk_name = "sync_target"
+	extra = 0
+	fields = (
+		"area",
+		"event_slug",
+		"ticket_product_member_regular_id",
+		"ticket_product_member_discounted_id",
+		"ticket_product_guest_regular_id",
+		"ticket_product_guest_discounted_id",
+		"ticket_product_business_id",
+	)
+	raw_id_fields = ("area",)
+
+
 @admin.register(models.PretixSyncTarget)
-class PretixSyncTargetAdmin(SimpleHistoryAdmin):
+class PretixSyncTargetAdmin(PolymorphicChildModelAdmin, SimpleHistoryAdmin):
 	list_display = ("organizer_slug", "api_url", "created_at", "updated_at")
 	search_fields = ("organizer_slug", "api_url")
 	ordering = ("-updated_at",)
+	inlines = (PretixSyncTargetAreaAssociationInline,)
 
 
 @admin.register(models.PretixSyncTargetAreaAssociation)

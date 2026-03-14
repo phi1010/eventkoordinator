@@ -26,6 +26,7 @@ dependencies = [
     "recurring-ical-events>=3.8.1",
     "pillow>=12.1.1",
     "psycopg2-binary>=2.9.11",
+    "django-polymorphic>=4.11.2",
 ]
 
 [dependency-groups]

@@ -204,17 +204,17 @@ class Command(BaseCommand):
 
     def _replace_sync_target(
         self, *, runtime_settings: PretixSettings, dry_run: bool
-    ) -> None:
+    ) -> PretixSyncTarget | None:
         if dry_run:
             self.stdout.write(
                 self.style.WARNING(
                     "[dry-run] Would replace all PretixSyncTarget entries with current client setup values."
                 )
             )
-            return
+            return PretixSyncTarget.objects.order_by("-created_at").first()
 
         PretixSyncTarget.objects.all().delete()
-        PretixSyncTarget.objects.create(
+        return PretixSyncTarget.objects.create(
             api_url=runtime_settings.api_base_url,
             api_token=runtime_settings.api_token,
             organizer_slug=runtime_settings.organizer_slug,
@@ -296,7 +296,9 @@ class Command(BaseCommand):
 
         dry_run = bool(options.get("dry_run"))
         client = self._build_client(runtime_settings)
-        self._replace_sync_target(runtime_settings=runtime_settings, dry_run=dry_run)
+        sync_target = self._replace_sync_target(
+            runtime_settings=runtime_settings, dry_run=dry_run
+        )
 
         organizer = client.get_organizer(runtime_settings.organizer_slug)
         if organizer is None:
@@ -402,9 +404,12 @@ class Command(BaseCommand):
                     reused_events += 1
 
             if dry_run:
-                existing_association = area.pretix_sync_associations.order_by(
-                    "-created_at"
-                ).first()
+                existing_association_query = area.pretix_sync_associations
+                if sync_target is not None:
+                    existing_association_query = existing_association_query.filter(
+                        sync_target=sync_target
+                    )
+                existing_association = existing_association_query.order_by("-created_at").first()
                 if existing_association is None:
                     self.stdout.write(
                         self.style.WARNING(
@@ -421,6 +426,7 @@ class Command(BaseCommand):
             else:
                 association, association_created = PretixSyncTargetAreaAssociation.objects.get_or_create(
                     area=area,
+                    sync_target=sync_target,
                     defaults={"event_slug": event_slug},
                 )
                 if association_created:

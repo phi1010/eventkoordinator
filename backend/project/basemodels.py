@@ -1,6 +1,7 @@
 import uuid
 
 from django.db import models
+from polymorphic.models import PolymorphicModel
 from simple_history.models import HistoricalRecords
 
 
@@ -20,6 +21,13 @@ class MetaBase(models.Model):
         abstract = True
 
 class HistoricalMetaBase(MetaBase):
+
+    history = HistoricalRecords(inherit=True)
+
+    class Meta:
+        abstract = True
+
+class PolymorphicMetaBase(PolymorphicModel, MetaBase):
 
     history = HistoricalRecords(inherit=True)
 
