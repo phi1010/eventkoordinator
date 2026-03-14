@@ -56,16 +56,6 @@
         - cell "Change":
           - link "Change":
             - /url: /admin/apiv1/proposallanguage/
-      - row "Proposal speakers Add Change":
-        - rowheader "Proposal speakers":
-          - link "Proposal speakers":
-            - /url: /admin/apiv1/proposalspeaker/
-        - cell "Add":
-          - link "Add":
-            - /url: /admin/apiv1/proposalspeaker/add/
-        - cell "Change":
-          - link "Change":
-            - /url: /admin/apiv1/proposalspeaker/
       - row "Proposals Add Change":
         - rowheader "Proposals":
           - link "Proposals":
@@ -176,24 +166,36 @@
         - cell "Change":
           - link "Change":
             - /url: /admin/openid_user_management/openiduser/
-  - table "Pricing":
+  - table "Sync_Pretix":
     - caption:
-      - link "Pricing":
-        - /url: /admin/pricing/
+      - link "Sync_Pretix":
+        - /url: /admin/sync_pretix/
     - rowgroup:
       - row "Model name Add link Change or view list link":
         - columnheader "Model name"
         - columnheader "Add link"
         - columnheader "Change or view list link"
     - rowgroup:
-      - row "Preiskonfiguration Change":
-        - rowheader "Preiskonfiguration":
-          - link "Preiskonfiguration":
-            - /url: /admin/pricing/pricingconfiguration/
-        - cell
+      - row "Berechnete Eventpreise Add Change":
+        - rowheader "Berechnete Eventpreise":
+          - link "Berechnete Eventpreise":
+            - /url: /admin/sync_pretix/calculatedprices/
+        - cell "Add":
+          - link "Add":
+            - /url: /admin/sync_pretix/calculatedprices/add/
         - cell "Change":
           - link "Change":
-            - /url: /admin/pricing/pricingconfiguration/
+            - /url: /admin/sync_pretix/calculatedprices/
+      - row "Preiskonfiguration Add Change":
+        - rowheader "Preiskonfiguration":
+          - link "Preiskonfiguration":
+            - /url: /admin/sync_pretix/pretixpricingconfiguration/
+        - cell "Add":
+          - link "Add":
+            - /url: /admin/sync_pretix/pretixpricingconfiguration/add/
+        - cell "Change":
+          - link "Change":
+            - /url: /admin/sync_pretix/pretixpricingconfiguration/
   - heading "Recent actions" [level=2]
   - heading "My actions" [level=3]
   - paragraph: None available

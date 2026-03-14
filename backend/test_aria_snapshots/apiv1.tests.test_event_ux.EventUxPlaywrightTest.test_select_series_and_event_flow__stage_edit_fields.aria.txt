@@ -19,7 +19,7 @@
       - button "Create new event"
       - listbox "Events":
         - option "General Information"
-        - option "Ux Test Event <localized-datetime> draft" [selected]
+        - 'option "Ux Test Event Status of Ux Test Event: draft <localized-datetime> draft" [selected]': Ux Test Event Draft <localized-datetime> draft
     - main "Events content":
       - heading "Ux Test Series" [level=1]
       - heading "Edit Event" [level=2]
@@ -41,6 +41,12 @@
         - paragraph: When checked, the event spans continuously over midnight (e.g. Mon 08:00 → Tue 16:00 shows as one block). When unchecked, multi-day events are split into daily blocks using the same daily start/end hours (e.g. Mon <time-range> and Tue <time-range>).
         - button "Save Changes"
         - button "Cancel"
+      - text: "Status: Draft"
+      - button "Submit event" [disabled]
+      - button "▶ Event lifecycle diagram"
+      - heading "Calculated Prices" [level=3]
+      - paragraph: No calculated prices exist for this event yet.
+      - paragraph: You do not have permission to create calculated prices.
       - heading "Pick Time in Calendar" [level=3]
       - paragraph: Displayed in local time. Stored in UTC. Drag on the calendar to update start and end.
       - button "Previous week": ‹

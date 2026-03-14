@@ -64,4 +64,4 @@
       - listitem: ✓ At least one speaker added
       - listitem: ✓ All speakers have biography
     - group: Edit history last changed just now
-    - text: Loading transitions...
+    - button "Submit proposal"
