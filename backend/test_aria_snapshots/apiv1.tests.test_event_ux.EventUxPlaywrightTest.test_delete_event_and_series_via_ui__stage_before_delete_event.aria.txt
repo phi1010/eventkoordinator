@@ -45,7 +45,8 @@
       - button "Submit event" [disabled]
       - button "▶ Event lifecycle diagram"
       - heading "Calculated Prices" [level=3]
-      - paragraph: Loading calculated prices...
+      - paragraph: No calculated prices exist for this event yet.
+      - paragraph: You do not have permission to create calculated prices.
       - heading "Pick Time in Calendar" [level=3]
       - paragraph: Displayed in local time. Stored in UTC. Drag on the calendar to update start and end.
       - button "Previous week": ‹
