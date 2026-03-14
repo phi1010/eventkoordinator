@@ -697,7 +697,7 @@ def get_proposal_events(
 
     events = (
         EventModel.objects.filter(proposal=proposal)
-        .select_related("series")
+        .select_related("series", "proposal")
         .order_by("start_time")
     )
 
@@ -712,5 +712,6 @@ def get_proposal_events(
             series_name=event.series.name,
         )
         for event in events
+        if request.user.has_perm((apiv1, "view", EventModel), event)
     ]
 

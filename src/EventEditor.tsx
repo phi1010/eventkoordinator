@@ -478,7 +478,7 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
             <button
               type="button"
               onClick={handleSaveChanges}
-              disabled={!hasChanges || isSaving || isDeleting}
+              disabled={disabled || !hasChanges || isSaving || isDeleting}
               className={styles.saveButton}
               aria-busy={isSaving}
             >

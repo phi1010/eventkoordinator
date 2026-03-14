@@ -395,6 +395,53 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
             finally:
                 browser.close()
 
+    def test_event_editor_uses_object_change_permission_instead_of_global_permission(self) -> None:
+        """Users with change_series but without global change_event can still edit events."""
+        user = get_user_model().objects.get(username=self.username)
+        user.user_permissions.remove(Permission.objects.get(codename="change_event"))
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(**playwright_launch_options())
+            page = browser.new_page()
+            page.set_viewport_size({"width": 1600, "height": 900})
+            try:
+                with print_aria_on_timeout(page):
+                    base_url = self.live_server_url
+                    if callable(base_url):
+                        base_url = base_url()
+
+                    self._login_via_navbar(page, base_url)
+                    self._go_to_coordinator(page, base_url)
+
+                    page.get_by_role("listbox", name="Series").get_by_text(
+                        self.series.name
+                    ).click()
+                    page.wait_for_load_state("networkidle")
+
+                    page.get_by_role("listbox", name="Events").get_by_text(
+                        self.event.name
+                    ).click()
+                    page.get_by_role("form", name="Edit event details").wait_for(
+                        timeout=3000
+                    )
+
+                    name_input = page.get_by_label("Name")
+                    self.assertTrue(name_input.is_enabled())
+
+                    name_input.clear()
+                    name_input.fill("Object Permission Edit")
+                    save_button = page.get_by_role("button", name="Save Changes")
+                    self.assertTrue(save_button.is_enabled())
+                    save_button.click()
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_timeout(500)
+                    self.assertEqual(name_input.input_value(), "Object Permission Edit")
+                    page.get_by_role("listbox", name="Events").get_by_text(
+                        "Object Permission Edit"
+                    ).wait_for(timeout=1000)
+            finally:
+                browser.close()
+
     # ------------------------------------------------------------------
     # Test 2: create series + event via the UI, then edit with drag
     # ------------------------------------------------------------------

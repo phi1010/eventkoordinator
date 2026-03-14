@@ -4,6 +4,7 @@ import {
   fetchProposal,
   fetchProposalEvents,
   fetchSeriesById,
+  checkObjectPermission,
   type ProposalDetail,
   type ProposalEventSummary,
   type Series,
@@ -26,6 +27,9 @@ export function ProposalEventView() {
   const [series, setSeries] = useState<Series | null>(null)
   const [event, setEvent] = useState<Event | null>(null)
   const [eventLoading, setEventLoading] = useState(false)
+  const [eventPermissionLoading, setEventPermissionLoading] = useState(false)
+  const [canEditEvent, setCanEditEvent] = useState(false)
+  const [canDeleteEvent, setCanDeleteEvent] = useState(false)
 
   // Load proposal details and linked events
   useEffect(() => {
@@ -79,6 +83,40 @@ export function ProposalEventView() {
 
     loadEvent()
   }, [eventId, proposalEvents])
+
+  useEffect(() => {
+    if (!event) {
+      setCanEditEvent(false)
+      setCanDeleteEvent(false)
+      return
+    }
+
+    const loadPermissions = async () => {
+      try {
+        setEventPermissionLoading(true)
+        const [canChange, canDelete] = await Promise.all([
+          checkObjectPermission({
+            app: 'apiv1',
+            action: 'change',
+            object_type: 'event',
+            object_id: event.id,
+          }),
+          checkObjectPermission({
+            app: 'apiv1',
+            action: 'delete',
+            object_type: 'event',
+            object_id: event.id,
+          }),
+        ])
+        setCanEditEvent(canChange)
+        setCanDeleteEvent(canDelete)
+      } finally {
+        setEventPermissionLoading(false)
+      }
+    }
+
+    void loadPermissions()
+  }, [event])
 
   const handleEventUpdate = useCallback((updated: Event) => {
     setEvent(updated)
@@ -173,7 +211,7 @@ export function ProposalEventView() {
 
       {/* Right panel: Event editor */}
       <div className={styles.eventEditorPanel}>
-        {eventLoading ? (
+        {eventLoading || eventPermissionLoading ? (
           <div className={styles.loading}>Loading event...</div>
         ) : event && series ? (
           <div>
@@ -188,6 +226,8 @@ export function ProposalEventView() {
               series={series}
               event={event}
               onEventUpdate={handleEventUpdate}
+              disabled={!canEditEvent}
+              canDelete={canDeleteEvent}
             />
           </div>
         ) : (

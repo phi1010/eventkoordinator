@@ -56,14 +56,20 @@ def event_flow_chart_image(request):
 
 
 @router.get("", response={200: list[SeriesListItem], 401: ErrorOut, 403: ErrorOut})
-@api_permission_required((apiv1, "view", SeriesModel))
-def get_series(request) -> list[SeriesListItem]:
-    """Fetch and return all series without event payloads."""
+@api_permission_mandatory()
+def get_series(request) -> list[SeriesListItem] | tuple[int, ErrorOut]:
+    """Fetch all series the requesting user is allowed to view."""
     import logging
     logger = logging.getLogger(__name__)
+    if not request.user.is_authenticated:
+        return 401, ErrorOut(error="Not authenticated")
     try:
         series_list = SeriesModel.objects.all().order_by('name')
-        return [model_series_list_item_to_schema(s) for s in series_list if s.id]
+        return [
+            model_series_list_item_to_schema(s)
+            for s in series_list
+            if s.id and request.user.has_perm((apiv1, "view", SeriesModel), s)
+        ]
     except Exception as e:
         logger.error(f"Failed to fetch series: {str(e)}")
         return []
@@ -90,7 +96,6 @@ def create_series(request, payload: CreateSeriesIn) -> tuple[int, Series]:
     "/{series_id}/events/create",
     response={201: CreateEventOut, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
 )
-@api_permission_required((apiv1, "change", SeriesModel))
 @api_permission_required((apiv1, "add", EventModel))
 def create_event(request, series_id: str, payload: CreateEventIn) -> tuple[int, CreateEventOut] | tuple[int, ErrorOut]:
     """Create a new event in a series"""
@@ -98,6 +103,9 @@ def create_event(request, series_id: str, payload: CreateEventIn) -> tuple[int, 
         series_model = SeriesModel.objects.get(id=series_id)
     except SeriesModel.DoesNotExist:
         return 404, ErrorOut(error="Series not found")
+
+    if not request.user.has_perm((apiv1, "change", SeriesModel), series_model):
+        return 403, ErrorOut(error="Unauthorized to modify this series")
 
     event_id = uuid4()
     now = django.utils.timezone.now().replace(second=0, microsecond=0)
@@ -177,7 +185,7 @@ def delete_series(request, series_id: str) -> tuple[int, None] | tuple[int, Erro
     "/{series_id}/events/{event_id}",
     response={200: Event, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
 )
-@api_permission_required((apiv1, "change", EventModel))
+@api_permission_mandatory()
 def update_event(request, series_id: str, event_id: str, payload: UpdateEventIn) -> tuple[int, Event] | tuple[int, ErrorOut]:
     """Update an event in a series"""
     try:
@@ -185,6 +193,9 @@ def update_event(request, series_id: str, event_id: str, payload: UpdateEventIn)
         event_model = EventModel.objects.get(id=event_id, series=series_model)
     except (SeriesModel.DoesNotExist, EventModel.DoesNotExist):
         return 404, ErrorOut(error="Series or event not found")
+
+    if not request.user.has_perm((apiv1, "change", EventModel), event_model):
+        return 403, ErrorOut(error="Unauthorized to modify this event")
 
     # Only update fields that were provided
     if payload.name is not None:
@@ -212,6 +223,8 @@ def update_event(request, series_id: str, event_id: str, payload: UpdateEventIn)
     if payload.series_id is not None:
         try:
             new_series = SeriesModel.objects.get(id=payload.series_id)
+            if not request.user.has_perm((apiv1, "change", SeriesModel), new_series):
+                return 403, ErrorOut(error="Unauthorized to modify the target series")
             event_model.series = new_series
         except SeriesModel.DoesNotExist:
             return 404, ErrorOut(error="Target series not found")
@@ -244,13 +257,16 @@ def delete_event(request, series_id: str, event_id: str) -> tuple[int, None] | t
 @router.get(
     "/{series_id}", response={200: Series, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut}
 )
-@api_permission_required((apiv1, "view", SeriesModel))
+@api_permission_mandatory()
 def get_one_series(request, series_id: str) -> tuple[int, Series] | tuple[int, ErrorOut]:
     """Fetch one series including its events."""
     try:
         series_model = SeriesModel.objects.get(id=series_id)
     except SeriesModel.DoesNotExist:
         return 404, ErrorOut(error="Series not found")
+
+    if not request.user.has_perm((apiv1, "view", SeriesModel), series_model):
+        return 401, ErrorOut(error="Unauthorized to view this series")
 
     return 200, model_series_to_schema(series_model)
 

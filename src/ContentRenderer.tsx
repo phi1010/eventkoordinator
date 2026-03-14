@@ -83,7 +83,7 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
             }),
           ])
           setCanViewSelectedObject(canView)
-          setCanEditSelectedObject(canEditEvent && canChange)
+          setCanEditSelectedObject(canChange)
           setCanDeleteSelectedObject(canDelete)
         } finally {
           setPermissionLoading(false)

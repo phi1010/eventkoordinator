@@ -1,5 +1,6 @@
 from pathlib import Path
 from datetime import date, datetime, timezone
+import time
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest.mock import patch
 from uuid import UUID
@@ -291,5 +292,439 @@ class EventApprovalPermissionTests(TestCase):
         self.other_user.user_permissions.add(self.approve_perm)
         other_user = get_user_model().objects.get(pk=self.other_user.pk)
         self.assertFalse(self.event.has_object_permission(other_user, "apiv1.approve_event"))
+
+
+class EventViewObjectPermissionTests(TestCase):
+    """Tests for the view_event object permission on the Event model."""
+
+    def setUp(self):
+        user_model = get_user_model()
+        self.owner = user_model.objects.create_user(
+            username="view-event-owner",
+            password="pw",
+            email="view-event-owner@example.com",
+        )
+        self.editor = user_model.objects.create_user(
+            username="view-event-editor",
+            password="pw",
+            email="view-event-editor@example.com",
+        )
+        self.unrelated_user = user_model.objects.create_user(
+            username="view-event-unrelated",
+            password="pw",
+            email="view-event-unrelated@example.com",
+        )
+
+        submission_type, _ = SubmissionType.objects.get_or_create(
+            code="workshop",
+            defaults={"label": "Workshop"},
+        )
+        language, _ = ProposalLanguage.objects.get_or_create(
+            code="en",
+            defaults={"label": "English"},
+        )
+        area, _ = ProposalArea.objects.get_or_create(
+            code="metal",
+            defaults={"label": "Metal Workshop"},
+        )
+
+        self.proposal = Proposal.objects.create(
+            owner=self.owner,
+            title="Linked proposal",
+            submission_type=submission_type,
+            language=language,
+            area=area,
+            abstract="A" * 50,
+            description="B" * 120,
+            occurrence_count=1,
+            photo=SimpleUploadedFile("proposal.png", b"img", content_type="image/png"),
+            duration_days=1,
+            duration_time_per_day="02:00",
+            max_participants=10,
+            material_cost_eur="3.50",
+            preferred_dates="2026-05-10 10:00",
+        )
+        self.proposal.editors.add(self.editor)
+
+        self.series = Series.objects.create(name="View permission series")
+        self.proposed_event = Event.objects.create(
+            series=self.series,
+            proposal=self.proposal,
+            name="Proposed event",
+            start_time=datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+            status=Event.Status.PROPOSED,
+        )
+        self.draft_event = Event.objects.create(
+            series=self.series,
+            proposal=self.proposal,
+            name="Draft event",
+            start_time=datetime(2026, 6, 2, 10, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 6, 2, 12, 0, tzinfo=timezone.utc),
+            status=Event.Status.DRAFT,
+        )
+        self.unlinked_event = Event.objects.create(
+            series=self.series,
+            proposal=None,
+            name="Unlinked event",
+            start_time=datetime(2026, 6, 3, 10, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 6, 3, 12, 0, tzinfo=timezone.utc),
+            status=Event.Status.PROPOSED,
+        )
+
+    def test_proposal_owner_can_view_non_draft_linked_event(self):
+        self.assertTrue(
+            self.proposed_event.has_object_permission(self.owner, "apiv1.view_event")
+        )
+
+    def test_proposal_editor_can_view_non_draft_linked_event(self):
+        self.assertTrue(
+            self.proposed_event.has_object_permission(self.editor, "apiv1.view_event")
+        )
+
+    def test_unrelated_user_cannot_view_non_draft_linked_event(self):
+        self.assertFalse(
+            self.proposed_event.has_object_permission(self.unrelated_user, "apiv1.view_event")
+        )
+
+    def test_draft_event_is_not_viewable_even_for_proposal_owner(self):
+        self.assertFalse(
+            self.draft_event.has_object_permission(self.owner, "apiv1.view_event")
+        )
+
+    def test_draft_event_is_not_viewable_for_proposal_editor(self):
+        self.assertFalse(
+            self.draft_event.has_object_permission(self.editor, "apiv1.view_event")
+        )
+
+    def test_event_without_proposal_is_not_viewable(self):
+        self.assertFalse(
+            self.unlinked_event.has_object_permission(self.owner, "apiv1.view_event")
+        )
+
+    def test_planned_event_is_viewable_by_owner(self):
+        self.proposed_event.status = Event.Status.PLANNED
+        self.proposed_event.save(update_fields=["status"])
+        self.assertTrue(
+            self.proposed_event.has_object_permission(self.owner, "apiv1.view_event")
+        )
+
+    def test_published_event_is_viewable_by_editor(self):
+        self.proposed_event.status = Event.Status.PUBLISHED
+        self.proposed_event.save(update_fields=["status"])
+        self.assertTrue(
+            self.proposed_event.has_object_permission(self.editor, "apiv1.view_event")
+        )
+
+
+class EventChangeObjectPermissionTests(TestCase):
+    """Tests for the change_event object permission and update API."""
+
+    def setUp(self):
+        user_model = get_user_model()
+        self.global_event_editor = user_model.objects.create_user(
+            username="event-change-global-editor",
+            password="pw",
+            email="event-change-global-editor@example.com",
+        )
+        self.series_editor = user_model.objects.create_user(
+            username="event-change-series-editor",
+            password="pw",
+            email="event-change-series-editor@example.com",
+        )
+        self.unprivileged_user = user_model.objects.create_user(
+            username="event-change-unprivileged",
+            password="pw",
+            email="event-change-unprivileged@example.com",
+        )
+
+        self.global_event_editor.user_permissions.add(
+            Permission.objects.get(codename="change_event")
+        )
+        self.series_editor.user_permissions.add(
+            Permission.objects.get(codename="change_series")
+        )
+
+        self.series = Series.objects.create(name="Event change permission series")
+        self.event = Event.objects.create(
+            series=self.series,
+            name="Editable event",
+            start_time=datetime(2026, 10, 1, 10, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+    def _login(self, user):
+        self.client.force_login(user)
+        session = self.client.session
+        session["oidc_id_token_expiration"] = time.time() + 3600
+        session.save()
+
+    def test_global_change_event_grants_change_event_object_permission(self):
+        editor = get_user_model().objects.get(pk=self.global_event_editor.pk)
+        self.assertTrue(
+            self.event.has_object_permission(editor, "apiv1.change_event")
+        )
+
+    def test_change_series_grants_change_event_object_permission(self):
+        editor = get_user_model().objects.get(pk=self.series_editor.pk)
+        self.assertTrue(
+            self.event.has_object_permission(editor, "apiv1.change_event")
+        )
+
+    def test_unprivileged_user_cannot_change_event_object(self):
+        self.assertFalse(
+            self.event.has_object_permission(self.unprivileged_user, "apiv1.change_event")
+        )
+
+    def test_update_event_api_allows_series_editor_without_global_change_event(self):
+        self._login(self.series_editor)
+        response = self.client.put(
+            f"/api/v1/series/{self.series.id}/events/{self.event.id}",
+            data='{"name": "Updated by series editor"}',
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.name, "Updated by series editor")
+
+    def test_update_event_api_denies_unprivileged_user(self):
+        self._login(self.unprivileged_user)
+        response = self.client.put(
+            f"/api/v1/series/{self.series.id}/events/{self.event.id}",
+            data='{"name": "Should fail"}',
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+
+class SeriesViewObjectPermissionTests(TestCase):
+    """Tests for the view_series object permission on the Series model."""
+
+    def setUp(self):
+        user_model = get_user_model()
+        self.owner = user_model.objects.create_user(
+            username="series-view-owner",
+            password="pw",
+            email="series-view-owner@example.com",
+        )
+        self.editor = user_model.objects.create_user(
+            username="series-view-editor",
+            password="pw",
+            email="series-view-editor@example.com",
+        )
+        self.unrelated = user_model.objects.create_user(
+            username="series-view-unrelated",
+            password="pw",
+            email="series-view-unrelated@example.com",
+        )
+        self.global_viewer = user_model.objects.create_user(
+            username="series-view-global",
+            password="pw",
+            email="series-view-global@example.com",
+        )
+        self.global_viewer.user_permissions.add(
+            Permission.objects.get(codename="view_series")
+        )
+        # Reload to clear permission cache
+        self.global_viewer = user_model.objects.get(pk=self.global_viewer.pk)
+
+        submission_type, _ = SubmissionType.objects.get_or_create(
+            code="workshop", defaults={"label": "Workshop"}
+        )
+        language, _ = ProposalLanguage.objects.get_or_create(
+            code="en", defaults={"label": "English"}
+        )
+        area, _ = ProposalArea.objects.get_or_create(
+            code="metal", defaults={"label": "Metal Workshop"}
+        )
+
+        self.proposal = Proposal.objects.create(
+            owner=self.owner,
+            title="Test proposal",
+            submission_type=submission_type,
+            language=language,
+            area=area,
+            abstract="A" * 50,
+            description="B" * 120,
+            occurrence_count=1,
+            photo=SimpleUploadedFile("p.png", b"img", content_type="image/png"),
+            duration_days=1,
+            duration_time_per_day="02:00",
+            max_participants=10,
+            material_cost_eur="0.00",
+            preferred_dates="2026-07-01",
+        )
+        self.proposal.editors.add(self.editor)
+
+        self.series = Series.objects.create(name="Permission test series")
+        self.empty_series = Series.objects.create(name="Empty series")
+
+        self.proposed_event = Event.objects.create(
+            series=self.series,
+            proposal=self.proposal,
+            name="Proposed event",
+            start_time=datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc),
+            status=Event.Status.PROPOSED,
+        )
+        self.draft_event = Event.objects.create(
+            series=self.series,
+            proposal=self.proposal,
+            name="Draft event",
+            start_time=datetime(2026, 7, 2, 10, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 7, 2, 12, 0, tzinfo=timezone.utc),
+            status=Event.Status.DRAFT,
+        )
+
+    # --- object permission unit tests ---
+
+    def test_global_viewer_can_view_any_series(self):
+        self.assertTrue(
+            self.series.has_object_permission(self.global_viewer, "apiv1.view_series")
+        )
+        self.assertTrue(
+            self.empty_series.has_object_permission(self.global_viewer, "apiv1.view_series")
+        )
+
+    def test_proposal_owner_can_view_series_with_non_draft_event(self):
+        self.assertTrue(
+            self.series.has_object_permission(self.owner, "apiv1.view_series")
+        )
+
+    def test_proposal_editor_can_view_series_with_non_draft_event(self):
+        self.assertTrue(
+            self.series.has_object_permission(self.editor, "apiv1.view_series")
+        )
+
+    def test_unrelated_user_cannot_view_series(self):
+        self.assertFalse(
+            self.series.has_object_permission(self.unrelated, "apiv1.view_series")
+        )
+
+    def test_owner_cannot_view_series_with_only_draft_events(self):
+        # Remove the proposed event so only the draft event remains
+        self.proposed_event.delete()
+        self.assertFalse(
+            self.series.has_object_permission(self.owner, "apiv1.view_series")
+        )
+
+    def test_owner_cannot_view_empty_series_without_global_perm(self):
+        self.assertFalse(
+            self.empty_series.has_object_permission(self.owner, "apiv1.view_series")
+        )
+
+    def test_change_series_delegates_to_global_permission(self):
+        """change_series object permission mirrors global permission."""
+        self.assertFalse(
+            self.series.has_object_permission(self.owner, "apiv1.change_series")
+        )
+        self.owner.user_permissions.add(Permission.objects.get(codename="change_series"))
+        owner = get_user_model().objects.get(pk=self.owner.pk)
+        self.assertTrue(
+            self.series.has_object_permission(owner, "apiv1.change_series")
+        )
+
+    # --- endpoint integration tests ---
+
+    def _login(self, user):
+        """Log in and set a valid OIDC session expiry so SessionRefresh does not redirect."""
+        self.client.force_login(user)
+        session = self.client.session
+        session["oidc_id_token_expiration"] = time.time() + 3600
+        session.save()
+
+    def test_get_series_list_returns_series_for_proposal_owner(self):
+        self._login(self.owner)
+        response = self.client.get("/api/v1/series")
+        self.assertEqual(response.status_code, 200)
+        ids = [s["id"] for s in response.json()]
+        self.assertIn(str(self.series.id), ids)
+        # Empty series not visible without global perm
+        self.assertNotIn(str(self.empty_series.id), ids)
+
+    def test_get_series_list_hides_series_for_unrelated_user(self):
+        self._login(self.unrelated)
+        response = self.client.get("/api/v1/series")
+        self.assertEqual(response.status_code, 200)
+        ids = [s["id"] for s in response.json()]
+        self.assertNotIn(str(self.series.id), ids)
+
+    def test_get_series_list_requires_authentication(self):
+        response = self.client.get("/api/v1/series")
+        self.assertEqual(response.status_code, 401)
+
+    def test_get_one_series_accessible_for_proposal_owner(self):
+        self._login(self.owner)
+        response = self.client.get(f"/api/v1/series/{self.series.id}")
+        self.assertEqual(response.status_code, 200)
+
+    def test_get_one_series_denied_for_unrelated_user(self):
+        self._login(self.unrelated)
+        response = self.client.get(f"/api/v1/series/{self.series.id}")
+        self.assertEqual(response.status_code, 401)
+
+    def test_get_one_series_accessible_for_global_viewer(self):
+        self._login(self.global_viewer)
+        response = self.client.get(f"/api/v1/series/{self.series.id}")
+        self.assertEqual(response.status_code, 200)
+
+
+class SeriesCreateEventPermissionTests(TestCase):
+    """Tests that creating an event in a series requires the change_series object permission."""
+
+    def setUp(self):
+        user_model = get_user_model()
+        self.user_with_perm = user_model.objects.create_user(
+            username="create-event-perm",
+            password="pw",
+            email="create-event-perm@example.com",
+        )
+        self.user_without_series_perm = user_model.objects.create_user(
+            username="create-event-noperm",
+            password="pw",
+            email="create-event-noperm@example.com",
+        )
+
+        self.user_with_perm.user_permissions.add(
+            Permission.objects.get(codename="add_event"),
+            Permission.objects.get(codename="change_series"),
+        )
+        self.user_without_series_perm.user_permissions.add(
+            Permission.objects.get(codename="add_event"),
+        )
+
+        self.series = Series.objects.create(name="Create-event test series")
+
+    def _create_event_payload(self):
+        import json
+        return json.dumps({
+            "name": "New event",
+            "startTime": "2026-09-01T10:00:00",
+            "endTime": "2026-09-01T12:00:00",
+        })
+
+    def _login(self, user):
+        self.client.force_login(user)
+        session = self.client.session
+        session["oidc_id_token_expiration"] = time.time() + 3600
+        session.save()
+
+    def test_user_with_change_series_can_create_event(self):
+        self._login(self.user_with_perm)
+        response = self.client.post(
+            f"/api/v1/series/{self.series.id}/events/create",
+            data=self._create_event_payload(),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+
+    def test_user_without_change_series_cannot_create_event(self):
+        self._login(self.user_without_series_perm)
+        response = self.client.post(
+            f"/api/v1/series/{self.series.id}/events/create",
+            data=self._create_event_payload(),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
 
 

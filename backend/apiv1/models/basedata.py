@@ -23,6 +23,7 @@ from prometheus_client.registry import Collector, REGISTRY
 from solo.models import SingletonModel
 from viewflow import fsm
 
+import apiv1
 from project.basemodels import HistoricalMetaBase, MetaBase
 
 from openid_user_management.models import OpenIDUser
@@ -74,6 +75,22 @@ class Series(HistoricalMetaBase):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True, max_length=500)
 
+    def has_object_permission(self, user, perm):
+        logger.getChild("has_object_permission").debug(
+            f"Checking permission {perm!r} for user {user.username!r} on series {self.pk}"
+        )
+        if perm.endswith(f".view_{Series.__name__.lower()}"):
+            # Global view permission always grants object permission.
+            if user.has_perm(perm, None):
+                return True
+            # Also when the user has view permission to any associated event
+            if any((user.has_perm((apiv1, "view", Event), event) for event in self.events.all())):
+                return True
+            return False
+        # For all other permissions the global permission is sufficient as
+        # object permission (no per-object restrictions beyond global rights).
+        return user.has_perm(perm, None)
+
     class Meta:
         ordering = ["name"]
         verbose_name_plural = "Series"
@@ -121,6 +138,23 @@ class Event(HistoricalMetaBase):
         logger.getChild("has_object_permission").debug(
             f"Checking permission {perm!r} for user {user.username!r} on event {self.pk}"
         )
+        # Object-level view permission: granted when the event is not in draft
+        # state and is linked to a proposal that the user has view permission on.
+        if perm.endswith(f".view_{Event.__name__.lower()}"):
+            if user.has_perm(perm, None):
+                return True
+            if self.status == Event.Status.DRAFT:
+                return False
+            if self.proposal_id is None:
+                return False
+            app_label = perm.split(".")[0]
+            return user.has_perm(f"{app_label}.view_proposal", self.proposal)
+
+        if perm.endswith(f".change_{Event.__name__.lower()}"):
+            if user.has_perm(perm, None):
+                return True
+            return user.has_perm((apiv1, "change", Series), self.series)
+
         # All event workflow transitions require the corresponding global permission
         for action in (
             "submit",
@@ -138,8 +172,6 @@ class Event(HistoricalMetaBase):
                 # For linked proposals, approving/rejecting additionally requires
                 # proposal ownership/editor rights.
                 if action in ("approve", "reject") and self.proposal_id is not None:
-                    if not has_global_permission:
-                        return False
 
                     if user == self.proposal.owner:
                         return True
@@ -360,94 +392,94 @@ def check_proposal_required_fields(proposal: Proposal) -> dict[Any, Any]:
     checklist = {}
 
     # Title validation
-    TITLE = "Title (max 30 characters)"
+    title = "Title (max 30 characters)"
     if proposal.title and proposal.title.strip() and 0 < len(proposal.title) <= 30:
-        checklist[TITLE] = {"status": "ok"}
+        checklist[title] = {"status": "ok"}
     else:
-        checklist[TITLE] = {"status": "error"}
+        checklist[title] = {"status": "error"}
 
     # Abstract validation (50-250 chars)
     abstract_len = len(proposal.abstract) if proposal.abstract else 0
-    ABSTRACT = "Abstract (50-250 characters)"
+    abstract = "Abstract (50-250 characters)"
     if proposal.abstract and 50 <= abstract_len <= 250:
-        checklist[ABSTRACT] = {"status": "ok"}
+        checklist[abstract] = {"status": "ok"}
     else:
-        checklist[ABSTRACT] = {"status": "error"}
+        checklist[abstract] = {"status": "error"}
 
     # Description validation (50-1000 chars)
     desc_len = len(proposal.description) if proposal.description else 0
-    DESCRIPTION = "Description (50-1000 characters)"
+    description = "Description (50-1000 characters)"
     if proposal.description and 50 <= desc_len <= 1000:
-        checklist[DESCRIPTION] = {"status": "ok"}
+        checklist[description] = {"status": "ok"}
     else:
-        checklist[DESCRIPTION] = {"status": "error"}
+        checklist[description] = {"status": "error"}
 
     # Duration validation
-    DURATIONSET = "Duration set"
+    durationset = "Duration set"
     total_minutes = proposal.get_total_duration_minutes()
     if total_minutes >= 1:
-        checklist[DURATIONSET] = {"status": "ok"}
+        checklist[durationset] = {"status": "ok"}
     else:
-        checklist[DURATIONSET] = {"status": "error"}
+        checklist[durationset] = {"status": "error"}
 
     # Max participants validation
-    MAXPARTICIPANTS = "Max participants set"
+    maxparticipants = "Max participants set"
     if proposal.max_participants and proposal.max_participants >= 1:
-        checklist[MAXPARTICIPANTS] = {"status": "ok"}
+        checklist[maxparticipants] = {"status": "ok"}
     else:
-        checklist[MAXPARTICIPANTS] = {"status": "error"}
+        checklist[maxparticipants] = {"status": "error"}
 
     # Occurrence count validation
-    OCCURENCECOUNT = "Occurrence count set"
+    occurencecount = "Occurrence count set"
     if proposal.occurrence_count and proposal.occurrence_count >= 1:
-        checklist[OCCURENCECOUNT] = {"status": "ok"}
+        checklist[occurencecount] = {"status": "ok"}
     else:
-        checklist[OCCURENCECOUNT] = {"status": "error"}
+        checklist[occurencecount] = {"status": "error"}
 
     # Preferred dates validation
-    PREFERREDDATES = "Preferred dates specified"
+    preferreddates = "Preferred dates specified"
     if proposal.preferred_dates and proposal.preferred_dates.strip():
-        checklist[PREFERREDDATES] = {"status": "ok"}
+        checklist[preferreddates] = {"status": "ok"}
     else:
-        checklist[PREFERREDDATES] = {"status": "error"}
+        checklist[preferreddates] = {"status": "error"}
 
-    LANGUAGE = "Language selected"
+    language = "Language selected"
     if proposal.language:
-        checklist[LANGUAGE] = {"status": "ok"}
+        checklist[language] = {"status": "ok"}
     else:
-        checklist[LANGUAGE] = {"status": "error"}
+        checklist[language] = {"status": "error"}
 
-    SUBMISSIONTYPE = "Submission type selected"
+    submissiontype = "Submission type selected"
     if proposal.submission_type:
-        checklist[SUBMISSIONTYPE] = {"status": "ok"}
+        checklist[submissiontype] = {"status": "ok"}
     else:
-        checklist[SUBMISSIONTYPE] = {"status": "error"}
+        checklist[submissiontype] = {"status": "error"}
 
     # Area validation
-    WORKSHOPAREA = "Workshop area selected"
+    workshoparea = "Workshop area selected"
     if proposal.area:
-        checklist[WORKSHOPAREA] = {"status": "ok"}
+        checklist[workshoparea] = {"status": "ok"}
     else:
-        checklist[WORKSHOPAREA] = {"status": "error"}
+        checklist[workshoparea] = {"status": "error"}
 
     # Speaker presence validation: require at least one speaker
     speaker_count = proposal.speakers.count()
 
-    ATLEASTONESPEAKER = "At least one speaker added"
+    atleastonespeaker = "At least one speaker added"
     if speaker_count >= 1:
-        checklist[ATLEASTONESPEAKER] = {"status": "ok"}
+        checklist[atleastonespeaker] = {"status": "ok"}
     else:
-        checklist[ATLEASTONESPEAKER] = {"status": "error"}
+        checklist[atleastonespeaker] = {"status": "error"}
 
     empty_bio_present = proposal.speakers.filter(
         Q(biography__isnull=True) | Q(biography__exact="")
     ).exists()
 
-    SPEAKERSHAVEBIO = "All speakers have biography"
+    speakershavebio = "All speakers have biography"
     if empty_bio_present:
-        checklist[SPEAKERSHAVEBIO] = {"status": "error"}
+        checklist[speakershavebio] = {"status": "error"}
     else:
-        checklist[SPEAKERSHAVEBIO] = {"status": "ok"}
+        checklist[speakershavebio] = {"status": "ok"}
     return checklist
 
 
