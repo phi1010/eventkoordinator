@@ -424,7 +424,7 @@ export interface paths {
         put?: never;
         /**
          * Add Speaker To Proposal
-         * @description Add a speaker to a proposal or create new speaker if doesn't exist
+         * @description Add a new speaker to a proposal
          */
         post: operations["apiv1_routers_speakers_add_speaker_to_proposal"];
         delete?: never;
@@ -1397,7 +1397,10 @@ export interface components {
             biography: string;
             /** Display Name */
             display_name: string;
-            /** Email */
+            /**
+             * Email
+             * @default
+             */
             email: string;
             /**
              * Id

@@ -8,7 +8,6 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
-from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 
 from apiv1.management.commands.import_ical import parse_calendar_data
@@ -16,7 +15,6 @@ from apiv1.models import (
     Proposal,
     ProposalArea,
     ProposalLanguage,
-    ProposalSpeaker,
     Series,
     Speaker,
     SubmissionType,
@@ -63,36 +61,35 @@ class ProposalModelTests(TestCase):
         self.assertIs(Proposal._meta.get_field('editors').remote_field.model, user_model)
 
     def test_speaker_biography_min_length_is_validated(self):
-        speaker = Speaker(email='person@example.com', display_name='Person', biography='too short')
+        proposal = self._create_proposal()
+        speaker = Speaker(proposal=proposal, email='person@example.com', display_name='Person', biography='too short')
         with self.assertRaises(ValidationError):
             speaker.full_clean()
 
-    def test_only_one_primary_speaker_per_proposal(self):
+    def test_speaker_belongs_to_exactly_one_proposal(self):
         proposal = self._create_proposal()
-        primary = Speaker.objects.create(
-            email='primary@example.com',
-            display_name='Primary',
-            biography='P' * 60,
-        )
-        second = Speaker.objects.create(
-            email='second@example.com',
-            display_name='Second',
-            biography='S' * 60,
-        )
-
-        ProposalSpeaker.objects.create(
+        speaker = Speaker.objects.create(
             proposal=proposal,
-            speaker=primary,
-            role=ProposalSpeaker.Role.PRIMARY,
+            email='speaker@example.com',
+            display_name='Test Speaker',
+            biography='B' * 60,
         )
+        self.assertEqual(speaker.proposal, proposal)
+        self.assertIn(speaker, proposal.speakers.all())
 
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                ProposalSpeaker.objects.create(
-                    proposal=proposal,
-                    speaker=second,
-                    role=ProposalSpeaker.Role.PRIMARY,
-                )
+    def test_speaker_email_can_be_empty(self):
+        proposal = self._create_proposal()
+        speaker = Speaker(proposal=proposal, display_name='No Email', biography='B' * 60, email='')
+        speaker.full_clean()  # Should not raise
+        speaker.save()
+        self.assertEqual(speaker.email, '')
+
+    def test_multiple_speakers_can_share_same_email(self):
+        proposal1 = self._create_proposal()
+        proposal2 = self._create_proposal(title='Second Proposal')
+        Speaker.objects.create(proposal=proposal1, email='shared@example.com', display_name='Speaker 1', biography='B' * 60)
+        Speaker.objects.create(proposal=proposal2, email='shared@example.com', display_name='Speaker 2', biography='B' * 60)
+        # No IntegrityError expected
 
     def test_proposal_photo_filename_uses_uuid_and_preserves_extension(self):
         with TemporaryDirectory() as tmp_media:
@@ -113,7 +110,9 @@ class ProposalModelTests(TestCase):
     def test_speaker_profile_picture_filename_uses_uuid_and_preserves_extension(self):
         with TemporaryDirectory() as tmp_media:
             with override_settings(MEDIA_ROOT=tmp_media):
+                proposal = self._create_proposal()
                 speaker = Speaker.objects.create(
+                    proposal=proposal,
                     email="photo-speaker@example.com",
                     display_name="Photo Speaker",
                     biography="B" * 60,

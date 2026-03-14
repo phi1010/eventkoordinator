@@ -7,11 +7,11 @@ from . import models
 from .flows import ProposalFlow
 
 
-class ProposalSpeakerInline(admin.TabularInline):
-    model = models.ProposalSpeaker
+class SpeakerInline(admin.TabularInline):
+    model = models.Speaker
     extra = 1
-    raw_id_fields = ("speaker",)
     ordering = ("sort_order",)
+    fields = ("display_name", "email", "role", "sort_order", "use_gravatar")
 
 
 @admin.register(models.Series)
@@ -52,11 +52,11 @@ class ProposalAreaAdmin(SimpleHistoryAdmin):
 
 @admin.register(models.Speaker)
 class SpeakerAdmin(SimpleHistoryAdmin):
-    list_display = ("display_name", "email", "use_gravatar", "created_at")
-    search_fields = ("display_name", "email")
+    list_display = ("display_name", "email", "proposal", "role", "use_gravatar", "created_at")
+    search_fields = ("display_name", "email", "proposal__title")
     readonly_fields = ("created_at", "updated_at")
-    list_filter = ("use_gravatar",)
-    raw_id_fields = ()
+    list_filter = ("use_gravatar", "role")
+    raw_id_fields = ("proposal",)
 
 
 @admin.register(models.Proposal)
@@ -81,7 +81,7 @@ class ProposalAdmin(fsm.FlowAdminMixin, SimpleHistoryAdmin):
     readonly_fields = ("created_at", "updated_at", "status")
     raw_id_fields = ("owner",)
     filter_horizontal = ("editors",)
-    inlines = (ProposalSpeakerInline,)
+    inlines = (SpeakerInline,)
     fieldsets = (
         (
             "General",
@@ -114,10 +114,3 @@ class ProposalAdmin(fsm.FlowAdminMixin, SimpleHistoryAdmin):
         ("Status", {"fields": ("status",)}),
     )
 
-
-@admin.register(models.ProposalSpeaker)
-class ProposalSpeakerAdmin(SimpleHistoryAdmin):
-    list_display = ("proposal", "speaker", "role", "sort_order")
-    search_fields = ("proposal__title", "speaker__display_name", "speaker__email")
-    raw_id_fields = ("proposal", "speaker")
-    ordering = ("proposal", "sort_order")

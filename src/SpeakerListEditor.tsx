@@ -75,8 +75,8 @@ export function SpeakerListEditor({
   }
 
   const handleAddSpeaker = async () => {
-    if (!newSpeaker.email?.trim()) {
-      setError('Email is required')
+    if (!newSpeaker.display_name?.trim() && !newSpeaker.email?.trim()) {
+      setError('At least a display name or email is required')
       return
     }
 
@@ -406,6 +406,9 @@ export function SpeakerListEditor({
           <h4 className={styles.addFormHeader}>
             Add New Speaker
           </h4>
+          <small className={styles.helpText}>
+            You can upload or change a speaker image after adding the speaker via Edit.
+          </small>
 
           <div style={{ marginBottom: '0.75rem' }}>
             <label htmlFor="new-speaker-email" style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>

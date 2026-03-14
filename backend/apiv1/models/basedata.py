@@ -152,9 +152,16 @@ class ProposalArea(LookupBase):
 
 
 class Speaker(HistoricalMetaBase):
-    """Public speaker profile independent from Django auth users."""
+    """Public speaker profile belonging to exactly one proposal."""
 
-    email = models.EmailField(unique=True)
+    class Role(models.TextChoices):
+        PRIMARY = "primary", "Primary speaker"
+        CO_SPEAKER = "co_speaker", "Co-speaker"
+
+    proposal = models.ForeignKey(
+        "Proposal", on_delete=models.CASCADE, related_name="speakers"
+    )
+    email = models.EmailField(blank=True)
     display_name = models.CharField(max_length=120)
     biography = models.TextField(validators=[MinLengthValidator(50)], max_length=2000)
     profile_picture = models.ImageField(
@@ -164,9 +171,11 @@ class Speaker(HistoricalMetaBase):
         null=True,
     )
     use_gravatar = models.BooleanField(default=False)
+    role = models.CharField(max_length=20, choices=Role, default=Role.CO_SPEAKER)
+    sort_order = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
-        ordering = ["display_name"]
+        ordering = ["sort_order", "id"]
 
     def __str__(self):
         return self.display_name
@@ -253,9 +262,6 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
     is_regular_member = models.BooleanField(default=False)
     has_building_access = models.BooleanField(default=False)
 
-    speakers = models.ManyToManyField(
-        Speaker, through="ProposalSpeaker", related_name="proposals"
-    )
     owner = models.ForeignKey(
         OpenIDUser,
         on_delete=models.SET_NULL,
@@ -289,37 +295,6 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
         return self.title
 
 
-class ProposalSpeaker(HistoricalMetaBase):
-    """Role and display order of speakers attached to a proposal."""
-
-    class Role(models.TextChoices):
-        PRIMARY = "primary", "Primary speaker"
-        CO_SPEAKER = "co_speaker", "Co-speaker"
-
-    proposal = models.ForeignKey(
-        Proposal, on_delete=models.CASCADE, related_name="proposal_speakers"
-    )
-    speaker = models.ForeignKey(
-        Speaker, on_delete=models.CASCADE, related_name="speaker_proposals"
-    )
-    role = models.CharField(max_length=20, choices=Role, default=Role.CO_SPEAKER)
-    sort_order = models.PositiveSmallIntegerField(default=0)
-
-    class Meta:
-        ordering = ["sort_order", "id"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["proposal", "speaker"], name="unique_proposal_speaker"
-            ),
-            models.UniqueConstraint(
-                fields=["proposal"],
-                condition=Q(role="primary"),
-                name="unique_primary_speaker_per_proposal",
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.proposal.pk}:{self.speaker.pk}:{self.role}"
 
 
 def check_proposal_required_fields(proposal: Proposal) -> dict[Any, Any]:

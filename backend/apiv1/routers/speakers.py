@@ -14,7 +14,7 @@ from ninja import File, Router, UploadedFile
 
 import apiv1
 from apiv1.api_utils import api_permission_mandatory
-from apiv1.models import Proposal as ProposalModel, ProposalSpeaker, Speaker
+from apiv1.models import Proposal as ProposalModel, Speaker
 from apiv1.schemas import ProposalSpeakerOut, SpeakerOut, SpeakerIn, ErrorOut
 
 router = Router()
@@ -32,12 +32,12 @@ def _speaker_to_schema(speaker: Speaker) -> SpeakerOut:
     )
 
 
-def _proposal_speaker_to_schema(proposal_speaker: ProposalSpeaker) -> ProposalSpeakerOut:
+def _speaker_to_proposal_speaker_out(speaker: Speaker) -> ProposalSpeakerOut:
     return ProposalSpeakerOut(
-        id=proposal_speaker.id,
-        speaker=_speaker_to_schema(proposal_speaker.speaker),
-        role=proposal_speaker.role,
-        sort_order=proposal_speaker.sort_order,
+        id=speaker.id,
+        speaker=_speaker_to_schema(speaker),
+        role=speaker.role,
+        sort_order=speaker.sort_order,
     )
 
 
@@ -49,7 +49,7 @@ def _proposal_speaker_to_schema(proposal_speaker: ProposalSpeaker) -> ProposalSp
 def add_speaker_to_proposal(
     request, proposal_id: uuid.UUID, payload: SpeakerIn
 ) -> tuple[int, ProposalSpeakerOut] | tuple[int, ErrorOut]:
-    """Add a speaker to a proposal or create new speaker if doesn't exist"""
+    """Add a new speaker to a proposal"""
     try:
         proposal = ProposalModel.objects.get(pk=proposal_id)
         if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
@@ -60,35 +60,17 @@ def add_speaker_to_proposal(
         return 404, ErrorOut(error="Proposal not found")
 
     try:
-        # Try to get existing speaker by email
-        if payload.email:
-            speaker, created = Speaker.objects.get_or_create(
-                email=payload.email,
-                defaults={
-                    "display_name": payload.display_name or payload.email.split("@")[0],
-                    "biography": payload.biography or "",
-                    "use_gravatar": payload.use_gravatar or False,
-                },
-            )
-            # Update speaker if it already existed
-            if not created:
-                if payload.display_name is not None:
-                    speaker.display_name = payload.display_name
-                if payload.biography is not None:
-                    speaker.biography = payload.biography
-                if payload.use_gravatar is not None:
-                    speaker.use_gravatar = payload.use_gravatar
-                speaker.save()
-        else:
-            return 400, ErrorOut(error="Speaker email is required")
-
-        # Add speaker to proposal
-        sort_order = proposal.proposal_speakers.count()
-        proposal_speaker, created = ProposalSpeaker.objects.get_or_create(
-            proposal=proposal, speaker=speaker, defaults={"sort_order": sort_order}
+        sort_order = proposal.speakers.count()
+        speaker = Speaker(
+            proposal=proposal,
+            email=payload.email or "",
+            display_name=payload.display_name or "",
+            biography=payload.biography or "",
+            use_gravatar=payload.use_gravatar or False,
+            sort_order=sort_order,
         )
-
-        return 201, _proposal_speaker_to_schema(proposal_speaker)
+        speaker.save()
+        return 201, _speaker_to_proposal_speaker_out(speaker)
     except Exception as e:
         logger.error(f"Failed to add speaker: {str(e)}")
         return 400, ErrorOut(error="Failed to add speaker")
@@ -112,16 +94,9 @@ def list_proposal_speakers(
             return 401, ErrorOut(error="Permission denied")
         return 404, ErrorOut(error="Proposal not found")
 
-    speakers = (
-        ProposalSpeaker.objects.select_related("speaker")
-        .filter(proposal=proposal)
-        .order_by("sort_order")
-    )
+    speakers = proposal.speakers.order_by("sort_order")
 
-    return 200, [
-        _proposal_speaker_to_schema(ps)
-        for ps in speakers
-    ]
+    return 200, [_speaker_to_proposal_speaker_out(s) for s in speakers]
 
 
 @router.delete(
@@ -137,15 +112,14 @@ def remove_speaker_from_proposal(
         proposal = ProposalModel.objects.get(pk=proposal_id)
         if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
             return 401, ErrorOut(error="Permission denied")
-        proposal_speaker = ProposalSpeaker.objects.get(id=speaker_id, proposal=proposal)
-        proposal_speaker.delete()
-
+        speaker = Speaker.objects.get(id=speaker_id, proposal=proposal)
+        speaker.delete()
         return 200, {"success": True, "message": "Speaker removed from proposal"}
     except ProposalModel.DoesNotExist:
         if not request.user.has_perm((apiv1, "change", ProposalModel), None):
             return 401, ErrorOut(error="Permission denied")
         return 404, ErrorOut(error="Proposal not found")
-    except ProposalSpeaker.DoesNotExist:
+    except Speaker.DoesNotExist:
         return 404, ErrorOut(error="Speaker not found in proposal")
     except Exception as e:
         logger.error(f"Failed to remove speaker: {str(e)}")
@@ -165,30 +139,19 @@ def update_speaker_in_proposal(
         proposal = ProposalModel.objects.get(pk=proposal_id)
         if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
             return 401, ErrorOut(error="Permission denied")
-        proposal_speaker = ProposalSpeaker.objects.select_related("speaker").get(
-            id=speaker_id, proposal=proposal
-        )
-        speaker = proposal_speaker.speaker
+        speaker = Speaker.objects.get(id=speaker_id, proposal=proposal)
     except ProposalModel.DoesNotExist:
         if not request.user.has_perm((apiv1, "change", ProposalModel), None):
             return 401, ErrorOut(error="Permission denied")
         return 404, ErrorOut(error="Proposal not found")
-    except ProposalSpeaker.DoesNotExist:
+    except Speaker.DoesNotExist:
         return 404, ErrorOut(error="Speaker not found in proposal")
     except Exception as e:
         logger.error(f"Failed to retrieve speaker: {str(e)}")
         return 404, ErrorOut(error="Speaker not found in proposal")
 
     try:
-        # Update speaker fields
-        if payload.email is not None and payload.email != speaker.email:
-            # Check if email is already in use
-            if (
-                Speaker.objects.filter(email=payload.email)
-                .exclude(id=speaker.id)
-                .exists()
-            ):
-                return 400, ErrorOut(error="Email already in use by another speaker")
+        if payload.email is not None:
             speaker.email = payload.email
 
         if payload.display_name is not None:
@@ -201,8 +164,7 @@ def update_speaker_in_proposal(
             speaker.use_gravatar = payload.use_gravatar
 
         speaker.save()
-
-        return 200, _proposal_speaker_to_schema(proposal_speaker)
+        return 200, _speaker_to_proposal_speaker_out(speaker)
     except Exception as e:
         logger.error(f"Failed to update speaker: {str(e)}")
         return 400, ErrorOut(error="Failed to update speaker")
@@ -221,17 +183,14 @@ def upload_speaker_profile_picture(
         proposal = ProposalModel.objects.get(pk=proposal_id)
         if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
             return 401, ErrorOut(error="Permission denied")
-        proposal_speaker = ProposalSpeaker.objects.select_related("speaker").get(
-            id=speaker_id, proposal=proposal
-        )
+        speaker = Speaker.objects.get(id=speaker_id, proposal=proposal)
     except ProposalModel.DoesNotExist:
         if not request.user.has_perm((apiv1, "change", ProposalModel), None):
             return 401, ErrorOut(error="Permission denied")
         return 404, ErrorOut(error="Proposal not found")
-    except ProposalSpeaker.DoesNotExist:
+    except Speaker.DoesNotExist:
         return 404, ErrorOut(error="Speaker not found in proposal")
 
-    speaker = proposal_speaker.speaker
     profile_picture_field = cast(
         models.FileField, speaker._meta.get_field("profile_picture")
     )
@@ -250,5 +209,4 @@ def upload_speaker_profile_picture(
     if previous_picture_name and previous_picture_name != speaker.profile_picture.name:
         profile_picture_field.storage.delete(previous_picture_name)
 
-    return 200, _proposal_speaker_to_schema(proposal_speaker)
-
+    return 200, _speaker_to_proposal_speaker_out(speaker)

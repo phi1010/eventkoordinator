@@ -17,7 +17,9 @@
       - group:
         - text: General Information Title (max 30 characters)
         - textbox "Title (max 30 characters)": Intro to wood joints
-        - text: 20/30 Submission Type
+        - text: 20/30 No image uploaded yet. Proposal image
+        - button "Proposal image"
+        - text: Upload a JPG or PNG image up to 10 MB for this proposal. Submission Type
         - combobox "Submission Type":
           - option "-- Select submission type --"
           - option "Workshop" [selected]
@@ -62,4 +64,4 @@
       - listitem: ✓ At least one speaker added
       - listitem: ✓ All speakers have biography
     - group: Edit history last changed just now
-    - button "Submit proposal"
+    - text: Loading transitions...

@@ -18,7 +18,9 @@
       - group:
         - text: General Information Title (max 30 characters)
         - textbox "Title (max 30 characters)" [disabled]: Test Event Link
-        - text: 15/30 Submission Type
+        - text: 15/30 No image uploaded yet. Proposal image
+        - button "Proposal image" [disabled]
+        - text: Upload a JPG or PNG image up to 10 MB for this proposal. Submission Type
         - combobox "Submission Type" [disabled]:
           - option "-- Select submission type --"
           - option "Workshop" [selected]

@@ -214,7 +214,7 @@ class ProposalDetail(Schema):
 
 class SpeakerOut(Schema):
     id: uuid.UUID
-    email: str
+    email: str = ""
     display_name: str
     biography: str
     profile_picture: Optional[str] = None

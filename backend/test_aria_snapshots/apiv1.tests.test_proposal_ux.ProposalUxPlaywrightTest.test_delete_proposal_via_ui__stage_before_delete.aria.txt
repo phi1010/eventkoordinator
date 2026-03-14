@@ -16,8 +16,10 @@
     - form "Proposal editor":
       - group:
         - text: General Information Title (max 30 characters)
-        - textbox "Title (max 30 characters)": Delete Me Proposal
-        - text: 18/30 Submission Type
+        - textbox "Title (max 30 characters)"
+        - text: 0/30 No image uploaded yet. Proposal image
+        - button "Proposal image"
+        - text: Upload a JPG or PNG image up to 10 MB for this proposal. Submission Type
         - combobox "Submission Type" [disabled]:
           - option "Loading..." [selected]
         - text: "Workshop: Fixed booking, fee required, providers receive a remuneration; Open offer: No booking or fee required; takes place in the main building. Area (optional)"
@@ -28,10 +30,10 @@
         - combobox "Language" [disabled]:
           - option "Loading..." [selected]
         - text: Abstract (50-250 characters)
-        - textbox "Abstract (50-250 characters)": This draft proposal exists only to exercise delete confirmation in the UI.
-        - text: This will be published on our website in the program overview. (50–250 characters) 74/250 Description (50-1000 characters)
-        - textbox "Description (50-1000 characters)": This draft proposal contains enough detail to satisfy model validation during the delete UX test.
-        - text: This will be published on our website in the detailed description. Please include goal, prerequisites and whether participants take something home. (50–1000 characters) 97/1000 Internal Notes (optional)
+        - textbox "Abstract (50-250 characters)"
+        - text: This will be published on our website in the program overview. (50–250 characters) 0/250 Description (50-1000 characters)
+        - textbox "Description (50-1000 characters)"
+        - text: This will be published on our website in the detailed description. Please include goal, prerequisites and whether participants take something home. (50–1000 characters) 0/1000 Internal Notes (optional)
         - textbox "Internal Notes (optional)"
         - text: Internal notes are not public. Mention equipment needs (e.g., laptops, projector, laser cutter). Number of Days
         - spinbutton "Number of Days": "1"

@@ -46,10 +46,9 @@
     - option "Event Schedule" [selected]
   - text: Event Schedule
   - grid:
-    - text: Mon 9 Mar <hour-grid> Tue 10 Mar <hour-grid> Wed 11 Mar <hour-grid> Thu 12 Mar <hour-grid> Fri 13 Mar <hour-grid> Sat 14 Mar <hour-grid>
+    - text: Mon 9 Mar <hour-grid> Tue 10 Mar <hour-grid> Wed 11 Mar <hour-grid> Thu 12 Mar <hour-grid> Fri 13 Mar <hour-grid> Sat 14 Mar <hour-grid> Sun 15 Mar <hour-grid>
     - button "Test Event Link Session (internal-calendar), <time-range>": Test Event Link Session (internal-calendar)
     - button "Test Event Link Session, <time-range>": Test Event Link Session
-    - text: Sun 15 Mar <hour-grid>
   - heading "Synchronization Status" [level=3]
   - heading "pretalx" [level=4]
   - text: "✓ Up to date Last synced: <localized-datetime>"

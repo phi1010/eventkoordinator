@@ -11,7 +11,6 @@ from apiv1.models import (
     Proposal,
     ProposalArea,
     ProposalLanguage,
-    ProposalSpeaker,
     Speaker,
     SubmissionType,
 )
@@ -98,20 +97,16 @@ class ImageUploadApiTests(TestCase):
     def test_owner_can_upload_speaker_image(self) -> None:
         proposal = self._create_proposal()
         speaker = Speaker.objects.create(
+            proposal=proposal,
             email='speaker@example.com',
             display_name='Speaker Example',
             biography='Biography text long enough for validation.' * 2,
-        )
-        proposal_speaker = ProposalSpeaker.objects.create(
-            proposal=proposal,
-            speaker=speaker,
-            sort_order=0,
         )
 
         with TemporaryDirectory() as tmp_media, override_settings(MEDIA_ROOT=tmp_media):
             self.client.force_login(self.owner)
             response = self.client.post(
-                f'/api/v1/proposals/{proposal.id}/speakers/{proposal_speaker.id}/profile-picture',
+                f'/api/v1/proposals/{proposal.id}/speakers/{speaker.id}/profile-picture',
                 data={
                     'file': SimpleUploadedFile(
                         'avatar.jpeg',

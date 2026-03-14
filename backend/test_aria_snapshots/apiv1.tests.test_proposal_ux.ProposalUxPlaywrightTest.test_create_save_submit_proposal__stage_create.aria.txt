@@ -17,7 +17,9 @@
       - group:
         - text: General Information Title (max 30 characters)
         - textbox "Title (max 30 characters)"
-        - text: 0/30 Submission Type
+        - text: 0/30 No image uploaded yet. Proposal image
+        - button "Proposal image"
+        - text: Upload a JPG or PNG image up to 10 MB for this proposal. Submission Type
         - combobox "Submission Type":
           - option "-- Select submission type --" [selected]
           - option "Workshop"
