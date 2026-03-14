@@ -5,11 +5,6 @@ services:
       - "127.0.0.1:8282:80"
     volumes:
       - pretix_data:/data
-    environment:
-      PRETIX_ADMIN_EMAIL: ${PRETIX_ADMIN_EMAIL:-admin@localhost}
-      PRETIX_ADMIN_PASSWORD: ${PRETIX_ADMIN_PASSWORD:-changeme}
-      PRETIX_INSTANCE_NAME: ${PRETIX_INSTANCE_NAME:-ZAM Pretix (Debug)}
-      PRETIX_URL: ${PRETIX_URL:-http://127.0.0.1:8282}
     restart: no
 
   grafana:

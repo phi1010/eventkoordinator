@@ -4,6 +4,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_CEILING
 
+from apiv1.models import SyncBaseTarget, ProposalArea
 from apiv1.models.basedata import time_string_to_minutes
 from project.basemodels import HistoricalMetaBase
 
@@ -15,10 +16,65 @@ def default_min_participants_params():
     Logic: max_participants - deduction where threshold <= max_participants
     Example: {0: 1, 7: 2} means deduct 1 for 1-6 participants, deduct 2 for 7+ participants
     """
-    return {
-        0: 1,
-        7: 2
-    }
+    return {0: 1, 7: 2}
+
+
+class PretixSyncTarget(SyncBaseTarget):
+    api_token = models.CharField(
+        max_length=255,
+        verbose_name="Pretix API Token",
+        help_text="API Token for authenticating with the Pretix API",
+    )
+    api_url = models.CharField(
+        max_length=255, verbose_name="Pretix API URL", help_text="Pretix API URL"
+    )
+    organizer_slug = models.CharField(
+        max_length=255, verbose_name="Organizer Slug", help_text="Organizer Slug"
+    )
+
+
+class PretixSyncTargetAreaAssociation(HistoricalMetaBase):
+    area = models.ForeignKey(
+        ProposalArea, on_delete=models.CASCADE, related_name="pretix_sync_associations"
+    )
+    event_slug = models.CharField(
+        max_length=255, verbose_name="Event Slug", help_text="Event Slug"
+    )
+    ticket_product_member_regular_id = models.CharField(
+        max_length=255,
+        default="Regular Member Ticket",
+        null=True,
+        blank=True,
+        verbose_name="ID or Name of Ticket Product for Members (regular)",
+    )
+    ticket_product_member_discounted_id = models.CharField(
+        max_length=255,
+        default="Discounted Member Ticket",
+        null=True,
+        blank=True,
+        verbose_name="ID or Name of Ticket Product for Members (discounted)",
+    )
+    ticket_product_guest_regular_id = models.CharField(
+        max_length=255,
+        default="Regular Guest Ticket",
+        null=True,
+        blank=True,
+        verbose_name="ID or Name of Ticket Product for Guests (regular)",
+    )
+    ticket_product_guest_discounted_id = models.CharField(
+        max_length=255,
+        default="Discounted Guest Ticket",
+        null=True,
+        blank=True,
+        verbose_name="ID or Name of Ticket Product for Guests (discounted)",
+    )
+    ticket_product_business_id = models.CharField(
+        max_length=255,
+        default="Business Ticket",
+        null=True,
+        blank=True,
+        verbose_name="ID of Ticket Product for Businesses",
+    )
 
 
 class PretixPricingConfiguration(HistoricalMetaBase):
@@ -36,7 +92,7 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         default=0.0,
         validators=[MinValueValidator(0)],
         verbose_name="Vorbereitungszeit (Stunden)",
-        help_text="Standard-Vorbereitungszeit in Stunden"
+        help_text="Standard-Vorbereitungszeit in Stunden",
     )
 
     lecturer_rate = models.DecimalField(
@@ -45,7 +101,7 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         default=40.0,
         validators=[MinValueValidator(0)],
         verbose_name="Dozent:in Honorar pro Stunde (€)",
-        help_text="Honorar für Dozent:innen pro Stunde"
+        help_text="Honorar für Dozent:innen pro Stunde",
     )
 
     # Workshop rates (different for basis courses vs regular courses)
@@ -55,7 +111,7 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         default=10.0,
         validators=[MinValueValidator(0)],
         verbose_name="Werkstatt & ZAM Satz Grundkurs (€/h)",
-        help_text="Stundensatz für Werkstatt & ZAM bei Grundkursen"
+        help_text="Stundensatz für Werkstatt & ZAM bei Grundkursen",
     )
 
     workshop_rate_regular = models.DecimalField(
@@ -64,7 +120,7 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         default=20.0,
         validators=[MinValueValidator(0)],
         verbose_name="Werkstatt & ZAM Satz Regelfall (€/h)",
-        help_text="Stundensatz für Werkstatt & ZAM bei regulären Kursen"
+        help_text="Stundensatz für Werkstatt & ZAM bei regulären Kursen",
     )
 
     # Surcharges and discounts
@@ -74,7 +130,7 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         default=10.0,
         validators=[MinValueValidator(0)],
         verbose_name="Gäst:in-Aufschlag (€/h)",
-        help_text="Aufschlag für Gäste pro Stunde"
+        help_text="Aufschlag für Gäste pro Stunde",
     )
 
     discount_rate = models.DecimalField(
@@ -83,7 +139,7 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         default=0.50,
         validators=[MinValueValidator(0), MaxValueValidator(1)],
         verbose_name="Ermäßigungssatz",
-        help_text="Ermäßigungssatz als Dezimalzahl (z.B. 0.50 für 50%)"
+        help_text="Ermäßigungssatz als Dezimalzahl (z.B. 0.50 für 50%)",
     )
 
     business_surcharge = models.DecimalField(
@@ -92,7 +148,7 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         default=0.75,
         validators=[MinValueValidator(0)],
         verbose_name="Gewerbe-Aufschlag",
-        help_text="Aufschlag für gewerbliche Teilnehmer als Dezimalzahl (z.B. 0.75 für 75%)"
+        help_text="Aufschlag für gewerbliche Teilnehmer als Dezimalzahl (z.B. 0.75 für 75%)",
     )
 
     # Tax rate
@@ -102,7 +158,7 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         default=0.07,
         validators=[MinValueValidator(0), MaxValueValidator(1)],
         verbose_name="Umsatzsteuersatz",
-        help_text="Umsatzsteuersatz als Dezimalzahl (z.B. 0.07 für 7%)"
+        help_text="Umsatzsteuersatz als Dezimalzahl (z.B. 0.07 für 7%)",
     )
 
     # Min participants calculation parameters
@@ -110,8 +166,8 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         default=default_min_participants_params,
         verbose_name="Min. Teilnehmerzahl Parameter",
         help_text="Parameter für Berechnung der Mindestteilnehmerzahl im Format {threshold: deduction}. "
-                  "Beispiel: {0: 1, 7: 2} bedeutet: Abzug von 1 für 1-6 Teilnehmer, Abzug von 2 für 7+ Teilnehmer. "
-                  "Formel: max_participants - deduction (wobei threshold <= max_participants)"
+        "Beispiel: {0: 1, 7: 2} bedeutet: Abzug von 1 für 1-6 Teilnehmer, Abzug von 2 für 7+ Teilnehmer. "
+        "Formel: max_participants - deduction (wobei threshold <= max_participants)",
     )
 
     class Meta:
@@ -176,11 +232,8 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         min_participants = self.get_min_participants(max_participants)
 
         value = (
-            (duration * (workshop_rate + lecturer_rate) + lecturer_rate * prep_hours)
-            * (Decimal("1") + vat_rate)
-            / Decimal(min_participants)
-            + material
-        )
+            duration * (workshop_rate + lecturer_rate) + lecturer_rate * prep_hours
+        ) * (Decimal("1") + vat_rate) / Decimal(min_participants) + material
         return self._roundup_euro(value)
 
     def get_member_discounted_price(
@@ -201,15 +254,9 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         min_participants = self.get_min_participants(max_participants)
 
         value = (
-            (
-                duration
-                * (workshop_rate * (Decimal("1") - discount_rate) + lecturer_rate)
-                + lecturer_rate * prep_hours
-            )
-            * (Decimal("1") + vat_rate)
-            / Decimal(min_participants)
-            + material
-        )
+            duration * (workshop_rate * (Decimal("1") - discount_rate) + lecturer_rate)
+            + lecturer_rate * prep_hours
+        ) * (Decimal("1") + vat_rate) / Decimal(min_participants) + material
         return self._roundup_euro(value)
 
     def get_guest_regular_price(
@@ -230,14 +277,9 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         min_participants = self.get_min_participants(max_participants)
 
         value = (
-            (
-                duration * (workshop_rate + guest_surcharge + lecturer_rate)
-                + lecturer_rate * prep_hours
-            )
-            * (Decimal("1") + vat_rate)
-            / Decimal(min_participants)
-            + material
-        )
+            duration * (workshop_rate + guest_surcharge + lecturer_rate)
+            + lecturer_rate * prep_hours
+        ) * (Decimal("1") + vat_rate) / Decimal(min_participants) + material
         return self._roundup_euro(value)
 
     def get_guest_discounted_price(
@@ -283,7 +325,7 @@ class PretixPricingConfiguration(HistoricalMetaBase):
                 + material
             )
         )
-        price =  (Decimal(base) * (Decimal("1") + business_surcharge)).quantize(
+        price = (Decimal(base) * (Decimal("1") + business_surcharge)).quantize(
             Decimal("0.01")
         )
         return self._roundup_euro(price)
@@ -412,9 +454,8 @@ class CalculatedPrices(HistoricalMetaBase):
         proposal = self.proposal
         if proposal is None:
             return Decimal("0")
-        total_minutes = (
-            time_string_to_minutes(proposal.duration_time_per_day)
-            * int(proposal.duration_days)
+        total_minutes = time_string_to_minutes(proposal.duration_time_per_day) * int(
+            proposal.duration_days
         )
         return Decimal(total_minutes) / Decimal("60")
 
@@ -426,7 +467,11 @@ class CalculatedPrices(HistoricalMetaBase):
     @property
     def material_cost(self) -> Decimal:
         proposal = self.proposal
-        return Decimal(str(proposal.material_cost_eur)) if proposal is not None else Decimal("0")
+        return (
+            Decimal(str(proposal.material_cost_eur))
+            if proposal is not None
+            else Decimal("0")
+        )
 
     @property
     def is_basic_course(self) -> bool:
@@ -446,7 +491,9 @@ class CalculatedPrices(HistoricalMetaBase):
         if not self.event_id:
             return
         if self.proposal is None:
-            raise ValidationError({"event": "Linked event must have a proposal to calculate prices."})
+            raise ValidationError(
+                {"event": "Linked event must have a proposal to calculate prices."}
+            )
         if getattr(self, "_skip_price_generation", False):
             return
         if self.pricing_configuration_id is None:
@@ -473,4 +520,3 @@ class CalculatedPrices(HistoricalMetaBase):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
-
