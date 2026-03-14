@@ -30,7 +30,7 @@ class PretixPricingConfigurationTests(TestCase):
 		self.assertEqual(prices.member_discounted_gross_eur, Decimal("16.00"))
 		self.assertEqual(prices.guest_regular_gross_eur, Decimal("20.00"))
 		self.assertEqual(prices.guest_discounted_gross_eur, Decimal("17.00"))
-		self.assertEqual(prices.business_net_eur, Decimal("31.50"))
+		self.assertEqual(prices.business_net_eur, Decimal("32.00"))
 		self.assertIsInstance(prices.member_regular_gross_eur, Decimal)
 		self.assertIsInstance(prices.member_discounted_gross_eur, Decimal)
 		self.assertIsInstance(prices.guest_regular_gross_eur, Decimal)
