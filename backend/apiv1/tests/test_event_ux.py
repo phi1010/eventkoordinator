@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import Permission
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, sync_playwright, expect
 
 from apiv1.models.basedata import Event, Series
 from project.test_utils import (
@@ -606,9 +606,10 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                     series_listbox.get_by_text(self.series.name).click()
                     events_listbox = page.get_by_role("listbox", name="Events")
                     events_listbox.get_by_text(self.event.name).click()
-                    page.get_by_role("form", name="Edit event details").wait_for(timeout=500)
+                    page.get_by_role("form", name="Edit event details").wait_for(timeout=1000)
 
                     with self.subTest(stage="before_delete_event"):
+                        expect(page.get_by_text("Loading")).to_be_hidden()
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
                     with self.subTest(stage="after_delete_event"):

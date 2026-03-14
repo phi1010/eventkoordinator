@@ -7,7 +7,7 @@ import re
 
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.models import Permission
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, sync_playwright, expect
 
 from apiv1.models.basedata import (
     ProposalArea,
@@ -217,6 +217,8 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.locator(
                             '[aria-label="Status of Test Event Link Session: draft"]'
                         ).first.wait_for(timeout=5000)
+                        page.wait_for_load_state("networkidle")
+                        expect(page.get_by_text("Loading")).to_be_hidden()
                         self.assert_snapshot(
                             page.locator("body").aria_snapshot()
                         )
@@ -231,6 +233,8 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.get_by_text("Linked Events (1)").wait_for(
                             timeout=5000
                         )
+                        page.wait_for_load_state("networkidle")
+                        expect(page.get_by_text("Loading")).to_be_hidden()
                         self.assert_snapshot(
                             page.locator("body").aria_snapshot()
                         )

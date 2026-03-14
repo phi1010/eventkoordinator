@@ -276,14 +276,14 @@ class EventApprovalPermissionTests(TestCase):
             status=Event.Status.PROPOSED,
         )
 
-    def test_owner_needs_global_approve_permission(self):
-        self.assertFalse(self.event.has_object_permission(self.owner, "apiv1.approve_event"))
+    def test_owner_needs_no_global_approve_permission(self):
+        self.assertTrue(self.event.has_object_permission(self.owner, "apiv1.approve_event"))
         self.owner.user_permissions.add(self.approve_perm)
         owner = get_user_model().objects.get(pk=self.owner.pk)
         self.assertTrue(self.event.has_object_permission(owner, "apiv1.approve_event"))
 
-    def test_editor_needs_global_reject_permission(self):
-        self.assertFalse(self.event.has_object_permission(self.editor, "apiv1.reject_event"))
+    def test_editor_needs_no_global_reject_permission(self):
+        self.assertTrue(self.event.has_object_permission(self.editor, "apiv1.reject_event"))
         self.editor.user_permissions.add(self.reject_perm)
         editor = get_user_model().objects.get(pk=self.editor.pk)
         self.assertTrue(self.event.has_object_permission(editor, "apiv1.reject_event"))

@@ -243,8 +243,7 @@ class SnapshotMixin:
             patch = "".join(diff)
             self.fail(
                 f"Snapshot {out.name} differs from the committed version.\n"
-                f"Run the test with --update-snapshots or commit the new "
-                f"file to accept the change.\n\n{patch}"
+                f"Commit the new file to accept the change.\n\n{patch}"
             )
 
 # ---------------------------------------------------------------------------

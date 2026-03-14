@@ -7,7 +7,7 @@ import re
 
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.models import Permission
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, sync_playwright, expect
 
 from apiv1.models.basedata import Proposal, ProposalArea, ProposalLanguage, SubmissionType
 from project.test_utils import (
@@ -94,6 +94,28 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
 
     def _log_field_step(self, label: str) -> None:
         logger.info("Proposal form step: %s", label)
+
+    def _wait_for_loading_indicators_to_disappear(
+        self, page: Page, *, timeout_ms: int = 10000
+    ) -> None:
+        # Wait until no visible UI element starts with "Loading".
+        page.wait_for_function(
+            """
+            () => {
+              const hasVisibleLoading = Array.from(document.querySelectorAll('body *')).some((el) => {
+                if (!(el instanceof HTMLElement)) return false;
+                const text = (el.innerText || '').trim();
+                if (!/^Loading/i.test(text)) return false;
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden') return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+              });
+              return !hasVisibleLoading;
+            }
+            """,
+            timeout=timeout_ms,
+        )
 
     def test_create_save_submit_proposal(self) -> None:
         with sync_playwright() as playwright:
@@ -199,8 +221,7 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         submit_button.click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(500)
-                        page.get_by_label("Loading proposal").is_hidden()
-                        page.get_by_label("Loading transitions").is_hidden()
+                        self._wait_for_loading_indicators_to_disappear(page)
                         page.wait_for_load_state("networkidle")
                         page.get_by_label("Submission Type").is_enabled()
                         page.get_by_label("Area").is_enabled()
@@ -253,6 +274,7 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                     page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
 
                     with self.subTest(stage="before_delete"):
+                        self._wait_for_loading_indicators_to_disappear(page)
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
                     with self.subTest(stage="after_delete"):

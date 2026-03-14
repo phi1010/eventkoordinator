@@ -155,6 +155,9 @@ class Event(HistoricalMetaBase):
                 return True
             return user.has_perm((apiv1, "change", Series), self.series)
 
+        if perm.endswith(f".delete_{Event.__name__.lower()}"):
+            return user.has_perm(perm, None)
+
         # All event workflow transitions require the corresponding global permission
         for action in (
             "submit",
