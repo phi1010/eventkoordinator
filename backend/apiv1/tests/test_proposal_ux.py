@@ -15,6 +15,7 @@ from project.test_utils import (
     ViteStaticLiveServerTestCase,
     playwright_launch_options,
     print_aria_on_timeout,
+    wait_for_loading_indicators_to_disappear,
 )
 
 
@@ -95,28 +96,6 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
     def _log_field_step(self, label: str) -> None:
         logger.info("Proposal form step: %s", label)
 
-    def _wait_for_loading_indicators_to_disappear(
-        self, page: Page, *, timeout_ms: int = 10000
-    ) -> None:
-        # Wait until no visible UI element starts with "Loading".
-        page.wait_for_function(
-            """
-            () => {
-              const hasVisibleLoading = Array.from(document.querySelectorAll('body *')).some((el) => {
-                if (!(el instanceof HTMLElement)) return false;
-                const text = (el.innerText || '').trim();
-                if (!/^Loading/i.test(text)) return false;
-                const style = window.getComputedStyle(el);
-                if (style.display === 'none' || style.visibility === 'hidden') return false;
-                const rect = el.getBoundingClientRect();
-                return rect.width > 0 && rect.height > 0;
-              });
-              return !hasVisibleLoading;
-            }
-            """,
-            timeout=timeout_ms,
-        )
-
     def test_create_save_submit_proposal(self) -> None:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(**playwright_launch_options())
@@ -135,20 +114,21 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                     page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
 
                     page.wait_for_load_state("networkidle")
-                    page.get_by_label("Submission Type").is_enabled()
-                    page.get_by_label("Area").is_enabled()
-                    page.get_by_label("Language").is_enabled()
+                    wait_for_loading_indicators_to_disappear(page)
+                    expect(page.get_by_label("Submission Type")).to_be_enabled()
+                    expect(page.get_by_label("Area (optional)")).to_be_enabled()
+                    expect(page.get_by_label("Language")).to_be_enabled()
                     page.wait_for_load_state("networkidle")
                     page.wait_for_timeout(100)
 
 
                     with self.subTest(stage="create"):
                         self._log_field_step("submission type")
-                        page.get_by_label("Submission Type").is_enabled()
+                        expect(page.get_by_label("Submission Type")).to_be_enabled()
                         self._log_field_step("area")
-                        page.get_by_label("Area (optional)").is_enabled()
+                        expect(page.get_by_label("Area (optional)")).to_be_enabled()
                         self._log_field_step("language")
-                        page.get_by_label("Language").is_enabled()
+                        expect(page.get_by_label("Language")).to_be_enabled()
                         self.assert_snapshot(page.locator("body").aria_snapshot())
                     with self.subTest(stage="save"):
                         self._log_field_step("title")
@@ -203,9 +183,10 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.get_by_role("button", name="Save Proposal").click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(500)
-                        page.get_by_label("Submission Type").is_enabled()
-                        page.get_by_label("Area").is_enabled()
-                        page.get_by_label("Language").is_enabled()
+                        wait_for_loading_indicators_to_disappear(page)
+                        expect(page.get_by_label("Submission Type")).to_be_enabled()
+                        expect(page.get_by_label("Area (optional)")).to_be_enabled()
+                        expect(page.get_by_label("Language")).to_be_enabled()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(100)
 
@@ -221,11 +202,11 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         submit_button.click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(500)
-                        self._wait_for_loading_indicators_to_disappear(page)
+                        wait_for_loading_indicators_to_disappear(page)
                         page.wait_for_load_state("networkidle")
-                        page.get_by_label("Submission Type").is_enabled()
-                        page.get_by_label("Area").is_enabled()
-                        page.get_by_label("Language").is_enabled()
+                        expect(page.get_by_label("Submission Type")).to_be_enabled()
+                        expect(page.get_by_label("Area (optional)")).to_be_enabled()
+                        expect(page.get_by_label("Language")).to_be_enabled()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(100)
 
@@ -274,7 +255,7 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                     page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
 
                     with self.subTest(stage="before_delete"):
-                        self._wait_for_loading_indicators_to_disappear(page)
+                        wait_for_loading_indicators_to_disappear(page)
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
                     with self.subTest(stage="after_delete"):

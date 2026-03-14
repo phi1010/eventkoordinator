@@ -64,6 +64,34 @@ def playwright_launch_options() -> dict:
     return {"headless": getattr(settings, "PLAYWRIGHT_HEADLESS", True)}
 
 
+def wait_for_loading_indicators_to_disappear(
+    page: playwright.sync_api.Page, *, timeout_ms: int = 10000
+) -> None:
+    """Wait until no visible UI element starts with ``Loading``.
+
+    Proposal-related Playwright tests use visible loading text while async
+    lookup options are being fetched. Waiting for that text to disappear keeps
+    snapshots and interactions stable across slower environments.
+    """
+    page.wait_for_function(
+        """
+        () => {
+          const hasVisibleLoading = Array.from(document.querySelectorAll('body *')).some((el) => {
+            if (!(el instanceof HTMLElement)) return false;
+            const text = (el.innerText || '').trim();
+            if (!/^Loading/i.test(text)) return false;
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
+          return !hasVisibleLoading;
+        }
+        """,
+        timeout=timeout_ms,
+    )
+
+
 def _git_show_committed(path: Path) -> str | None:
     """Return the content of *path* as last committed in git, or ``None``.
 

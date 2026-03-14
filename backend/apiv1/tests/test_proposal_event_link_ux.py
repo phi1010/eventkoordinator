@@ -20,6 +20,7 @@ from project.test_utils import (
     ViteStaticLiveServerTestCase,
     playwright_launch_options,
     print_aria_on_timeout,
+    wait_for_loading_indicators_to_disappear,
 )
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,10 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
         page.get_by_role("button", name="Create New Proposal").click()
         page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
         page.wait_for_load_state("networkidle")
+        wait_for_loading_indicators_to_disappear(page)
+        expect(page.get_by_label("Submission Type")).to_be_enabled()
+        expect(page.get_by_label("Area (optional)")).to_be_enabled()
+        expect(page.get_by_label("Language")).to_be_enabled()
 
         # Fill required fields
         page.get_by_label("Title (max 30 characters)").fill("Test Event Link")
@@ -153,6 +158,7 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
         page.get_by_role("button", name="Save Proposal").click()
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(500)
+        wait_for_loading_indicators_to_disappear(page)
 
         # Submit
         submit_button = page.get_by_role(
@@ -163,6 +169,7 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
         submit_button.click()
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(500)
+        wait_for_loading_indicators_to_disappear(page)
 
         # Accept
         accept_button = page.get_by_role(
@@ -173,6 +180,7 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
         accept_button.click()
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(500)
+        wait_for_loading_indicators_to_disappear(page)
 
     def test_proposal_event_link_flow(self) -> None:
         """Test the complete flow: accept proposal, create event, verify linked events list."""
@@ -190,6 +198,7 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
 
                     with self.subTest(stage="accepted_with_linked_events_section"):
                         # After acceptance, linked events section should appear
+                        wait_for_loading_indicators_to_disappear(page)
                         page.get_by_text("Linked Events (0)").wait_for(timeout=5000)
                         self.assert_snapshot(
                             page.locator("body").aria_snapshot()
@@ -197,6 +206,7 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
 
                     with self.subTest(stage="create_event_from_proposal"):
                         # Select the series from the dropdown
+                        wait_for_loading_indicators_to_disappear(page)
                         page.get_by_role("combobox", name="Series").select_option(
                             label=self.test_series.name
                         )
@@ -218,7 +228,7 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                             '[aria-label="Status of Test Event Link Session: draft"]'
                         ).first.wait_for(timeout=5000)
                         page.wait_for_load_state("networkidle")
-                        expect(page.get_by_text("Loading")).to_be_hidden()
+                        wait_for_loading_indicators_to_disappear(page)
                         self.assert_snapshot(
                             page.locator("body").aria_snapshot()
                         )
@@ -230,11 +240,11 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.wait_for_timeout(500)
 
                         # Should show 1 linked event
+                        wait_for_loading_indicators_to_disappear(page)
                         page.get_by_text("Linked Events (1)").wait_for(
                             timeout=5000
                         )
                         page.wait_for_load_state("networkidle")
-                        expect(page.get_by_text("Loading")).to_be_hidden()
                         self.assert_snapshot(
                             page.locator("body").aria_snapshot()
                         )

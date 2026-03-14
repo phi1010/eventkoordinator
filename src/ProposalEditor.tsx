@@ -676,6 +676,12 @@ export function ProposalEditor({
                 />
               </div>
 
+              {lookupLoading && (
+                <p className={styles.fieldHint} role="status" aria-live="polite">
+                  Loading...
+                </p>
+              )}
+
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-submission-type" className={styles.label}>
                   Submission Type
@@ -720,15 +726,19 @@ export function ProposalEditor({
                   className={`${styles.input} ${changedFields.has('area') ? styles.changed : ''}`}
                   disabled={isSaving || !canEdit || lookupLoading}
                 >
-                  <option value="">-- Select an area --</option>
-                  {proposalAreas.length === 0 ? (
-                    <option disabled>Loading areas...</option>
+                  {lookupLoading ? (
+                    <option value="">Loading...</option>
+                  ) : proposalAreas.length === 0 ? (
+                    <option value="">No areas available</option>
                   ) : (
-                    proposalAreas.map((area) => (
-                      <option key={area.code} value={area.code}>
-                        {area.label}
-                      </option>
-                    ))
+                    <>
+                      <option value="">-- Select an area --</option>
+                      {proposalAreas.map((area) => (
+                        <option key={area.code} value={area.code}>
+                          {area.label}
+                        </option>
+                      ))}
+                    </>
                   )}
                 </select>
               </div>

@@ -18,6 +18,7 @@ from django.contrib.auth.models import Permission
 from playwright.sync_api import Page, sync_playwright, expect
 
 from apiv1.models.basedata import Event, Series
+from project import test_utils
 from project.test_utils import (
     SnapshotMixin,
     ViteStaticLiveServerTestCase,
@@ -609,7 +610,7 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                     page.get_by_role("form", name="Edit event details").wait_for(timeout=1000)
 
                     with self.subTest(stage="before_delete_event"):
-                        expect(page.get_by_text("Loading")).to_be_hidden()
+                        test_utils.wait_for_loading_indicators_to_disappear(page)
                         self.assert_snapshot(page.locator("body").aria_snapshot())
 
                     with self.subTest(stage="after_delete_event"):
