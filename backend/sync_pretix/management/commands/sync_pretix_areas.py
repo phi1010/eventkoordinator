@@ -10,7 +10,6 @@ import requests
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.text import slugify
-from playwright.sync_api import sync_playwright, expect
 
 from apiv1.models.basedata import ProposalArea
 
@@ -311,6 +310,7 @@ class Command(BaseCommand):
         )
 
     def _setup_pretix(self, runtime_settings: PretixSettings):
+        from playwright.sync_api import sync_playwright, expect
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
             page = browser.new_page()
