@@ -14,6 +14,7 @@ import {
   fetchProposalTransitions,
   createEvent,
   searchSeriesAutocomplete,
+  uploadProposalImage,
   type ProposalDetail,
   type ProposalChecklistItem,
   type ProposalHistoryEntry,
@@ -25,6 +26,7 @@ import {
 } from './api'
 import { useUnsavedChanges } from './useUnsavedChanges'
 import { usePermissions } from './usePermissions'
+import { ImageUploadField } from './ImageUploadField'
 import { SpeakerListEditor } from './SpeakerListEditor'
 import { ProposalTransitionButtons } from './ProposalTransitionButtons'
 import styles from './EventGeneralEditor.module.css'
@@ -208,6 +210,10 @@ export function ProposalEditor({
   const [linkedEvents, setLinkedEvents] = useState<ProposalEventSummary[]>([])
   const [linkedEventsLoading, setLinkedEventsLoading] = useState(false)
   const [currentStatus, setCurrentStatus] = useState<string>('')
+  const [proposalPhotoUrl, setProposalPhotoUrl] = useState<string | null>(null)
+  const [isProposalImageUploading, setIsProposalImageUploading] = useState(false)
+  const [proposalImageUploadProgress, setProposalImageUploadProgress] = useState<number | null>(null)
+  const [proposalImageError, setProposalImageError] = useState<string | null>(null)
 
   // Event creation state
   const [seriesSearchQuery, setSeriesSearchQuery] = useState('')
@@ -245,6 +251,7 @@ export function ProposalEditor({
     })
 
     setOwner(data.owner || null)
+    setProposalPhotoUrl(data.photo || null)
 
     if (resetChangedFields || !changedFieldsRef.current.has('editors')) {
       setEditors(data.editors || [])
@@ -485,6 +492,27 @@ export function ProposalEditor({
     setError(null)
   }
 
+  const handleProposalImageUpload = async (file: File) => {
+    if (!_proposalId || !_proposalId.trim()) {
+      setProposalImageError('Save the proposal before uploading an image.')
+      return
+    }
+
+    try {
+      setIsProposalImageUploading(true)
+      setProposalImageUploadProgress(0)
+      setProposalImageError(null)
+
+      const updatedProposal = await uploadProposalImage(_proposalId, file, setProposalImageUploadProgress)
+      setProposalPhotoUrl(updatedProposal.photo || null)
+    } catch (err) {
+      setProposalImageError(err instanceof Error ? err.message : 'Failed to upload proposal image')
+    } finally {
+      setIsProposalImageUploading(false)
+      setProposalImageUploadProgress(null)
+    }
+  }
+
   const handleSave = async () => {
     if (!_proposalId || !_proposalId.trim()) {
       setError('No proposal ID provided')
@@ -603,6 +631,21 @@ export function ProposalEditor({
                   required
                 />
                 <small aria-live="polite">{formData.title.length}/30</small>
+              </div>
+
+              <div className={styles.formGroup}>
+                <ImageUploadField
+                  label="Proposal image"
+                  inputId="proposal-image-upload"
+                  previewAlt="Proposal image preview"
+                  currentImageUrl={proposalPhotoUrl}
+                  disabled={isSaving || !canEdit || !_proposalId || !_proposalId.trim()}
+                  isUploading={isProposalImageUploading}
+                  uploadProgress={proposalImageUploadProgress}
+                  error={proposalImageError}
+                  helpText="Upload a JPG or PNG image up to 10 MB for this proposal."
+                  onFileSelected={handleProposalImageUpload}
+                />
               </div>
 
               <div className={styles.formGroup}>

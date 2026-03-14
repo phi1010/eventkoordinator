@@ -207,6 +207,7 @@ class ProposalDetail(Schema):
     preferred_dates: str
     is_regular_member: bool
     has_building_access: bool
+    photo: Optional[str] = None
     owner: Optional[UserBasic] = None
     editors: list[UserBasic] = []
 

@@ -51,6 +51,72 @@ export async function getCsrfToken(): Promise<string> {
   return csrfToken || ''
 }
 
+function parseUploadError(responseText: string, fallbackMessage: string): Error {
+  try {
+    const payload = responseText ? JSON.parse(responseText) : null
+    const errorMessage = payload?.detail ? `${payload.error}: ${payload.detail}` : payload?.error
+    return new Error(errorMessage || fallbackMessage)
+  } catch {
+    return new Error(fallbackMessage)
+  }
+}
+
+async function uploadMultipartJson<T>(
+  url: string,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<T> {
+  const token = await getCsrfToken()
+
+  return await new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', url)
+    xhr.withCredentials = true
+
+    if (token) {
+      xhr.setRequestHeader(CSRF_HEADER_NAME, token)
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (!onProgress) {
+        return
+      }
+
+      if (!event.lengthComputable || event.total === 0) {
+        onProgress(0)
+        return
+      }
+
+      onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)))
+    }
+
+    xhr.onerror = () => {
+      reject(new Error('Upload failed because of a network error.'))
+    }
+
+    xhr.onload = () => {
+      const fallbackMessage = `Upload failed: ${xhr.status} ${xhr.statusText}`.trim()
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100)
+
+        try {
+          resolve(JSON.parse(xhr.responseText) as T)
+        } catch {
+          reject(new Error('Upload succeeded but the response could not be read.'))
+        }
+        return
+      }
+
+      reject(parseUploadError(xhr.responseText, fallbackMessage))
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+    onProgress?.(0)
+    xhr.send(formData)
+  })
+}
+
 const client = createClient<paths>({
   baseUrl: '',
   fetch: async (request: Request) => {
@@ -853,7 +919,7 @@ export interface SpeakerIn {
 }
 
 export interface ProposalDetail {
-  id: number
+  id: string
   title: string
   submission_type: string
   area?: string | null
@@ -870,6 +936,7 @@ export interface ProposalDetail {
   preferred_dates: string
   is_regular_member: boolean
   has_building_access: boolean
+  photo?: string | null
   owner?: UserBasic | null
   editors?: UserBasic[]
 }
@@ -929,7 +996,7 @@ export async function updateProposal(proposalId: string, formData: {
 // Speaker Management API Functions
 
 export interface SpeakerOut {
-  id: number
+  id: string
   email: string
   display_name: string
   biography: string
@@ -1015,6 +1082,31 @@ export async function removeSpeaker(proposalId: string, speakerId: string): Prom
   if (error || !response.ok) {
     throw new Error(`Failed to remove speaker: ${response.statusText}`)
   }
+}
+
+export async function uploadProposalImage(
+  proposalId: string,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<ProposalDetail> {
+  return await uploadMultipartJson<ProposalDetail>(
+    `/api/v1/proposals/${proposalId}/photo`,
+    file,
+    onProgress
+  )
+}
+
+export async function uploadSpeakerImage(
+  proposalId: string,
+  speakerId: string,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<ProposalSpeakerOut> {
+  return await uploadMultipartJson<ProposalSpeakerOut>(
+    `/api/v1/proposals/${proposalId}/speakers/${speakerId}/profile-picture`,
+    file,
+    onProgress
+  )
 }
 
 // Lookup table API Functions

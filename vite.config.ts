@@ -27,6 +27,10 @@ export default defineConfig(({ command }) => {
           target: 'http://localhost:8000',
           changeOrigin: false,
         },
+        '/media': {
+          target: 'http://localhost:8000',
+          changeOrigin: false,
+        },
         '/admin': {
           target: 'http://localhost:8000',
           changeOrigin: false,

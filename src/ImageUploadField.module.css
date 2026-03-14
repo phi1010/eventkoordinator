@@ -1,0 +1,107 @@
+.container {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.previewBox {
+  width: 160px;
+  min-width: 160px;
+  aspect-ratio: 1;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.previewImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.emptyPreview {
+  padding: 0.75rem;
+  text-align: center;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.controls {
+  display: flex;
+  flex: 1;
+  min-width: 240px;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #333;
+}
+
+.fileInput {
+  font: inherit;
+}
+
+.fileInput:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.helpText {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.progressWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.progressNative {
+  width: 100%;
+}
+
+.progressText {
+  color: #555;
+  font-size: 0.85rem;
+}
+
+.errorText {
+  background-color: #ffebee;
+  color: #c62828;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .previewBox {
+    background: #2a2a3e;
+    border-color: #555;
+  }
+
+  .emptyPreview,
+  .helpText,
+  .progressText {
+    color: #aaa;
+  }
+
+  .label {
+    color: #e0e0e0;
+  }
+
+  .errorText {
+    background-color: #2a1515;
+    color: #ef9a9a;
+  }
+}
+

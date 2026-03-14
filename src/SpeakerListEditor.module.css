@@ -32,6 +32,15 @@
   justify-content: space-between;
   align-items: flex-start;
   min-width: 0;
+  gap: 1rem;
+}
+
+.speakerImage {
+  width: 84px;
+  height: 84px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .speakerName {
@@ -129,6 +138,10 @@
     background-color: #2a2a3e;
     border-color: #444;
     color: #e0e0e0;
+  }
+
+  .speakerImage {
+    background-color: #1e1e2e;
   }
 
   .speakerEmail {

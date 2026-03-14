@@ -6,7 +6,11 @@ Handles endpoints for managing proposal speakers.
 
 import logging
 import uuid
-from ninja import Router
+from typing import cast
+
+from django.core.exceptions import ValidationError
+from django.db import models
+from ninja import File, Router, UploadedFile
 
 import apiv1
 from apiv1.api_utils import api_permission_mandatory
@@ -15,6 +19,26 @@ from apiv1.schemas import ProposalSpeakerOut, SpeakerOut, SpeakerIn, ErrorOut
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+def _speaker_to_schema(speaker: Speaker) -> SpeakerOut:
+    return SpeakerOut(
+        id=speaker.id,
+        email=speaker.email,
+        display_name=speaker.display_name,
+        biography=speaker.biography,
+        profile_picture=speaker.profile_picture.url if speaker.profile_picture else None,
+        use_gravatar=speaker.use_gravatar,
+    )
+
+
+def _proposal_speaker_to_schema(proposal_speaker: ProposalSpeaker) -> ProposalSpeakerOut:
+    return ProposalSpeakerOut(
+        id=proposal_speaker.id,
+        speaker=_speaker_to_schema(proposal_speaker.speaker),
+        role=proposal_speaker.role,
+        sort_order=proposal_speaker.sort_order,
+    )
 
 
 @router.post(
@@ -64,24 +88,10 @@ def add_speaker_to_proposal(
             proposal=proposal, speaker=speaker, defaults={"sort_order": sort_order}
         )
 
-        return 201, ProposalSpeakerOut(
-            id=proposal_speaker.id,
-            speaker=SpeakerOut(
-                id=speaker.id,
-                email=speaker.email,
-                display_name=speaker.display_name,
-                biography=speaker.biography,
-                profile_picture=speaker.profile_picture.url
-                if speaker.profile_picture
-                else None,
-                use_gravatar=speaker.use_gravatar,
-            ),
-            role=proposal_speaker.role,
-            sort_order=proposal_speaker.sort_order,
-        )
+        return 201, _proposal_speaker_to_schema(proposal_speaker)
     except Exception as e:
         logger.error(f"Failed to add speaker: {str(e)}")
-        return 400, ErrorOut(error=f"Failed to add speaker")
+        return 400, ErrorOut(error="Failed to add speaker")
 
 
 @router.get(
@@ -109,21 +119,7 @@ def list_proposal_speakers(
     )
 
     return 200, [
-        ProposalSpeakerOut(
-            id=ps.id,
-            speaker=SpeakerOut(
-                id=ps.speaker.id,
-                email=ps.speaker.email,
-                display_name=ps.speaker.display_name,
-                biography=ps.speaker.biography,
-                profile_picture=ps.speaker.profile_picture.url
-                if ps.speaker.profile_picture
-                else None,
-                use_gravatar=ps.speaker.use_gravatar,
-            ),
-            role=ps.role,
-            sort_order=ps.sort_order,
-        )
+        _proposal_speaker_to_schema(ps)
         for ps in speakers
     ]
 
@@ -206,21 +202,53 @@ def update_speaker_in_proposal(
 
         speaker.save()
 
-        return 200, ProposalSpeakerOut(
-            id=proposal_speaker.id,
-            speaker=SpeakerOut(
-                id=speaker.id,
-                email=speaker.email,
-                display_name=speaker.display_name,
-                biography=speaker.biography,
-                profile_picture=speaker.profile_picture.url
-                if speaker.profile_picture
-                else None,
-                use_gravatar=speaker.use_gravatar,
-            ),
-            role=proposal_speaker.role,
-            sort_order=proposal_speaker.sort_order,
-        )
+        return 200, _proposal_speaker_to_schema(proposal_speaker)
     except Exception as e:
         logger.error(f"Failed to update speaker: {str(e)}")
-        return 400, ErrorOut(error=f"Failed to update speaker")
+        return 400, ErrorOut(error="Failed to update speaker")
+
+
+@router.post(
+    "/{proposal_id}/speakers/{speaker_id}/profile-picture",
+    response={200: ProposalSpeakerOut, 400: ErrorOut, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+)
+@api_permission_mandatory()
+def upload_speaker_profile_picture(
+    request, proposal_id: uuid.UUID, speaker_id: uuid.UUID, file: UploadedFile = File(...)
+) -> tuple[int, ProposalSpeakerOut] | tuple[int, ErrorOut]:
+    """Upload or replace a speaker profile image within a proposal."""
+    try:
+        proposal = ProposalModel.objects.get(pk=proposal_id)
+        if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
+            return 401, ErrorOut(error="Permission denied")
+        proposal_speaker = ProposalSpeaker.objects.select_related("speaker").get(
+            id=speaker_id, proposal=proposal
+        )
+    except ProposalModel.DoesNotExist:
+        if not request.user.has_perm((apiv1, "change", ProposalModel), None):
+            return 401, ErrorOut(error="Permission denied")
+        return 404, ErrorOut(error="Proposal not found")
+    except ProposalSpeaker.DoesNotExist:
+        return 404, ErrorOut(error="Speaker not found in proposal")
+
+    speaker = proposal_speaker.speaker
+    profile_picture_field = cast(
+        models.FileField, speaker._meta.get_field("profile_picture")
+    )
+    try:
+        profile_picture_field.clean(file, speaker)
+    except ValidationError as exc:
+        return 400, ErrorOut(
+            error="Invalid speaker image",
+            detail=" ".join(exc.messages),
+        )
+
+    previous_picture_name = speaker.profile_picture.name if speaker.profile_picture else None
+    speaker.profile_picture = file
+    speaker.save(update_fields=["profile_picture"])
+
+    if previous_picture_name and previous_picture_name != speaker.profile_picture.name:
+        profile_picture_field.storage.delete(previous_picture_name)
+
+    return 200, _proposal_speaker_to_schema(proposal_speaker)
+

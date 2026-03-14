@@ -7,11 +7,14 @@ Handles endpoints for managing proposals, associations, and validation.
 import logging
 import uuid
 from datetime import timedelta
+from typing import cast
 
 import pydot
+from django.core.exceptions import ValidationError
+from django.db import models
 from django.http import HttpResponse
 from django.utils import timezone
-from ninja import Router
+from ninja import File, Router, UploadedFile
 from openid_user_management.models import OpenIDUser
 from viewflow.fsm import chart
 
@@ -43,6 +46,43 @@ from apiv1.schemas import (
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+def _proposal_to_detail_schema(proposal: ProposalModel) -> ProposalDetail:
+    submission_type_code = (
+        proposal.submission_type.code if proposal.submission_type else ""
+    )
+    area_code = proposal.area.code if proposal.area else None
+    language_code = proposal.language.code if proposal.language else None
+
+    owner = None
+    if proposal.owner:
+        owner = UserBasic(id=proposal.owner.pk, username=proposal.owner.username)
+
+    editors = [UserBasic(id=p.pk, username=p.username) for p in proposal.editors.all()]
+
+    return ProposalDetail(
+        id=proposal.id,
+        title=proposal.title,
+        submission_type=submission_type_code,
+        area=area_code,
+        language=language_code,
+        abstract=proposal.abstract,
+        description=proposal.description,
+        internal_notes=proposal.internal_notes,
+        occurrence_count=proposal.occurrence_count,
+        duration_days=proposal.duration_days,
+        duration_time_per_day=proposal.duration_time_per_day,
+        is_basic_course=proposal.is_basic_course,
+        max_participants=proposal.max_participants,
+        material_cost_eur=str(proposal.material_cost_eur),
+        preferred_dates=proposal.preferred_dates,
+        is_regular_member=proposal.is_regular_member,
+        has_building_access=proposal.has_building_access,
+        photo=proposal.photo.url if proposal.photo else None,
+        owner=owner,
+        editors=editors,
+    )
 
 
 @router.get("/flow-chart", response={200: bytes, 401: ErrorOut, 403: ErrorOut})
@@ -163,7 +203,7 @@ def create_proposal(
         return 201, model_proposal_to_schema(proposal)
     except Exception as e:
         logger.error(f"Failed to create proposal: {str(e)}")
-        return 400, ErrorOut(error=f"Failed to create proposal")
+        return 400, ErrorOut(error="Failed to create proposal")
 
 
 @router.get(
@@ -191,39 +231,51 @@ def get_proposal(
     ):
         return 401, ErrorOut(error="Unauthorized to view this proposal")
 
-    submission_type_code = (
-        proposal.submission_type.code if proposal.submission_type else ""
-    )
-    area_code = proposal.area.code if proposal.area else None
-    language_code = proposal.language.code if proposal.language else None
+    return 200, _proposal_to_detail_schema(proposal)
 
-    owner = None
-    if proposal.owner:
-        owner = UserBasic(id=proposal.owner.pk, username=proposal.owner.username)
 
-    editors = [UserBasic(id=p.pk, username=p.username) for p in proposal.editors.all()]
+@router.post(
+    "/{proposal_id}/photo",
+    response={200: ProposalDetail, 400: ErrorOut, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+)
+@api_permission_mandatory()
+def upload_proposal_photo(
+    request, proposal_id: uuid.UUID, file: UploadedFile = File(...)
+) -> tuple[int, ProposalDetail] | tuple[int, ErrorOut]:
+    """Upload or replace a proposal image."""
+    try:
+        proposal = (
+            ProposalModel.objects.select_related(
+                "submission_type", "area", "language", "owner"
+            )
+            .prefetch_related("editors")
+            .get(pk=proposal_id)
+        )
+    except ProposalModel.DoesNotExist:
+        return 404, ErrorOut(error="Proposal not found")
 
-    return 200, ProposalDetail(
-        id=proposal.id,
-        title=proposal.title,
-        submission_type=submission_type_code,
-        area=area_code,
-        language=language_code,
-        abstract=proposal.abstract,
-        description=proposal.description,
-        internal_notes=proposal.internal_notes,
-        occurrence_count=proposal.occurrence_count,
-        duration_days=proposal.duration_days,
-        duration_time_per_day=proposal.duration_time_per_day,
-        is_basic_course=proposal.is_basic_course,
-        max_participants=proposal.max_participants,
-        material_cost_eur=str(proposal.material_cost_eur),
-        preferred_dates=proposal.preferred_dates,
-        is_regular_member=proposal.is_regular_member,
-        has_building_access=proposal.has_building_access,
-        owner=owner,
-        editors=editors,
-    )
+    if not request.user.has_perm(
+        f"{apiv1.__name__}.change_{ProposalModel.__name__.lower()}", proposal
+    ):
+        return 401, ErrorOut(error="Unauthorized to change this proposal")
+
+    photo_field = cast(models.FileField, proposal._meta.get_field("photo"))
+    try:
+        photo_field.clean(file, proposal)
+    except ValidationError as exc:
+        return 400, ErrorOut(
+            error="Invalid proposal image",
+            detail=" ".join(exc.messages),
+        )
+
+    previous_photo_name = proposal.photo.name if proposal.photo else None
+    proposal.photo = file
+    proposal.save(update_fields=["photo"])
+
+    if previous_photo_name and previous_photo_name != proposal.photo.name:
+        photo_field.storage.delete(previous_photo_name)
+
+    return 200, _proposal_to_detail_schema(proposal)
 
 
 @router.put(
@@ -341,40 +393,7 @@ def update_proposal(
 
     proposal.save()
 
-    # Return updated proposal
-    submission_type_code = (
-        proposal.submission_type.code if proposal.submission_type else ""
-    )
-    area_code = proposal.area.code if proposal.area else None
-    language_code = proposal.language.code if proposal.language else None
-
-    owner = None
-    if proposal.owner:
-        owner = UserBasic(id=proposal.owner.pk, username=proposal.owner.username)
-
-    editors = [UserBasic(id=p.pk, username=p.username) for p in proposal.editors.all()]
-
-    return 200, ProposalDetail(
-        id=proposal.id,
-        title=proposal.title,
-        submission_type=submission_type_code,
-        area=area_code,
-        language=language_code,
-        abstract=proposal.abstract,
-        description=proposal.description,
-        internal_notes=proposal.internal_notes,
-        occurrence_count=proposal.occurrence_count,
-        duration_days=proposal.duration_days,
-        duration_time_per_day=proposal.duration_time_per_day,
-        is_basic_course=proposal.is_basic_course,
-        max_participants=proposal.max_participants,
-        material_cost_eur=str(proposal.material_cost_eur),
-        preferred_dates=proposal.preferred_dates,
-        is_regular_member=proposal.is_regular_member,
-        has_building_access=proposal.has_building_access,
-        owner=owner,
-        editors=editors,
-    )
+    return 200, _proposal_to_detail_schema(proposal)
 
 
 @router.delete(
@@ -596,42 +615,9 @@ def _execute_proposal_transition(
             return 400, ErrorOut(error=f"Failed to execute {action} transition")
     except Exception as e:
         logger.error(f"Error executing transition {action}: {str(e)}")
-        return 400, ErrorOut(error=f"Error executing transition")
+        return 400, ErrorOut(error="Error executing transition")
 
-    # Return updated proposal
-    submission_type_code = (
-        proposal.submission_type.code if proposal.submission_type else ""
-    )
-    area_code = proposal.area.code if proposal.area else None
-    language_code = proposal.language.code if proposal.language else None
-
-    owner = None
-    if proposal.owner:
-        owner = UserBasic(id=proposal.owner.pk, username=proposal.owner.username)
-
-    editors = [UserBasic(id=p.pk, username=p.username) for p in proposal.editors.all()]
-
-    return 200, ProposalDetail(
-        id=proposal.id,
-        title=proposal.title,
-        submission_type=submission_type_code,
-        area=area_code,
-        language=language_code,
-        abstract=proposal.abstract,
-        description=proposal.description,
-        internal_notes=proposal.internal_notes,
-        occurrence_count=proposal.occurrence_count,
-        duration_days=proposal.duration_days,
-        duration_time_per_day=proposal.duration_time_per_day,
-        is_basic_course=proposal.is_basic_course,
-        max_participants=proposal.max_participants,
-        material_cost_eur=str(proposal.material_cost_eur),
-        preferred_dates=proposal.preferred_dates,
-        is_regular_member=proposal.is_regular_member,
-        has_building_access=proposal.has_building_access,
-        owner=owner,
-        editors=editors,
-    )
+    return 200, _proposal_to_detail_schema(proposal)
 
 
 @router.post(

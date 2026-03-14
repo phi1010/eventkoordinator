@@ -2,10 +2,12 @@ import { useState } from 'react'
 import {
   addSpeakerToProposal,
   removeSpeaker,
+  uploadSpeakerImage,
   updateSpeaker,
   type ProposalSpeakerOut,
   type SpeakerIn,
 } from './api'
+import { ImageUploadField } from './ImageUploadField'
 import styles from './SpeakerListEditor.module.css'
 
 interface SpeakerListEditorProps {
@@ -21,6 +23,12 @@ interface EditingSpeaker {
   display_name: string
   biography: string
   use_gravatar: boolean
+}
+
+interface UploadState {
+  isUploading: boolean
+  progress: number | null
+  error: string | null
 }
 
 function getSpeakerFieldId(prefix: string, speakerId: string, fieldName: string) {
@@ -42,6 +50,29 @@ export function SpeakerListEditor({
   const [editingSpeaker, setEditingSpeaker] = useState<EditingSpeaker | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [uploadStates, setUploadStates] = useState<Record<string, UploadState>>({})
+
+  const getUploadState = (speakerId: string): UploadState => (
+    uploadStates[speakerId] ?? {
+      isUploading: false,
+      progress: null,
+      error: null,
+    }
+  )
+
+  const updateUploadState = (speakerId: string, updates: Partial<UploadState>) => {
+    setUploadStates((previous) => ({
+      ...previous,
+      [speakerId]: {
+        ...(previous[speakerId] ?? {
+          isUploading: false,
+          progress: null,
+          error: null,
+        }),
+        ...updates,
+      },
+    }))
+  }
 
   const handleAddSpeaker = async () => {
     if (!newSpeaker.email?.trim()) {
@@ -120,6 +151,38 @@ export function SpeakerListEditor({
     }
   }
 
+  const handleSpeakerImageUpload = async (speaker: ProposalSpeakerOut, file: File) => {
+    try {
+      updateUploadState(speaker.id, {
+        isUploading: true,
+        progress: 0,
+        error: null,
+      })
+
+      const updatedSpeaker = await uploadSpeakerImage(
+        proposalId,
+        speaker.id,
+        file,
+        (progress) => updateUploadState(speaker.id, { progress })
+      )
+
+      onSpeakersChange(
+        speakers.map((currentSpeaker) => (
+          currentSpeaker.id === speaker.id ? updatedSpeaker : currentSpeaker
+        ))
+      )
+    } catch (err) {
+      updateUploadState(speaker.id, {
+        error: err instanceof Error ? err.message : 'Failed to upload speaker image',
+      })
+    } finally {
+      updateUploadState(speaker.id, {
+        isUploading: false,
+        progress: null,
+      })
+    }
+  }
+
   return (
     <div style={{ marginBottom: '2rem' }}>
       <h3 className={styles.title}>Speakers</h3>
@@ -141,6 +204,21 @@ export function SpeakerListEditor({
               editingSpeaker?.id === speaker.id ? (
                 // Edit Mode
                 <div key={speaker.id} className={styles.editCard}>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <ImageUploadField
+                      label="Speaker image"
+                      inputId={`speaker-image-${speaker.id}`}
+                      previewAlt={`Speaker image preview for ${speaker.speaker.display_name || speaker.speaker.email}`}
+                      currentImageUrl={speaker.speaker.profile_picture || null}
+                      disabled={disabled || isSaving}
+                      isUploading={getUploadState(speaker.id).isUploading}
+                      uploadProgress={getUploadState(speaker.id).progress}
+                      error={getUploadState(speaker.id).error}
+                      helpText="Upload a JPG or PNG image up to 10 MB for this speaker."
+                      onFileSelected={(file) => handleSpeakerImageUpload(speaker, file)}
+                    />
+                  </div>
+
                   <div style={{ marginBottom: '0.75rem' }}>
                     <label
                       htmlFor={getSpeakerFieldId('edit-speaker', speaker.id, 'email')}
@@ -259,6 +337,13 @@ export function SpeakerListEditor({
               ) : (
                 // Display Mode
                 <div key={speaker.id} className={styles.speakerCard}>
+                  {speaker.speaker.profile_picture && (
+                    <img
+                      src={speaker.speaker.profile_picture}
+                      alt={`Speaker image preview for ${speaker.speaker.display_name || speaker.speaker.email}`}
+                      className={styles.speakerImage}
+                    />
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className={styles.speakerName}>
                       {speaker.speaker.display_name || speaker.speaker.email}
