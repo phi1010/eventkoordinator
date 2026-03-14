@@ -133,7 +133,24 @@ class Event(HistoricalMetaBase):
             "archive",
         ):
             if perm.endswith(f".{action}_{Event.__name__.lower()}"):
-                return user.has_perm(perm, None)
+                has_global_permission = user.has_perm(perm, None)
+
+                # For linked proposals, approving/rejecting additionally requires
+                # proposal ownership/editor rights.
+                if action in ("approve", "reject") and self.proposal_id is not None:
+                    if not has_global_permission:
+                        return False
+
+                    if user == self.proposal.owner:
+                        return True
+
+                    user_id = getattr(user, "pk", None)
+                    if user_id is None:
+                        return False
+
+                    return self.proposal.editors.filter(pk=user_id).exists()
+
+                return has_global_permission
         return False
 
     class Meta:

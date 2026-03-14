@@ -5,6 +5,7 @@ from unittest.mock import patch
 from uuid import UUID
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -12,6 +13,7 @@ from django.test import TestCase, override_settings
 
 from apiv1.management.commands.import_ical import parse_calendar_data
 from apiv1.models import (
+    Event,
     Proposal,
     ProposalArea,
     ProposalLanguage,
@@ -208,3 +210,86 @@ END:VCALENDAR
         self.assertEqual(imported_events[-1].start_time.date(), date(2027, 3, 10))
         self.assertTrue(all(event.tag == "community" for event in imported_events))
         self.assertEqual(series.description, "Recurring import description")
+
+
+class EventApprovalPermissionTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.owner = user_model.objects.create_user(
+            username="event-owner",
+            password="pw",
+            email="event-owner@example.com",
+        )
+        self.editor = user_model.objects.create_user(
+            username="event-editor",
+            password="pw",
+            email="event-editor@example.com",
+        )
+        self.other_user = user_model.objects.create_user(
+            username="event-other",
+            password="pw",
+            email="event-other@example.com",
+        )
+
+        self.approve_perm = Permission.objects.get(codename="approve_event")
+        self.reject_perm = Permission.objects.get(codename="reject_event")
+
+        submission_type, _ = SubmissionType.objects.get_or_create(
+            code="workshop",
+            defaults={"label": "Workshop"},
+        )
+        language, _ = ProposalLanguage.objects.get_or_create(
+            code="en",
+            defaults={"label": "English"},
+        )
+        area, _ = ProposalArea.objects.get_or_create(
+            code="metal",
+            defaults={"label": "Metal Workshop"},
+        )
+
+        self.proposal = Proposal.objects.create(
+            owner=self.owner,
+            title="Linked proposal",
+            submission_type=submission_type,
+            language=language,
+            area=area,
+            abstract="A" * 50,
+            description="B" * 120,
+            occurrence_count=1,
+            photo=SimpleUploadedFile("proposal.png", b"img", content_type="image/png"),
+            duration_days=1,
+            duration_time_per_day="02:00",
+            max_participants=10,
+            material_cost_eur="3.50",
+            preferred_dates="2026-05-10 10:00, 2026-05-24 10:00",
+        )
+        self.proposal.editors.add(self.editor)
+
+        self.series = Series.objects.create(name="Permission series")
+        self.event = Event.objects.create(
+            series=self.series,
+            proposal=self.proposal,
+            name="Proposal-linked event",
+            start_time=datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+            status=Event.Status.PROPOSED,
+        )
+
+    def test_owner_needs_global_approve_permission(self):
+        self.assertFalse(self.event.has_object_permission(self.owner, "apiv1.approve_event"))
+        self.owner.user_permissions.add(self.approve_perm)
+        owner = get_user_model().objects.get(pk=self.owner.pk)
+        self.assertTrue(self.event.has_object_permission(owner, "apiv1.approve_event"))
+
+    def test_editor_needs_global_reject_permission(self):
+        self.assertFalse(self.event.has_object_permission(self.editor, "apiv1.reject_event"))
+        self.editor.user_permissions.add(self.reject_perm)
+        editor = get_user_model().objects.get(pk=self.editor.pk)
+        self.assertTrue(self.event.has_object_permission(editor, "apiv1.reject_event"))
+
+    def test_non_owner_non_editor_denied_even_with_global_permission(self):
+        self.other_user.user_permissions.add(self.approve_perm)
+        other_user = get_user_model().objects.get(pk=self.other_user.pk)
+        self.assertFalse(self.event.has_object_permission(other_user, "apiv1.approve_event"))
+
+
