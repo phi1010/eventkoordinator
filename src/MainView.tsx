@@ -4,6 +4,7 @@ import { SelectionPanel, type SelectionItem } from './SelectionPanel'
 import { ContentRenderer } from './ContentRenderer'
 import { Tooltip } from './Tooltip'
 import { loadSeriesFromAPI, fetchSeriesById, createSeries, createEvent, deleteSeries, deleteEvent, type Event, type Series, type Event as ApiEvent, type Series as ApiSeries } from './api'
+import { EventStatusBadge } from './EventStatusBadge'
 import { usePermissions } from './usePermissions'
 import styles from './MainView.module.css'
 
@@ -13,6 +14,7 @@ export interface EventItem extends SelectionItem {
   startTime?: Date
   endTime?: Date
   tag?: string
+  status?: string
   useFullDays?: boolean
 }
 
@@ -24,6 +26,10 @@ export interface SeriesItem extends SelectionItem {
   eventsLoaded?: boolean
 }
 
+function toOptionalStatus(status: unknown): string | undefined {
+  return typeof status === 'string' ? status : undefined
+}
+
 function toEventItem(event: ApiEvent): EventItem {
   return {
     id: event.id,
@@ -31,6 +37,7 @@ function toEventItem(event: ApiEvent): EventItem {
     startTime: event.startTime,
     endTime: event.endTime,
     tag: event.tag,
+    status: toOptionalStatus(event.status),
     useFullDays: event.useFullDays,
   }
 }
@@ -100,14 +107,7 @@ export function MainView() {
           if (s.id !== targetSeriesId) return s
           return {
             ...s,
-            events: detailedSeries.events.map((event) => ({
-              id: event.id,
-              name: event.name,
-              startTime: event.startTime,
-              endTime: event.endTime,
-              tag: event.tag,
-              useFullDays: event.useFullDays,
-            })),
+            events: detailedSeries.events.map((event) => toEventItem(event)),
             eventsLoaded: true,
           }
         }))
@@ -217,14 +217,7 @@ export function MainView() {
         ...s,
         events: s.events.map((e) => {
           if (e.id !== updated.id) return e
-          return {
-            id: updated.id,
-            name: updated.name,
-            startTime: updated.startTime,
-            endTime: updated.endTime,
-            tag: updated.tag,
-            useFullDays: updated.useFullDays,
-          }
+          return toEventItem(updated)
         }),
       }
     }))
@@ -417,7 +410,13 @@ function CoordinatorInnerView({
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <div style={{ fontWeight: 500 }}>{event.name}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ fontWeight: 500 }}>{event.name}</div>
+          <EventStatusBadge
+            status={event.status}
+            ariaLabel={`Status of ${event.name}: ${event.status}`}
+          />
+        </div>
         <div style={{ fontSize: '0.8rem', opacity: 0.7, display: 'flex', gap: '8px', alignItems: 'center' }}>
           {event.startTime && (
             <>

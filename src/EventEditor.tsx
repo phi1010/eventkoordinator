@@ -11,6 +11,7 @@ import {
 import type { CalendarEvent, Resource } from './calendarTypes'
 import WeekViewCombined from './WeekViewCombined'
 import { useUnsavedChanges } from './useUnsavedChanges'
+import { EventTransitionButtons } from './EventTransitionButtons'
 import styles from './SubEventEditor.module.css'
 
 interface EventEditorProps {
@@ -505,6 +506,14 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
             )}
           </div>
         </form>
+
+        {/* Workflow status & transition buttons */}
+        <EventTransitionButtons
+          seriesId={series.id}
+          eventId={event.id}
+          currentStatus={(event.status as string | undefined) ?? 'draft'}
+          onTransitionSuccess={(updatedEvent) => onEventUpdate(updatedEvent)}
+        />
       </div>
 
       {/* Calendar Time Picker */}

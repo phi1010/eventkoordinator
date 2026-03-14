@@ -1,0 +1,173 @@
+.section {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.statusLabel {
+  font-weight: 600;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.statusText {
+  font-size: 0.9rem;
+  color: #333;
+  padding: 0.25rem 0.5rem;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  min-width: 120px;
+  user-select: none;
+  cursor: default;
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.transitionButton {
+  padding: 0.45rem 1rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+  background-color: #1976d2;
+  color: #fff;
+}
+
+.transitionButton:hover:not(:disabled) {
+  background-color: #1565c0;
+}
+
+.transitionButton:disabled {
+  background-color: #e0e0e0;
+  color: #9e9e9e;
+  cursor: not-allowed;
+  border-color: #d0d0d0;
+}
+
+.transitionButton.busy {
+  opacity: 0.6;
+}
+
+.errorBox {
+  background-color: #ffebee;
+  border: 1px solid #ef5350;
+  border-radius: 4px;
+  padding: 0.6rem 0.75rem;
+  color: #c62828;
+  font-size: 0.88rem;
+}
+
+/* Collapsible flow chart */
+.flowChartToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #555;
+  font-size: 0.85rem;
+  padding: 0.25rem 0;
+  margin-top: 0.25rem;
+}
+
+.flowChartToggle:hover {
+  color: #1976d2;
+}
+
+.flowChartArrow {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  font-size: 0.7rem;
+}
+
+.flowChartArrow.open {
+  transform: rotate(90deg);
+}
+
+.flowChartContainer {
+  margin-top: 0.5rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: auto;
+  max-height: 400px;
+  background: #fafafa;
+  padding: 0.5rem;
+}
+
+.flowChartContainer svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.flowChartLoading {
+  color: #888;
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .statusText {
+    background: #2a2a2a;
+    border-color: #444;
+    color: #ddd;
+  }
+
+  .errorBox {
+    background-color: #2a1515;
+    border-color: #b71c1c;
+    color: #ef9a9a;
+  }
+
+  .statusLabel {
+    color: #aaa;
+  }
+
+  .transitionButton:disabled {
+    background-color: #3a3a3a;
+    color: #666;
+    border-color: #444;
+  }
+
+  .flowChartToggle {
+    color: #aaa;
+  }
+
+  .flowChartToggle:hover {
+    color: #64b5f6;
+  }
+
+  .flowChartContainer {
+    background: #1e1e1e;
+    border-color: #444;
+  }
+}
+

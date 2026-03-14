@@ -87,7 +87,7 @@ def _proposal_to_detail_schema(proposal: ProposalModel) -> ProposalDetail:
 
 @router.get("/flow-chart", response={200: bytes, 401: ErrorOut, 403: ErrorOut})
 def flow_chart_image(request):
-    dot_graph = chart(ProposalFlow.state)
+    dot_graph = chart(ProposalFlow.status)
 
     graphs = pydot.graph_from_dot_data(dot_graph)
     graph = graphs[0]
@@ -723,6 +723,7 @@ def get_proposal_events(
             name=event.name,
             startTime=event.start_time.isoformat(),
             endTime=event.end_time.isoformat(),
+            status=event.status,
             series_id=event.series_id,
             series_name=event.series.name,
         )

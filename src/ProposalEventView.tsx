@@ -10,6 +10,7 @@ import {
   type Event,
 } from './api'
 import { EventEditor } from './EventEditor'
+import { EventStatusBadge } from './EventStatusBadge'
 import styles from './ProposalEventView.module.css'
 
 export function ProposalEventView() {
@@ -153,7 +154,13 @@ export function ProposalEventView() {
                 style={{ cursor: 'pointer' }}
                 onClick={() => navigate(`/proposal/${proposalId}/event/${ev.id}`)}
               >
-                <strong>{ev.name}</strong>
+                <div className={styles.linkedEventHeader}>
+                  <strong className={styles.linkedEventName}>{ev.name}</strong>
+                  <EventStatusBadge
+                    status={ev.status}
+                    ariaLabel={`Status of ${ev.name}: ${ev.status}`}
+                  />
+                </div>
                 <br />
                 <small>{ev.series_name}</small>
                 <br />

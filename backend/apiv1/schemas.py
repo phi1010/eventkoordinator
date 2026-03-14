@@ -41,6 +41,7 @@ class Event(Schema):
     proposal_id: Optional[uuid.UUID] = None
     series_id: Optional[uuid.UUID] = None
     series_name: Optional[str] = None
+    status: str = "draft"
 
 
 class Series(Schema):
@@ -325,7 +326,22 @@ class ProposalEventSummary(Schema):
     name: str
     startTime: str
     endTime: str
+    status: str
     series_id: uuid.UUID
     series_name: str
 
 
+class EventTransitionOut(Schema):
+    """Information about a single available or unavailable event transition."""
+    action: str
+    label: str
+    target_status: str
+    enabled: bool
+    disable_reason: Optional[str] = None
+
+
+class EventTransitions(Schema):
+    """List of available transitions for an event."""
+    event_id: uuid.UUID
+    current_status: str
+    transitions: list[EventTransitionOut]

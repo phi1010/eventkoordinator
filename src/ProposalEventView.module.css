@@ -78,6 +78,18 @@
   color: #e65100;
 }
 
+.linkedEventHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.linkedEventName {
+  min-width: 0;
+}
+
 .seriesSelector {
   margin-bottom: 1rem;
 }

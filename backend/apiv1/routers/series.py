@@ -8,13 +8,17 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 import django.utils.timezone
+import pydot
+from django.http import HttpResponse
 from ninja import Router
+from viewflow.fsm import chart
 
 import apiv1
 from apiv1.api_utils import (
     api_permission_mandatory,
     api_permission_required,
 )
+from apiv1.flows import EventFlow
 from apiv1.helpers import (
     model_event_to_schema,
     model_series_list_item_to_schema,
@@ -29,6 +33,8 @@ from apiv1.schemas import (
     CreateSeriesIn,
     ErrorOut,
     Event,
+    EventTransitionOut,
+    EventTransitions,
     Series,
     SeriesListItem,
     UpdateEventIn,
@@ -36,6 +42,17 @@ from apiv1.schemas import (
 )
 
 router = Router()
+
+
+@router.get("/event-flow-chart", response={200: bytes, 401: ErrorOut, 403: ErrorOut})
+@api_permission_required((apiv1, "view", SeriesModel))
+def event_flow_chart_image(request):
+    """Return an SVG diagram of the event lifecycle state machine."""
+    dot_graph = chart(EventFlow.status)
+    graphs = pydot.graph_from_dot_data(dot_graph)
+    graph = graphs[0]
+    svg_data = graph.create(format="svg")
+    return HttpResponse(svg_data, content_type="image/svg+xml")
 
 
 @router.get("", response={200: list[SeriesListItem], 401: ErrorOut, 403: ErrorOut})
@@ -240,3 +257,80 @@ def get_one_series(request, series_id: str) -> tuple[int, Series] | tuple[int, E
         return 404, ErrorOut(error="Series not found")
 
     return 200, model_series_to_schema(series_model)
+
+
+@router.get(
+    "/{series_id}/events/{event_id}/transitions",
+    response={200: EventTransitions, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+)
+@api_permission_mandatory()
+def get_event_transitions(
+    request, series_id: str, event_id: str
+) -> tuple[int, EventTransitions | ErrorOut]:
+    """Get the available FSM transitions for an event."""
+    try:
+        series_model = SeriesModel.objects.get(id=series_id)
+        event_model = EventModel.objects.get(id=event_id, series=series_model)
+    except (SeriesModel.DoesNotExist, EventModel.DoesNotExist):
+        return 404, ErrorOut(error="Series or event not found")
+
+    if not request.user.has_perm(
+        f"{apiv1.__name__}.view_{SeriesModel.__name__.lower()}", series_model
+    ):
+        return 401, ErrorOut(error="Unauthorized to view this series")
+
+    flow = EventFlow(event_model)
+    transitions = flow.get_available_transitions(request.user)
+
+    return 200, EventTransitions(
+        event_id=event_model.id,
+        current_status=event_model.status,
+        transitions=[
+            EventTransitionOut(
+                action=t.action,
+                label=t.label,
+                target_status=t.target_status,
+                enabled=t.enabled,
+                disable_reason=t.disable_reason,
+            )
+            for t in transitions
+        ],
+    )
+
+
+@router.post(
+    "/{series_id}/events/{event_id}/transitions/{action}",
+    response={200: Event, 400: ErrorOut, 404: ErrorOut, 401: ErrorOut, 403: ErrorOut},
+)
+@api_permission_mandatory()
+def execute_event_transition(
+    request, series_id: str, event_id: str, action: str
+) -> tuple[int, Event | ErrorOut]:
+    """Execute an event lifecycle transition (submit, approve, reject, publish, confirm, cancel, complete, archive)."""
+    try:
+        series_model = SeriesModel.objects.get(id=series_id)
+        event_model = EventModel.objects.get(id=event_id, series=series_model)
+    except (SeriesModel.DoesNotExist, EventModel.DoesNotExist):
+        return 404, ErrorOut(error="Series or event not found")
+
+    if not request.user.has_perm(
+        f"{apiv1.__name__}.view_{SeriesModel.__name__.lower()}", series_model
+    ):
+        return 401, ErrorOut(error="Unauthorized to view this series")
+
+    flow = EventFlow(event_model)
+    transitions = flow.get_available_transitions(request.user)
+
+    matching = next((t for t in transitions if t.action == action), None)
+    if matching is None:
+        return 400, ErrorOut(error=f"Transition '{action}' is not available from state '{event_model.status}'")
+    if not matching.enabled:
+        return 400, ErrorOut(error=matching.disable_reason or "Transition not allowed")
+
+    success = flow.execute_transition(action)
+    if not success:
+        return 400, ErrorOut(error="Failed to execute transition")
+
+    event_model.refresh_from_db()
+    return 200, model_event_to_schema(event_model)
+

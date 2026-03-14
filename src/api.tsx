@@ -188,6 +188,7 @@ interface ApiEvent {
   proposal_id?: string | null
   series_id?: string | null
   series_name?: string | null
+  status?: string
 }
 
 interface ApiSeries {
@@ -225,6 +226,7 @@ export interface Event {
   proposal_id?: string | null
   series_id?: string | null
   series_name?: string | null
+  status?: string
   [key: string]: unknown
 }
 
@@ -1185,8 +1187,69 @@ export interface ProposalEventSummary {
   name: string
   startTime: string
   endTime: string
+  status: string
   series_id: string
   series_name: string
+}
+
+export interface EventTransition {
+  action: string
+  label: string
+  target_status: string
+  enabled: boolean
+  disable_reason?: string | null
+}
+
+export interface EventTransitions {
+  event_id: string
+  current_status: string
+  transitions: EventTransition[]
+}
+
+export async function fetchEventTransitions(seriesId: string, eventId: string): Promise<EventTransitions> {
+  const { data, error, response } = await client.GET(
+    '/api/v1/series/{series_id}/events/{event_id}/transitions',
+    {
+      params: {
+        path: { series_id: seriesId, event_id: eventId },
+      },
+    }
+  )
+
+  if (error || !response.ok || !data) {
+    throw new Error(`Failed to fetch event transitions: ${response.statusText}`)
+  }
+
+  return data as unknown as EventTransitions
+}
+
+export async function executeEventTransition(seriesId: string, eventId: string, action: string): Promise<Event> {
+  const { data, error, response } = await client.POST(
+    '/api/v1/series/{series_id}/events/{event_id}/transitions/{action}',
+    {
+      params: {
+        path: { series_id: seriesId, event_id: eventId, action },
+      },
+    }
+  )
+
+  if (error || !response.ok || !data) {
+    throw new Error(`Failed to execute event transition: ${response.statusText}`)
+  }
+
+  return toFrontendEvent(data as unknown as ApiEvent)
+}
+
+export async function fetchEventFlowChartSvg(): Promise<string> {
+  const response = await fetch('/api/v1/series/event-flow-chart', {
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch event flow chart: ${response.statusText}`)
+  }
+
+  return response.text()
 }
 
 export async function fetchProposalEvents(proposalId: string): Promise<ProposalEventSummary[]> {

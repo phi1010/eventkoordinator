@@ -557,6 +557,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/series/event-flow-chart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Event Flow Chart Image
+         * @description Return an SVG diagram of the event lifecycle state machine.
+         */
+        get: operations["apiv1_routers_series_event_flow_chart_image"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/series/search": {
         parameters: {
             query?: never;
@@ -644,6 +664,46 @@ export interface paths {
          * @description Delete an event from a series.
          */
         delete: operations["apiv1_routers_series_delete_event"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/series/{series_id}/events/{event_id}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Event Transitions
+         * @description Get the available FSM transitions for an event.
+         */
+        get: operations["apiv1_routers_series_get_event_transitions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/series/{series_id}/events/{event_id}/transitions/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute Event Transition
+         * @description Execute an event lifecycle transition (submit, approve, reject, publish, confirm, cancel, complete, archive).
+         */
+        post: operations["apiv1_routers_series_execute_event_transition"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -952,6 +1012,11 @@ export interface components {
             series_name?: string | null;
             /** Starttime */
             startTime: string;
+            /**
+             * Status
+             * @default draft
+             */
+            status: string;
             /** Tag */
             tag?: string | null;
             /**
@@ -974,6 +1039,37 @@ export interface components {
             series_id: string;
             /** Sync Statuses */
             sync_statuses: components["schemas"]["SyncStatus"][];
+        };
+        /**
+         * EventTransitionOut
+         * @description Information about a single available or unavailable event transition.
+         */
+        EventTransitionOut: {
+            /** Action */
+            action: string;
+            /** Disable Reason */
+            disable_reason?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Label */
+            label: string;
+            /** Target Status */
+            target_status: string;
+        };
+        /**
+         * EventTransitions
+         * @description List of available transitions for an event.
+         */
+        EventTransitions: {
+            /** Current Status */
+            current_status: string;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Transitions */
+            transitions: components["schemas"]["EventTransitionOut"][];
         };
         /** ExternalCalendarEvent */
         ExternalCalendarEvent: {
@@ -1227,6 +1323,8 @@ export interface components {
             series_name: string;
             /** Starttime */
             startTime: string;
+            /** Status */
+            status: string;
         };
         /**
          * ProposalHistory
@@ -2979,6 +3077,44 @@ export interface operations {
             };
         };
     };
+    apiv1_routers_series_event_flow_chart_image: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     apiv1_routers_lookups_search_series: {
         parameters: {
             query?: {
@@ -3293,6 +3429,116 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_series_get_event_transitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventTransitions"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_series_execute_event_transition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+                event_id: string;
+                action: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
             };
             /** @description Unauthorized */
             401: {

@@ -85,6 +85,19 @@ class Series(HistoricalMetaBase):
 class Event(HistoricalMetaBase):
     """An event is an individual time-bound item within a series."""
 
+    class Status(models.TextChoices):
+        DRAFT = "draft", _("Draft")
+        PROPOSED = "proposed", _("Proposed")
+        PLANNED = "planned", _("Planned")
+        PUBLISHED = "published", _("Published")
+        CONFIRMED = "confirmed", _("Confirmed")
+        CANCELED = "canceled", _("Canceled")
+        COMPLETED = "completed", _("Completed")
+        ARCHIVED = "archived", _("Archived")
+        REJECTED = "rejected", _("Rejected")
+
+    status = models.CharField(max_length=20, choices=Status, default=Status.DRAFT)
+
     series = models.ForeignKey(Series, on_delete=models.CASCADE, related_name="events")
     proposal = models.ForeignKey(
         "Proposal",
@@ -104,10 +117,39 @@ class Event(HistoricalMetaBase):
         "using the start/end times of the first/last day.",
     )
 
+    def has_object_permission(self, user, perm):
+        logger.getChild("has_object_permission").debug(
+            f"Checking permission {perm!r} for user {user.username!r} on event {self.pk}"
+        )
+        # All event workflow transitions require the corresponding global permission
+        for action in (
+            "submit",
+            "approve",
+            "reject",
+            "publish",
+            "confirm",
+            "cancel",
+            "complete",
+            "archive",
+        ):
+            if perm.endswith(f".{action}_{Event.__name__.lower()}"):
+                return user.has_perm(perm, None)
+        return False
+
     class Meta:
         ordering = ["start_time"]
         indexes = [
             models.Index(fields=["series", "start_time"]),
+        ]
+        permissions = [
+            ("submit_event", "Can submit events (Draft → Proposed)"),
+            ("approve_event", "Can approve events (Proposed → Planned)"),
+            ("reject_event", "Can reject events (Proposed → Rejected)"),
+            ("publish_event", "Can publish events (Planned → Published)"),
+            ("confirm_event", "Can confirm events (Published → Confirmed)"),
+            ("cancel_event", "Can cancel events (Published → Canceled)"),
+            ("complete_event", "Can complete events (Confirmed → Completed)"),
+            ("archive_event", "Can archive events (Completed/Canceled/Rejected → Archived)"),
         ]
 
     def __str__(self):

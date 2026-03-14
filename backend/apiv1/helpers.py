@@ -50,6 +50,7 @@ def model_event_to_schema(event_model: EventModel) -> Event:
         proposal_id=event_model.proposal_id,
         series_id=event_model.series_id,
         series_name=event_model.series.name if event_model.series else None,
+        status=event_model.status,
     )
 
 

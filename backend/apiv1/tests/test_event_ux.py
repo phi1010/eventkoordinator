@@ -237,6 +237,34 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
     # Test 1: select a DB-seeded series + event, then edit with drag
     # ------------------------------------------------------------------
 
+    def test_event_sidebar_shows_status_badge(self) -> None:
+        """Coordinator sidebar shows the event lifecycle badge for listed events."""
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(**playwright_launch_options())
+            page = browser.new_page()
+            page.set_viewport_size({"width": 1600, "height": 900})
+            try:
+                with print_aria_on_timeout(page):
+                    base_url = self.live_server_url
+                    if callable(base_url):
+                        base_url = base_url()
+
+                    self._login_via_navbar(page, base_url)
+                    self._go_to_coordinator(page, base_url)
+
+                    series_listbox = page.get_by_role("listbox", name="Series")
+                    series_listbox.get_by_text(self.series.name).click()
+                    page.wait_for_load_state("networkidle")
+
+                    events_listbox = page.get_by_role("listbox", name="Events")
+                    events_listbox.wait_for(timeout=500)
+                    events_listbox.get_by_text(self.event.name).wait_for(timeout=500)
+                    events_listbox.locator(
+                        f'[aria-label="Status of {self.event.name}: draft"]'
+                    ).wait_for(timeout=500)
+            finally:
+                browser.close()
+
     def test_select_series_and_event_flow(self) -> None:
         """Select pre-seeded series/event, edit fields, drag-select time, save."""
         with sync_playwright() as playwright:
@@ -288,6 +316,9 @@ class EventUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         events_listbox.get_by_text(self.event.name).wait_for(
                             timeout=500
                         )
+                        events_listbox.locator(
+                            f'[aria-label="Status of {self.event.name}: draft"]'
+                        ).wait_for(timeout=500)
                         logger.debug("Clicking event: %r", self.event.name)
                         events_listbox.get_by_text(self.event.name).click()
                         page.wait_for_load_state("networkidle")
