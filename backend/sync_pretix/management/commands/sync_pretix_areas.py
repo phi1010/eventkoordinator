@@ -32,13 +32,13 @@ def _build_event_slug(prefix: str, area_code: str) -> str:
 @dataclass
 class PretixSettings:
     api_base_url: str
-    api_token: str
-    organizer_slug: str
-    organizer_name: str
-    event_slug_prefix: str
     event_currency: str
     event_timezone: str
     event_locale: str
+    api_token: str | None = None
+    organizer_slug: str | None = None
+    organizer_name: str | None = None
+    event_slug_prefix: str | None = None
 
 
 class PretixApiClient:
@@ -149,25 +149,13 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--api-base-url", type=str, default=None)
-        parser.add_argument("--api-token", type=str, default=None)
-        parser.add_argument("--organizer-slug", type=str, default=None)
-        parser.add_argument("--organizer-name", type=str, default=None)
-        parser.add_argument("--event-slug-prefix", type=str, default=None)
-        parser.add_argument("--dry-run", action="store_true")
 
     def _read_settings(self, options: dict) -> PretixSettings:
         return PretixSettings(
             api_base_url=options.get("api_base_url") or settings.PRETIX_API_BASE_URL,
-            api_token=options.get("api_token") or settings.PRETIX_API_TOKEN,
-            organizer_slug=options.get("organizer_slug")
-            or settings.PRETIX_ORGANIZER_SLUG,
-            organizer_name=options.get("organizer_name")
-            or settings.PRETIX_ORGANIZER_NAME,
-            event_slug_prefix=options.get("event_slug_prefix")
-            or settings.PRETIX_EVENT_SLUG_PREFIX,
-            event_currency=settings.PRETIX_EVENT_CURRENCY,
-            event_timezone=settings.PRETIX_EVENT_TIMEZONE,
-            event_locale=settings.PRETIX_EVENT_LOCALE,
+            event_currency="EUR",
+            event_timezone="Europe/Berlin",
+            event_locale="en",
         )
 
     def _build_client(self, runtime_settings: PretixSettings) -> PretixApiClient:
@@ -311,6 +299,7 @@ class Command(BaseCommand):
 
     def _setup_pretix(self, runtime_settings: PretixSettings):
         from playwright.sync_api import sync_playwright, expect
+
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
             page = browser.new_page()
@@ -348,13 +337,15 @@ class Command(BaseCommand):
             apitoken_message = locator.inner_html()
             logger.info(apitoken_message)
             apitoken_message_strip = apitoken_message.strip()
-            message_strip__lstrip = apitoken_message_strip.removeprefix("A new API token has been created with the following secret:")
-            apitoken = (
-                message_strip__lstrip.split("<br>")[0]
+            message_strip__lstrip = apitoken_message_strip.removeprefix(
+                "A new API token has been created with the following secret:"
             )
+            apitoken = message_strip__lstrip.split("<br>")[0]
             runtime_settings.api_token = apitoken
             logger.info(runtime_settings.api_token)
-            if not 55 < len(runtime_settings.api_token) < 70:  # sometimes 64, sometimes 61 chars
+            if (
+                not 55 < len(runtime_settings.api_token) < 70
+            ):  # sometimes 64, sometimes 61 chars
                 raise Exception("Invalid API token")
             page.close()
             browser.close()
