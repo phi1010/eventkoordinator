@@ -283,9 +283,10 @@ class PretixPricingConfiguration(HistoricalMetaBase):
                 + material
             )
         )
-        return (Decimal(base) * (Decimal("1") + business_surcharge)).quantize(
+        price =  (Decimal(base) * (Decimal("1") + business_surcharge)).quantize(
             Decimal("0.01")
         )
+        return self._roundup_euro(price)
 
     def get_calculated_prices(
         self,
