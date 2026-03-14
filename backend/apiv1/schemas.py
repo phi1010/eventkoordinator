@@ -345,3 +345,34 @@ class EventTransitions(Schema):
     event_id: uuid.UUID
     current_status: str
     transitions: list[EventTransitionOut]
+
+
+class CreateCalculatedPricesIn(Schema):
+    """Creation mode for calculated prices: default configuration or manual empty values."""
+
+    use_default_pricing_configuration: bool = True
+
+    model_config = {"extra": "forbid"}
+
+
+class UpdateCalculatedPricesIn(Schema):
+    pricing_configuration_id: Optional[uuid.UUID] = None
+    member_regular_gross_eur: Optional[str] = None
+    member_discounted_gross_eur: Optional[str] = None
+    guest_regular_gross_eur: Optional[str] = None
+    guest_discounted_gross_eur: Optional[str] = None
+    business_net_eur: Optional[str] = None
+
+    model_config = {"extra": "forbid"}
+
+
+class CalculatedPricesOut(Schema):
+    id: uuid.UUID
+    event_id: uuid.UUID
+    pricing_configuration_id: Optional[uuid.UUID] = None
+    member_regular_gross_eur: Optional[str] = None
+    member_discounted_gross_eur: Optional[str] = None
+    guest_regular_gross_eur: Optional[str] = None
+    guest_discounted_gross_eur: Optional[str] = None
+    business_net_eur: Optional[str] = None
+

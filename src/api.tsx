@@ -1268,3 +1268,115 @@ export async function fetchProposalEvents(proposalId: string): Promise<ProposalE
   return (data as unknown as ProposalEventSummary[]) || []
 }
 
+export interface CalculatedPrices {
+  id: string
+  event_id: string
+  pricing_configuration_id: string | null
+  member_regular_gross_eur: string | null
+  member_discounted_gross_eur: string | null
+  guest_regular_gross_eur: string | null
+  guest_discounted_gross_eur: string | null
+  business_net_eur: string | null
+}
+
+export interface UpdateCalculatedPricesRequest {
+  seriesId: string
+  eventId: string
+  pricing_configuration_id?: string | null
+  member_regular_gross_eur?: string | null
+  member_discounted_gross_eur?: string | null
+  guest_regular_gross_eur?: string | null
+  guest_discounted_gross_eur?: string | null
+  business_net_eur?: string | null
+}
+
+export async function fetchCalculatedPrices(seriesId: string, eventId: string): Promise<CalculatedPrices | null> {
+  const { data, error, response } = await client.GET(
+    '/api/v1/pricing/{series_id}/events/{event_id}/calculated-prices',
+    {
+      params: {
+        path: { series_id: seriesId, event_id: eventId },
+      },
+    }
+  )
+
+  if (response.status === 404) {
+    return null
+  }
+
+  if (error || !response.ok || !data) {
+    throw new Error(`Failed to fetch calculated prices: ${response.statusText}`)
+  }
+
+  return data as unknown as CalculatedPrices
+}
+
+export async function createCalculatedPrices(
+  seriesId: string,
+  eventId: string,
+  useDefaultPricingConfiguration: boolean
+): Promise<CalculatedPrices> {
+  const { data, error, response } = await client.POST(
+    '/api/v1/pricing/{series_id}/events/{event_id}/calculated-prices/create',
+    {
+      params: {
+        path: { series_id: seriesId, event_id: eventId },
+      },
+      body: {
+        use_default_pricing_configuration: useDefaultPricingConfiguration,
+      },
+    }
+  )
+
+  if (error || !response.ok || !data) {
+    throw new Error(`Failed to create calculated prices: ${response.statusText}`)
+  }
+
+  return data as unknown as CalculatedPrices
+}
+
+export async function updateCalculatedPrices(
+  request: UpdateCalculatedPricesRequest
+): Promise<CalculatedPrices> {
+  const { data, error, response } = await client.PUT(
+    '/api/v1/pricing/{series_id}/events/{event_id}/calculated-prices',
+    {
+      params: {
+        path: {
+          series_id: request.seriesId,
+          event_id: request.eventId,
+        },
+      },
+      body: {
+        pricing_configuration_id: request.pricing_configuration_id,
+        member_regular_gross_eur: request.member_regular_gross_eur,
+        member_discounted_gross_eur: request.member_discounted_gross_eur,
+        guest_regular_gross_eur: request.guest_regular_gross_eur,
+        guest_discounted_gross_eur: request.guest_discounted_gross_eur,
+        business_net_eur: request.business_net_eur,
+      },
+    }
+  )
+
+  if (error || !response.ok || !data) {
+    throw new Error(`Failed to update calculated prices: ${response.statusText}`)
+  }
+
+  return data as unknown as CalculatedPrices
+}
+
+export async function deleteCalculatedPrices(seriesId: string, eventId: string): Promise<void> {
+  const { error, response } = await client.DELETE(
+    '/api/v1/pricing/{series_id}/events/{event_id}/calculated-prices',
+    {
+      params: {
+        path: { series_id: seriesId, event_id: eventId },
+      },
+    }
+  )
+
+  if (error || !response.ok) {
+    throw new Error(`Failed to delete calculated prices: ${response.statusText}`)
+  }
+}
+

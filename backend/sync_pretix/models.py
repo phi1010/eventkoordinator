@@ -446,6 +446,8 @@ class CalculatedPrices(HistoricalMetaBase):
             return
         if self.proposal is None:
             raise ValidationError({"event": "Linked event must have a proposal to calculate prices."})
+        if getattr(self, "_skip_price_generation", False):
+            return
         if self.pricing_configuration_id is None:
             self.pricing_configuration = self._get_default_pricing_configuration()
 

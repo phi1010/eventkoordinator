@@ -497,6 +497,37 @@
   margin-bottom: 30px;
 }
 
+.calculatedPricesSection {
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 30px;
+}
+
+.calculatedPricesSection h3 {
+  margin: 0 0 12px 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.calculatedPricesEmptyState {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.calculatedPricesForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.calculatedPricesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+
 .calendarSection h3 {
   margin: 0 0 8px 0;
   font-size: 1.1rem;
@@ -577,11 +608,13 @@
   }
 
   .editSection,
+  .calculatedPricesSection,
   .calendarSection {
     background-color: #1e1e2e;
   }
 
   .editSection h3,
+  .calculatedPricesSection h3,
   .calendarSection h3 {
     color: #e0e0e0;
   }

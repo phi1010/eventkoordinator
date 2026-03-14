@@ -6,6 +6,13 @@ import {
   fetchExternalCalendarEvents,
   pushToPlatform,
   updateEvent,
+  fetchCalculatedPrices,
+  createCalculatedPrices,
+  updateCalculatedPrices,
+  deleteCalculatedPrices,
+  getUserPermissions,
+  checkObjectPermission,
+  type CalculatedPrices,
   type EventSyncInfo,
 } from './api'
 import type { CalendarEvent, Resource } from './calendarTypes'
@@ -22,6 +29,22 @@ interface EventEditorProps {
   onRequestNavigation?: (confirmFn: () => Promise<boolean>) => void
   disabled?: boolean
   canDelete?: boolean
+}
+
+interface CalculatedPricesFormValues {
+  member_regular_gross_eur: string
+  member_discounted_gross_eur: string
+  guest_regular_gross_eur: string
+  guest_discounted_gross_eur: string
+  business_net_eur: string
+}
+
+const EMPTY_CALCULATED_PRICES_FORM: CalculatedPricesFormValues = {
+  member_regular_gross_eur: '',
+  member_discounted_gross_eur: '',
+  guest_regular_gross_eur: '',
+  guest_discounted_gross_eur: '',
+  business_net_eur: '',
 }
 
 function parseLocalDateTimeInput(value: string): Date | null {
@@ -41,6 +64,21 @@ function toLocalDateTimeInputValue(date: Date | string): string {
   return `${y}-${m}-${day}T${hh}:${mm}`
 }
 
+function toCalculatedPricesForm(values: CalculatedPrices): CalculatedPricesFormValues {
+  return {
+    member_regular_gross_eur: values.member_regular_gross_eur ?? '',
+    member_discounted_gross_eur: values.member_discounted_gross_eur ?? '',
+    guest_regular_gross_eur: values.guest_regular_gross_eur ?? '',
+    guest_discounted_gross_eur: values.guest_discounted_gross_eur ?? '',
+    business_net_eur: values.business_net_eur ?? '',
+  }
+}
+
+function toNullableDecimal(value: string): string | null {
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
 export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onRequestNavigation, disabled = false, canDelete = false }: EventEditorProps) {
   const navigate = useNavigate()
   const [syncInfo, setSyncInfo] = useState<EventSyncInfo | null>(null)
@@ -58,6 +96,20 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  const [calculatedPrices, setCalculatedPrices] = useState<CalculatedPrices | null>(null)
+  const [calculatedPricesForm, setCalculatedPricesForm] = useState<CalculatedPricesFormValues>(
+    EMPTY_CALCULATED_PRICES_FORM
+  )
+  const [calculatedPricesDirty, setCalculatedPricesDirty] = useState(false)
+  const [calculatedPricesLoading, setCalculatedPricesLoading] = useState(true)
+  const [calculatedPricesSaving, setCalculatedPricesSaving] = useState(false)
+  const [calculatedPricesDeleting, setCalculatedPricesDeleting] = useState(false)
+  const [calculatedPricesCreateMode, setCalculatedPricesCreateMode] = useState<'default' | 'blank' | null>(null)
+  const [calculatedPricesError, setCalculatedPricesError] = useState<string | null>(null)
+  const [canViewCalculatedPrices, setCanViewCalculatedPrices] = useState(false)
+  const [canAddCalculatedPrices, setCanAddCalculatedPrices] = useState(false)
+  const [canChangeCalculatedPrices, setCanChangeCalculatedPrices] = useState(false)
+  const [canDeleteCalculatedPrices, setCanDeleteCalculatedPrices] = useState(false)
 
   // Calendar reference state – calendarRange is driven solely by WeekViewCombined's onWeekRangeChange
   const [calendarRange, setCalendarRange] = useState<{ startUtc: string; endUtc: string } | null>(null)
@@ -215,6 +267,91 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
     loadExternalEvents()
   }, [calendarRange])
 
+  useEffect(() => {
+    let isMounted = true
+
+    const loadCalculatedPrices = async () => {
+      try {
+        setCalculatedPricesLoading(true)
+        setCalculatedPricesError(null)
+        setCalculatedPricesDirty(false)
+
+        const permissions = await getUserPermissions()
+        const canAdd = permissions.is_superuser || permissions.permissions.includes('add_calculatedprices')
+        if (!isMounted) {
+          return
+        }
+        setCanAddCalculatedPrices(canAdd)
+
+        const prices = await fetchCalculatedPrices(series.id, event.id)
+        if (!isMounted) {
+          return
+        }
+
+        if (!prices) {
+          setCalculatedPrices(null)
+          setCalculatedPricesForm(EMPTY_CALCULATED_PRICES_FORM)
+          setCanViewCalculatedPrices(false)
+          setCanChangeCalculatedPrices(false)
+          setCanDeleteCalculatedPrices(false)
+          return
+        }
+
+        setCalculatedPrices(prices)
+        setCalculatedPricesForm(toCalculatedPricesForm(prices))
+
+        const [canView, canChange, canDelete] = await Promise.all([
+          checkObjectPermission({
+            app: 'sync_pretix',
+            action: 'view',
+            object_type: 'calculatedprices',
+            object_id: prices.id,
+          }),
+          checkObjectPermission({
+            app: 'sync_pretix',
+            action: 'change',
+            object_type: 'calculatedprices',
+            object_id: prices.id,
+          }),
+          checkObjectPermission({
+            app: 'sync_pretix',
+            action: 'delete',
+            object_type: 'calculatedprices',
+            object_id: prices.id,
+          }),
+        ])
+
+        if (!isMounted) {
+          return
+        }
+
+        setCanViewCalculatedPrices(canView)
+        setCanChangeCalculatedPrices(canChange)
+        setCanDeleteCalculatedPrices(canDelete)
+      } catch (err) {
+        if (!isMounted) {
+          return
+        }
+        setCalculatedPricesError(err instanceof Error ? err.message : 'Failed to load calculated prices')
+        setCalculatedPrices(null)
+        setCalculatedPricesForm(EMPTY_CALCULATED_PRICES_FORM)
+        setCanViewCalculatedPrices(false)
+        setCanChangeCalculatedPrices(false)
+        setCanDeleteCalculatedPrices(false)
+      } finally {
+        if (isMounted) {
+          setCalculatedPricesLoading(false)
+        }
+      }
+    }
+
+    void loadCalculatedPrices()
+
+    return () => {
+      isMounted = false
+    }
+  }, [series.id, event.id])
+
   const handleNameChange = (value: string) => {
     setName(value)
     setChangedFields((prev) => new Set(prev).add('name'))
@@ -348,6 +485,109 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
 
   const handleViewDiff = (platform: string) => {
     navigate(`/sync/diff/${series.id}/${event.id}/${encodeURIComponent(platform)}`)
+  }
+
+  const handleCalculatedPriceFieldChange = (field: keyof CalculatedPricesFormValues, value: string) => {
+    setCalculatedPricesForm((prev) => ({ ...prev, [field]: value }))
+    setCalculatedPricesDirty(true)
+    setCalculatedPricesError(null)
+  }
+
+  const handleCreateCalculatedPrices = async (useDefaultPricingConfiguration: boolean) => {
+    try {
+      setCalculatedPricesError(null)
+      setCalculatedPricesCreateMode(useDefaultPricingConfiguration ? 'default' : 'blank')
+
+      const created = await createCalculatedPrices(series.id, event.id, useDefaultPricingConfiguration)
+      setCalculatedPrices(created)
+      setCalculatedPricesForm(toCalculatedPricesForm(created))
+      setCalculatedPricesDirty(false)
+
+      const [canView, canChange, canDelete] = await Promise.all([
+        checkObjectPermission({
+          app: 'sync_pretix',
+          action: 'view',
+          object_type: 'calculatedprices',
+          object_id: created.id,
+        }),
+        checkObjectPermission({
+          app: 'sync_pretix',
+          action: 'change',
+          object_type: 'calculatedprices',
+          object_id: created.id,
+        }),
+        checkObjectPermission({
+          app: 'sync_pretix',
+          action: 'delete',
+          object_type: 'calculatedprices',
+          object_id: created.id,
+        }),
+      ])
+
+      setCanViewCalculatedPrices(canView)
+      setCanChangeCalculatedPrices(canChange)
+      setCanDeleteCalculatedPrices(canDelete)
+    } catch (err) {
+      setCalculatedPricesError(err instanceof Error ? err.message : 'Failed to create calculated prices')
+    } finally {
+      setCalculatedPricesCreateMode(null)
+    }
+  }
+
+  const handleSaveCalculatedPrices = async () => {
+    if (!calculatedPrices) {
+      return
+    }
+
+    try {
+      setCalculatedPricesSaving(true)
+      setCalculatedPricesError(null)
+
+      const updated = await updateCalculatedPrices({
+        seriesId: series.id,
+        eventId: event.id,
+        member_regular_gross_eur: toNullableDecimal(calculatedPricesForm.member_regular_gross_eur),
+        member_discounted_gross_eur: toNullableDecimal(calculatedPricesForm.member_discounted_gross_eur),
+        guest_regular_gross_eur: toNullableDecimal(calculatedPricesForm.guest_regular_gross_eur),
+        guest_discounted_gross_eur: toNullableDecimal(calculatedPricesForm.guest_discounted_gross_eur),
+        business_net_eur: toNullableDecimal(calculatedPricesForm.business_net_eur),
+      })
+
+      setCalculatedPrices(updated)
+      setCalculatedPricesForm(toCalculatedPricesForm(updated))
+      setCalculatedPricesDirty(false)
+    } catch (err) {
+      setCalculatedPricesError(err instanceof Error ? err.message : 'Failed to save calculated prices')
+    } finally {
+      setCalculatedPricesSaving(false)
+    }
+  }
+
+  const handleDeleteCalculatedPrices = async () => {
+    if (!calculatedPrices) {
+      return
+    }
+
+    const confirmed = window.confirm('Delete calculated prices for this event? This cannot be undone.')
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setCalculatedPricesDeleting(true)
+      setCalculatedPricesError(null)
+      await deleteCalculatedPrices(series.id, event.id)
+      setCalculatedPrices(null)
+      setCalculatedPricesForm(EMPTY_CALCULATED_PRICES_FORM)
+      setCalculatedPricesDirty(false)
+      setCanViewCalculatedPrices(false)
+      setCanChangeCalculatedPrices(false)
+      setCanDeleteCalculatedPrices(false)
+    } catch (err) {
+      setCalculatedPricesError(err instanceof Error ? err.message : 'Failed to delete calculated prices')
+    } finally {
+      setCalculatedPricesDeleting(false)
+    }
   }
 
   const getStatusColor = (status: string): string => {
@@ -514,6 +754,148 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
           currentStatus={(event.status as string | undefined) ?? 'draft'}
           onTransitionSuccess={(updatedEvent) => onEventUpdate(updatedEvent)}
         />
+      </div>
+
+      <div className={styles.calculatedPricesSection}>
+        <h3>Calculated Prices</h3>
+
+        {calculatedPricesLoading && <p className={styles.loading}>Loading calculated prices...</p>}
+        {!calculatedPricesLoading && calculatedPricesError && <p className={styles.error}>{calculatedPricesError}</p>}
+
+        {!calculatedPricesLoading && !calculatedPrices && !calculatedPricesError && (
+          <div className={styles.calculatedPricesEmptyState}>
+            <p className={styles.note}>No calculated prices exist for this event yet.</p>
+            {canAddCalculatedPrices ? (
+              <div className={styles.buttonGroup}>
+                <button
+                  type="button"
+                  className={styles.saveButton}
+                  onClick={() => void handleCreateCalculatedPrices(true)}
+                  disabled={calculatedPricesCreateMode !== null}
+                >
+                  {calculatedPricesCreateMode === 'default' ? 'Generating...' : 'Generate with Default Config'}
+                </button>
+                <button
+                  type="button"
+                  className={styles.cancelButton}
+                  onClick={() => void handleCreateCalculatedPrices(false)}
+                  disabled={calculatedPricesCreateMode !== null}
+                >
+                  {calculatedPricesCreateMode === 'blank' ? 'Creating...' : 'Create Blank Values'}
+                </button>
+              </div>
+            ) : (
+              <p className={styles.note}>You do not have permission to create calculated prices.</p>
+            )}
+          </div>
+        )}
+
+        {!calculatedPricesLoading && calculatedPrices && !canViewCalculatedPrices && (
+          <p className={styles.note}>You do not have permission to view calculated prices for this event.</p>
+        )}
+
+        {!calculatedPricesLoading && calculatedPrices && canViewCalculatedPrices && (
+          <div className={styles.calculatedPricesForm}>
+            <div className={styles.formGroup}>
+              <label htmlFor="pricing-config-id" className={styles.label}>Pricing Configuration</label>
+              <input
+                id="pricing-config-id"
+                type="text"
+                value={calculatedPrices.pricing_configuration_id ?? 'None (manual)'}
+                className={styles.formInput}
+                disabled
+              />
+            </div>
+
+            <div className={styles.calculatedPricesGrid}>
+              <div className={styles.formGroup}>
+                <label htmlFor="member-regular-gross" className={styles.label}>Member Regular Gross (EUR)</label>
+                <input
+                  id="member-regular-gross"
+                  type="text"
+                  value={calculatedPricesForm.member_regular_gross_eur}
+                  onChange={(e) => handleCalculatedPriceFieldChange('member_regular_gross_eur', e.target.value)}
+                  className={styles.formInput}
+                  disabled={!canChangeCalculatedPrices || calculatedPricesSaving}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="member-discounted-gross" className={styles.label}>Member Discounted Gross (EUR)</label>
+                <input
+                  id="member-discounted-gross"
+                  type="text"
+                  value={calculatedPricesForm.member_discounted_gross_eur}
+                  onChange={(e) => handleCalculatedPriceFieldChange('member_discounted_gross_eur', e.target.value)}
+                  className={styles.formInput}
+                  disabled={!canChangeCalculatedPrices || calculatedPricesSaving}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="guest-regular-gross" className={styles.label}>Guest Regular Gross (EUR)</label>
+                <input
+                  id="guest-regular-gross"
+                  type="text"
+                  value={calculatedPricesForm.guest_regular_gross_eur}
+                  onChange={(e) => handleCalculatedPriceFieldChange('guest_regular_gross_eur', e.target.value)}
+                  className={styles.formInput}
+                  disabled={!canChangeCalculatedPrices || calculatedPricesSaving}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="guest-discounted-gross" className={styles.label}>Guest Discounted Gross (EUR)</label>
+                <input
+                  id="guest-discounted-gross"
+                  type="text"
+                  value={calculatedPricesForm.guest_discounted_gross_eur}
+                  onChange={(e) => handleCalculatedPriceFieldChange('guest_discounted_gross_eur', e.target.value)}
+                  className={styles.formInput}
+                  disabled={!canChangeCalculatedPrices || calculatedPricesSaving}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="business-net" className={styles.label}>Business Net (EUR)</label>
+                <input
+                  id="business-net"
+                  type="text"
+                  value={calculatedPricesForm.business_net_eur}
+                  onChange={(e) => handleCalculatedPriceFieldChange('business_net_eur', e.target.value)}
+                  className={styles.formInput}
+                  disabled={!canChangeCalculatedPrices || calculatedPricesSaving}
+                />
+              </div>
+            </div>
+
+            <div className={styles.buttonGroup}>
+              {canChangeCalculatedPrices ? (
+                <button
+                  type="button"
+                  className={styles.saveButton}
+                  onClick={() => void handleSaveCalculatedPrices()}
+                  disabled={!calculatedPricesDirty || calculatedPricesSaving || calculatedPricesDeleting}
+                >
+                  {calculatedPricesSaving ? 'Saving...' : 'Save Calculated Prices'}
+                </button>
+              ) : (
+                <p className={styles.note}>You do not have permission to change calculated prices.</p>
+              )}
+
+              {canDeleteCalculatedPrices && (
+                <button
+                  type="button"
+                  className={styles.deleteButton}
+                  onClick={() => void handleDeleteCalculatedPrices()}
+                  disabled={calculatedPricesDeleting || calculatedPricesSaving}
+                >
+                  {calculatedPricesDeleting ? 'Deleting...' : 'Delete Calculated Prices'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Calendar Time Picker */}

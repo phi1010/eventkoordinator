@@ -144,6 +144,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pricing/{series_id}/events/{event_id}/calculated-prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Calculated Prices */
+        get: operations["apiv1_routers_calculated_prices_get_calculated_prices"];
+        /** Update Calculated Prices */
+        put: operations["apiv1_routers_calculated_prices_update_calculated_prices"];
+        post?: never;
+        /** Delete Calculated Prices */
+        delete: operations["apiv1_routers_calculated_prices_delete_calculated_prices"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pricing/{series_id}/events/{event_id}/calculated-prices/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Calculated Prices */
+        post: operations["apiv1_routers_calculated_prices_create_calculated_prices"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/proposal_areas": {
         parameters: {
             query?: never;
@@ -526,7 +562,7 @@ export interface paths {
         };
         /**
          * Get Series
-         * @description Fetch and return all series without event payloads.
+         * @description Fetch all series the requesting user is allowed to view.
          */
         get: operations["apiv1_routers_series_get_series"];
         put?: never;
@@ -955,6 +991,42 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CalculatedPricesOut */
+        CalculatedPricesOut: {
+            /** Business Net Eur */
+            business_net_eur?: string | null;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Guest Discounted Gross Eur */
+            guest_discounted_gross_eur?: string | null;
+            /** Guest Regular Gross Eur */
+            guest_regular_gross_eur?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Member Discounted Gross Eur */
+            member_discounted_gross_eur?: string | null;
+            /** Member Regular Gross Eur */
+            member_regular_gross_eur?: string | null;
+            /** Pricing Configuration Id */
+            pricing_configuration_id?: string | null;
+        };
+        /**
+         * CreateCalculatedPricesIn
+         * @description Creation mode for calculated prices: default configuration or manual empty values.
+         */
+        CreateCalculatedPricesIn: {
+            /**
+             * Use Default Pricing Configuration
+             * @default true
+             */
+            use_default_pricing_configuration: boolean;
+        };
         /** CreateEventIn */
         CreateEventIn: {
             /** Endtime */
@@ -1562,6 +1634,21 @@ export interface components {
              */
             status: "no entry exists" | "entry up-to-date" | "entry differs";
         };
+        /** UpdateCalculatedPricesIn */
+        UpdateCalculatedPricesIn: {
+            /** Business Net Eur */
+            business_net_eur?: string | null;
+            /** Guest Discounted Gross Eur */
+            guest_discounted_gross_eur?: string | null;
+            /** Guest Regular Gross Eur */
+            guest_regular_gross_eur?: string | null;
+            /** Member Discounted Gross Eur */
+            member_discounted_gross_eur?: string | null;
+            /** Member Regular Gross Eur */
+            member_regular_gross_eur?: string | null;
+            /** Pricing Configuration Id */
+            pricing_configuration_id?: string | null;
+        };
         /** UpdateEventIn */
         UpdateEventIn: {
             /** Endtime */
@@ -1830,6 +1917,203 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calculated_prices_get_calculated_prices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalculatedPricesOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calculated_prices_update_calculated_prices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCalculatedPricesIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalculatedPricesOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calculated_prices_delete_calculated_prices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calculated_prices_create_calculated_prices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCalculatedPricesIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalculatedPricesOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
