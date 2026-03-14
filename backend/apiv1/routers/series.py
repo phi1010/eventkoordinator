@@ -166,9 +166,7 @@ def delete_series(request, series_id: str) -> tuple[int, None] | tuple[int, Erro
     except SeriesModel.DoesNotExist:
         return 404, ErrorOut(error="Series not found")
 
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.delete_{SeriesModel.__name__.lower()}", series_model
-    ):
+    if not request.user.has_perm((apiv1, "delete", SeriesModel), series_model):
         return 401, ErrorOut(error="Unauthorized to delete this series")
 
     series_model.delete()
@@ -235,9 +233,7 @@ def delete_event(request, series_id: str, event_id: str) -> tuple[int, None] | t
     except (SeriesModel.DoesNotExist, EventModel.DoesNotExist):
         return 404, ErrorOut(error="Series or event not found")
 
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.delete_{EventModel.__name__.lower()}", event_model
-    ):
+    if not request.user.has_perm((apiv1, "delete", EventModel), event_model):
         return 401, ErrorOut(error="Unauthorized to delete this event")
 
     event_model.delete()
@@ -274,9 +270,7 @@ def get_event_transitions(
     except (SeriesModel.DoesNotExist, EventModel.DoesNotExist):
         return 404, ErrorOut(error="Series or event not found")
 
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.view_{SeriesModel.__name__.lower()}", series_model
-    ):
+    if not request.user.has_perm((apiv1, "view", SeriesModel), series_model):
         return 401, ErrorOut(error="Unauthorized to view this series")
 
     flow = EventFlow(event_model)
@@ -313,9 +307,7 @@ def execute_event_transition(
     except (SeriesModel.DoesNotExist, EventModel.DoesNotExist):
         return 404, ErrorOut(error="Series or event not found")
 
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.view_{SeriesModel.__name__.lower()}", series_model
-    ):
+    if not request.user.has_perm((apiv1, "view", SeriesModel), series_model):
         return 401, ErrorOut(error="Unauthorized to view this series")
 
     flow = EventFlow(event_model)
