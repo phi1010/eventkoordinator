@@ -73,6 +73,10 @@ FROM ghcr.io/astral-sh/uv:python3.14-trixie-slim AS backend
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends graphviz \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 RUN mkdir -p /app/prometheus_multiproc

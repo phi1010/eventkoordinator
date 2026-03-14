@@ -45,7 +45,6 @@ router = Router()
 
 
 @router.get("/event-flow-chart", response={200: bytes, 401: ErrorOut, 403: ErrorOut})
-@api_permission_required((apiv1, "view", SeriesModel))
 def event_flow_chart_image(request):
     """Return an SVG diagram of the event lifecycle state machine."""
     dot_graph = chart(EventFlow.status)
