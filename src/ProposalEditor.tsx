@@ -85,6 +85,8 @@ const DEFAULT_FORM_DATA: ProposalFormData = {
   has_building_access: false,
 }
 
+type ChangedFieldName = keyof ProposalFormData | 'editors'
+
 function proposalToFormData(data: ProposalDetail): ProposalFormData {
   return {
     title: data.title,
@@ -188,7 +190,7 @@ export function ProposalEditor({
   const navigate = useNavigate()
   const { canView, canAdd, loading: permissionsLoading } = usePermissions()
   const [formData, setFormData] = useState<ProposalFormData>(DEFAULT_FORM_DATA)
-  const [changedFields, setChangedFields] = useState<Set<string>>(new Set())
+  const [changedFields, setChangedFields] = useState<Set<ChangedFieldName>>(new Set())
   const changedFieldsRef = useRef(changedFields)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -210,6 +212,7 @@ export function ProposalEditor({
   const [linkedEvents, setLinkedEvents] = useState<ProposalEventSummary[]>([])
   const [linkedEventsLoading, setLinkedEventsLoading] = useState(false)
   const [currentStatus, setCurrentStatus] = useState<string>('')
+  const [transitionButtonsVersion, setTransitionButtonsVersion] = useState(0)
   const [proposalPhotoUrl, setProposalPhotoUrl] = useState<string | null>(null)
   const [isProposalImageUploading, setIsProposalImageUploading] = useState(false)
   const [proposalImageUploadProgress, setProposalImageUploadProgress] = useState<number | null>(null)
@@ -232,6 +235,30 @@ export function ProposalEditor({
   useEffect(() => {
     changedFieldsRef.current = changedFields
   }, [changedFields])
+
+  const updateChangedFields = (
+    updater: (previous: Set<ChangedFieldName>) => Set<ChangedFieldName>
+  ) => {
+    setChangedFields((previous) => {
+      const next = updater(previous)
+      changedFieldsRef.current = next
+      return next
+    })
+  }
+
+  const markFieldAsChanged = (fieldName: ChangedFieldName) => {
+    updateChangedFields((previous) => {
+      const next = new Set(previous)
+      next.add(fieldName)
+      return next
+    })
+  }
+
+  const clearChangedFields = () => {
+    const next = new Set<ChangedFieldName>()
+    changedFieldsRef.current = next
+    setChangedFields(next)
+  }
 
   const applyProposalData = (data: ProposalDetail, resetChangedFields: boolean) => {
     const nextFormData = proposalToFormData(data)
@@ -258,7 +285,7 @@ export function ProposalEditor({
     }
 
     if (resetChangedFields) {
-      setChangedFields(new Set())
+      clearChangedFields()
     }
   }
 
@@ -481,14 +508,14 @@ export function ProposalEditor({
       ...prev,
       [fieldName]: value,
     }))
-    setChangedFields((prev) => new Set(prev).add(fieldName))
+    markFieldAsChanged(fieldName)
     setError(null)
   }
 
 
   const handleRemoveEditor = (userId: string) => {
     setEditors((prev) => prev.filter((p) => p.id !== userId))
-    setChangedFields((prev) => new Set(prev).add('editors'))
+    markFieldAsChanged('editors')
     setError(null)
   }
 
@@ -579,6 +606,7 @@ export function ProposalEditor({
       // Reload speakers
       const freshSpeakers = await fetchProposalSpeakers(_proposalId)
       setSpeakers(freshSpeakers)
+      setTransitionButtonsVersion((previous) => previous + 1)
       if (onProposalSave) {
         onProposalSave(formData)
       }
@@ -594,7 +622,7 @@ export function ProposalEditor({
     setOwner(null)
     setEditors([])
     setParticipantSearchQuery('')
-    setChangedFields(new Set())
+    clearChangedFields()
     setError(null)
   }
 
@@ -1012,7 +1040,7 @@ export function ProposalEditor({
                       const selectedUser = participantSearchResults.find((u) => u.username === newValue)
                       if (selectedUser && !editors.find((p) => p.id === selectedUser.id)) {
                         setEditors((prev) => [...prev, selectedUser])
-                        setChangedFields((prev) => new Set(prev).add('editors'))
+                        markFieldAsChanged('editors')
                         setError(null)
                         setParticipantSearchQuery('')
                       }
@@ -1266,6 +1294,7 @@ export function ProposalEditor({
       {/* Transition Buttons - Below history */}
       {_proposalId && _proposalId.trim() && (
         <ProposalTransitionButtons
+          key={`${_proposalId}-${transitionButtonsVersion}`}
           proposalId={_proposalId}
           onTransitionSuccess={(updatedProposal) => {
             // Reload form data with updated proposal
