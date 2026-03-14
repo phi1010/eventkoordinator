@@ -1,8 +1,63 @@
-
 from django.contrib import admin
-from django.contrib.admin import ModelAdmin
+from simple_history.admin import SimpleHistoryAdmin
 
-from sync_pretix.models import CalculatedPrices, PretixPricingConfiguration
+from sync_pretix import models
 
-admin.site.register(PretixPricingConfiguration, ModelAdmin)
-admin.site.register(CalculatedPrices, ModelAdmin)
+
+class CalculatedPricesInline(admin.TabularInline):
+	model = models.CalculatedPrices
+	extra = 0
+	fields = (
+		"event",
+		"member_regular_gross_eur",
+		"member_discounted_gross_eur",
+		"guest_regular_gross_eur",
+		"guest_discounted_gross_eur",
+		"business_net_eur",
+	)
+	readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(models.PretixSyncTarget)
+class PretixSyncTargetAdmin(SimpleHistoryAdmin):
+	list_display = ("organizer_slug", "api_url", "created_at", "updated_at")
+	search_fields = ("organizer_slug", "api_url")
+	ordering = ("-updated_at",)
+
+
+@admin.register(models.PretixSyncTargetAreaAssociation)
+class PretixSyncTargetAreaAssociationAdmin(SimpleHistoryAdmin):
+	list_display = ("area", "event_slug", "created_at", "updated_at")
+	list_filter = ("area",)
+	search_fields = ("area__code", "area__label", "event_slug")
+	ordering = ("area__sort_order", "area__label")
+
+
+@admin.register(models.PretixPricingConfiguration)
+class PretixPricingConfigurationAdmin(SimpleHistoryAdmin):
+	list_display = (
+		"id",
+		"prep_hours",
+		"lecturer_rate",
+		"workshop_rate_basis",
+		"workshop_rate_regular",
+		"created_at",
+		"updated_at",
+	)
+	inlines = (CalculatedPricesInline,)
+	ordering = ("-updated_at",)
+
+
+@admin.register(models.CalculatedPrices)
+class CalculatedPricesAdmin(SimpleHistoryAdmin):
+	list_display = (
+		"event",
+		"pricing_configuration",
+		"member_regular_gross_eur",
+		"guest_regular_gross_eur",
+		"business_net_eur",
+		"updated_at",
+	)
+	list_filter = ("pricing_configuration",)
+	search_fields = ("event__name", "event__proposal__title")
+	raw_id_fields = ("event", "pricing_configuration")

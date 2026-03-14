@@ -12,6 +12,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils.text import slugify
 
 from apiv1.models.basedata import ProposalArea
+from sync_pretix.models import PretixSyncTarget, PretixSyncTargetAreaAssociation
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,9 @@ class PretixSettings:
     event_timezone: str
     event_locale: str
     api_token: str | None = None
-    organizer_slug: str | None = None
-    organizer_name: str | None = None
-    event_slug_prefix: str | None = None
+    organizer_slug: str = "zam"
+    organizer_name: str = "ZAM"
+    event_slug_prefix: str = "area-"
 
 
 class PretixApiClient:
@@ -143,12 +144,31 @@ class PretixApiClient:
             json_payload=payload,
         )
 
+    def list_items(self, *, organizer_slug: str, event_slug: str) -> list[dict]:
+        return self._request_paginated(
+            f"/organizers/{organizer_slug}/events/{event_slug}/items/"
+        )
+
+    def create_item(
+        self, *, organizer_slug: str, event_slug: str, payload: dict
+    ) -> dict:
+        return self._request(
+            "POST",
+            f"/organizers/{organizer_slug}/events/{event_slug}/items/",
+            json_payload=payload,
+        )
+
 
 class Command(BaseCommand):
     help = "Ensure one pretix organizer and one pretix event per active proposal area."
 
     def add_arguments(self, parser):
         parser.add_argument("--api-base-url", type=str, default=None)
+        parser.add_argument("--api-token", type=str, default=None)
+        parser.add_argument("--organizer-slug", type=str, default=None)
+        parser.add_argument("--organizer-name", type=str, default=None)
+        parser.add_argument("--event-slug-prefix", type=str, default=None)
+        parser.add_argument("--dry-run", action="store_true")
 
     def _read_settings(self, options: dict) -> PretixSettings:
         return PretixSettings(
@@ -182,11 +202,101 @@ class Command(BaseCommand):
             "has_subevents": True,
         }
 
+    def _replace_sync_target(
+        self, *, runtime_settings: PretixSettings, dry_run: bool
+    ) -> None:
+        if dry_run:
+            self.stdout.write(
+                self.style.WARNING(
+                    "[dry-run] Would replace all PretixSyncTarget entries with current client setup values."
+                )
+            )
+            return
+
+        PretixSyncTarget.objects.all().delete()
+        PretixSyncTarget.objects.create(
+            api_url=runtime_settings.api_base_url,
+            api_token=runtime_settings.api_token,
+            organizer_slug=runtime_settings.organizer_slug,
+        )
+
+    def _default_ticket_product_names(self) -> list[str]:
+        return [
+            PretixSyncTargetAreaAssociation._meta.get_field(
+                "ticket_product_member_regular_id"
+            ).get_default(),
+            PretixSyncTargetAreaAssociation._meta.get_field(
+                "ticket_product_member_discounted_id"
+            ).get_default(),
+            PretixSyncTargetAreaAssociation._meta.get_field(
+                "ticket_product_guest_regular_id"
+            ).get_default(),
+            PretixSyncTargetAreaAssociation._meta.get_field(
+                "ticket_product_guest_discounted_id"
+            ).get_default(),
+            PretixSyncTargetAreaAssociation._meta.get_field(
+                "ticket_product_business_id"
+            ).get_default(),
+        ]
+
+    def _ensure_default_ticket_products(
+        self,
+        *,
+        client: PretixApiClient,
+        runtime_settings: PretixSettings,
+        event_slug: str,
+        dry_run: bool,
+        skip_existing_lookup: bool = False,
+    ) -> int:
+        existing_names: set[str] = set()
+        if not skip_existing_lookup:
+            existing_items = client.list_items(
+                organizer_slug=runtime_settings.organizer_slug,
+                event_slug=event_slug,
+            )
+            existing_names = {
+                localized_name
+                for item in existing_items
+                for localized_name in (item.get("name") or {}).values()
+                if isinstance(localized_name, str)
+            }
+
+        created_count = 0
+        for product_name in self._default_ticket_product_names():
+            if not product_name or product_name in existing_names:
+                continue
+
+            item_payload = {
+                "name": {runtime_settings.event_locale: product_name},
+                "default_price": "0.00",
+                "admission": True,
+            }
+            if dry_run:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"[dry-run] Would create ticket product {product_name!r} in event {event_slug!r}."
+                    )
+                )
+            else:
+                client.create_item(
+                    organizer_slug=runtime_settings.organizer_slug,
+                    event_slug=event_slug,
+                    payload=item_payload,
+                )
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Created ticket product {product_name!r} in event {event_slug!r}."
+                    )
+                )
+            created_count += 1
+        return created_count
+
     def handle(self, *args, **options):
         runtime_settings = self._read_settings(options)
 
         dry_run = bool(options.get("dry_run"))
         client = self._build_client(runtime_settings)
+        self._replace_sync_target(runtime_settings=runtime_settings, dry_run=dry_run)
 
         organizer = client.get_organizer(runtime_settings.organizer_slug)
         if organizer is None:
@@ -227,6 +337,8 @@ class Command(BaseCommand):
         created_events = 0
         updated_events = 0
         reused_events = 0
+        associations_created = 0
+        ticket_products_created = 0
 
         for area in area_rows:
             event_slug = _build_event_slug(
@@ -258,42 +370,78 @@ class Command(BaseCommand):
                         )
                     )
                 created_events += 1
-                continue
+            else:
+                patch_payload = {}
+                current_name = existing.get("name")
+                if current_name != expected_name:
+                    patch_payload["name"] = expected_name
 
-            patch_payload = {}
-            current_name = existing.get("name")
-            if current_name != expected_name:
-                patch_payload["name"] = expected_name
+                if not existing.get("has_subevents"):
+                    patch_payload["has_subevents"] = True
 
-            if not existing.get("has_subevents"):
-                patch_payload["has_subevents"] = True
+                if patch_payload:
+                    if dry_run:
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"[dry-run] Would update event {event_slug!r} with payload {patch_payload!r}."
+                            )
+                        )
+                    else:
+                        client.patch_event(
+                            organizer_slug=runtime_settings.organizer_slug,
+                            event_slug=event_slug,
+                            payload=patch_payload,
+                        )
+                        self.stdout.write(
+                            self.style.SUCCESS(
+                                f"Updated event {event_slug!r} for area {area.code!r}."
+                            )
+                        )
+                    updated_events += 1
+                else:
+                    reused_events += 1
 
-            if patch_payload:
-                if dry_run:
+            if dry_run:
+                existing_association = area.pretix_sync_associations.order_by(
+                    "-created_at"
+                ).first()
+                if existing_association is None:
                     self.stdout.write(
                         self.style.WARNING(
-                            f"[dry-run] Would update event {event_slug!r} with payload {patch_payload!r}."
+                            f"[dry-run] Would create area association for {area.code!r} to event {event_slug!r}."
                         )
                     )
-                else:
-                    client.patch_event(
-                        organizer_slug=runtime_settings.organizer_slug,
-                        event_slug=event_slug,
-                        payload=patch_payload,
-                    )
+                    associations_created += 1
+                elif existing_association.event_slug != event_slug:
                     self.stdout.write(
-                        self.style.SUCCESS(
-                            f"Updated event {event_slug!r} for area {area.code!r}."
+                        self.style.WARNING(
+                            f"[dry-run] Would update area association for {area.code!r} to event {event_slug!r}."
                         )
                     )
-                updated_events += 1
             else:
-                reused_events += 1
+                association, association_created = PretixSyncTargetAreaAssociation.objects.get_or_create(
+                    area=area,
+                    defaults={"event_slug": event_slug},
+                )
+                if association_created:
+                    associations_created += 1
+                elif association.event_slug != event_slug:
+                    association.event_slug = event_slug
+                    association.save(update_fields=["event_slug", "updated_at"])
+
+            ticket_products_created += self._ensure_default_ticket_products(
+                client=client,
+                runtime_settings=runtime_settings,
+                event_slug=event_slug,
+                dry_run=dry_run,
+                skip_existing_lookup=bool(dry_run and existing is None),
+            )
 
         self.stdout.write(
             self.style.SUCCESS(
                 "Pretix sync finished: "
-                f"created={created_events}, updated={updated_events}, unchanged={reused_events}."
+                f"created={created_events}, updated={updated_events}, unchanged={reused_events}, "
+                f"associations_created={associations_created}, ticket_products_created={ticket_products_created}."
             )
         )
 

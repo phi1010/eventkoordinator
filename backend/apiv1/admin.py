@@ -1,10 +1,12 @@
 from django.contrib import admin
-from django.forms import ModelForm
+from django.contrib.admin import ModelAdmin
 from simple_history.admin import SimpleHistoryAdmin
 from viewflow import fsm
 
 from . import models
 from .flows import ProposalFlow
+from sync_pretix.models import PretixSyncTargetAreaAssociation
+from .models import SyncBaseTarget, SyncBaseItem
 
 
 class SpeakerInline(admin.TabularInline):
@@ -12,6 +14,19 @@ class SpeakerInline(admin.TabularInline):
     extra = 1
     ordering = ("sort_order",)
     fields = ("display_name", "email", "role", "sort_order", "use_gravatar")
+
+
+class PretixSyncTargetAreaAssociationInline(admin.TabularInline):
+    model = PretixSyncTargetAreaAssociation
+    extra = 0
+    fields = (
+        "event_slug",
+        "ticket_product_member_regular_id",
+        "ticket_product_member_discounted_id",
+        "ticket_product_guest_regular_id",
+        "ticket_product_guest_discounted_id",
+        "ticket_product_business_id",
+    )
 
 
 @admin.register(models.Series)
@@ -48,6 +63,7 @@ class ProposalAreaAdmin(SimpleHistoryAdmin):
     list_display = ("code", "label", "is_active", "sort_order")
     list_editable = ("label", "is_active", "sort_order")
     search_fields = ("code", "label")
+    inlines = (PretixSyncTargetAreaAssociationInline,)
 
 
 @admin.register(models.Speaker)
@@ -114,3 +130,15 @@ class ProposalAdmin(fsm.FlowAdminMixin, SimpleHistoryAdmin):
         ("Status", {"fields": ("status",)}),
     )
 
+
+@admin.register(SyncBaseTarget)
+class SyncBaseTargetAdmin(SimpleHistoryAdmin):
+
+    list_display = (
+        "id",
+        "type",
+        "created_at",
+    )
+    list_filter = ("type")
+    readonly_fields = ("id","type", "created_at")
+    fields = ("id","type", "created_at")
