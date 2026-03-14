@@ -37,7 +37,13 @@ class _FakePretixApiClient:
 
     def create_event(self, *, organizer_slug, payload):
         self.created_events.append({"organizer_slug": organizer_slug, "payload": payload})
-        self.events.append({"slug": payload["slug"], "name": payload["name"]})
+        self.events.append(
+            {
+                "slug": payload["slug"],
+                "name": payload["name"],
+                "has_subevents": payload.get("has_subevents", False),
+            }
+        )
         return self.events[-1]
 
     def patch_event(self, *, organizer_slug, event_slug, payload):
@@ -81,6 +87,7 @@ class SyncPretixAreasCommandTests(TestCase):
         self.assertEqual(fake_client.created_organizers, [{"slug": "zam", "name": "ZAM"}])
         self.assertEqual(len(fake_client.created_events), 1)
         self.assertEqual(fake_client.created_events[0]["payload"]["slug"], "area-metal")
+        self.assertTrue(fake_client.created_events[0]["payload"]["has_subevents"])
 
     def test_updates_event_name_when_label_changed(self):
         ProposalArea.objects.create(code="laser", label="Laser Workshop")
@@ -99,6 +106,33 @@ class SyncPretixAreasCommandTests(TestCase):
         self.assertEqual(len(fake_client.patched_events), 1)
         self.assertEqual(fake_client.patched_events[0]["event_slug"], "area-laser")
         self.assertEqual(fake_client.patched_events[0]["payload"]["name"], {"en": "Laser Workshop"})
+        self.assertTrue(fake_client.patched_events[0]["payload"]["has_subevents"])
+
+    def test_enables_subevents_for_existing_event(self):
+        ProposalArea.objects.create(code="stage", label="Main Stage")
+        fake_client = _FakePretixApiClient(
+            organizer={"slug": "zam", "name": "ZAM"},
+            events=[
+                {
+                    "slug": "area-stage",
+                    "name": {"en": "Main Stage"},
+                    "has_subevents": False,
+                }
+            ],
+        )
+
+        with patch(
+            "sync_pretix.management.commands.sync_pretix_areas.Command._build_client",
+            return_value=fake_client,
+        ):
+            call_command("sync_pretix_areas")
+
+        self.assertEqual(len(fake_client.created_events), 0)
+        self.assertEqual(len(fake_client.patched_events), 1)
+        self.assertEqual(
+            fake_client.patched_events[0]["payload"],
+            {"has_subevents": True},
+        )
 
     def test_dry_run_does_not_mutate_remote(self):
         ProposalArea.objects.create(code="print", label="3D Print")

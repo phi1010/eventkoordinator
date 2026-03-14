@@ -13,7 +13,6 @@ from django.utils.text import slugify
 from playwright.sync_api import sync_playwright, expect
 
 from apiv1.models.basedata import ProposalArea
-from project.test_utils import playwright_launch_options
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +192,7 @@ class Command(BaseCommand):
             "date_from": today.isoformat(),
             "date_to": tomorrow.isoformat(),
             "live": False,
+            "has_subevents": True,
         }
 
     def handle(self, *args, **options):
@@ -273,19 +273,26 @@ class Command(BaseCommand):
                 created_events += 1
                 continue
 
+            patch_payload = {}
             current_name = existing.get("name")
             if current_name != expected_name:
+                patch_payload["name"] = expected_name
+
+            if not existing.get("has_subevents"):
+                patch_payload["has_subevents"] = True
+
+            if patch_payload:
                 if dry_run:
                     self.stdout.write(
                         self.style.WARNING(
-                            f"[dry-run] Would update event {event_slug!r} name to {expected_name!r}."
+                            f"[dry-run] Would update event {event_slug!r} with payload {patch_payload!r}."
                         )
                     )
                 else:
                     client.patch_event(
                         organizer_slug=runtime_settings.organizer_slug,
                         event_slug=event_slug,
-                        payload={"name": expected_name},
+                        payload=patch_payload,
                     )
                     self.stdout.write(
                         self.style.SUCCESS(
