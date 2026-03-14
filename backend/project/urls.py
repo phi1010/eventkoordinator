@@ -14,6 +14,7 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+
 from django.contrib import admin
 from django.conf import settings
 from django.conf.urls.static import static
@@ -29,10 +30,12 @@ urlpatterns = [
     path("api/v1/", apiv1.api.api.urls),
     path("oidc/", include("mozilla_django_oidc.urls")),
     path("", include("django_prometheus.urls")),
-    # SPA catch-all: any URL not matched above is handled by React-Router.
-    # Must be last so it never shadows the real API or admin routes.
-    re_path(r"^.*$", SpaFallbackView.as_view(), name="spa-fallback"),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
+urlpatterns += [
+    # SPA catch-all: any URL not matched above is handled by React-Router.
+    # Must be last so it never shadows the real API or admin routes.
+    re_path(r"^.*$", SpaFallbackView.as_view(), name="spa-fallback"),
+]

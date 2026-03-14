@@ -7,6 +7,7 @@ from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.exceptions import AppRegistryNotReady
 from django.core.validators import (
+    FileExtensionValidator,
     MaxValueValidator,
     MinLengthValidator,
     MinValueValidator,
@@ -27,6 +28,10 @@ from project.basemodels import HistoricalMetaBase, MetaBase
 from openid_user_management.models import OpenIDUser
 
 logger = logging.getLogger(__name__)
+
+IMAGE_FILE_VALIDATORS = [
+    FileExtensionValidator(allowed_extensions=["png", "jpg", "jpeg"])
+]
 
 
 @deconstructible
@@ -153,7 +158,10 @@ class Speaker(HistoricalMetaBase):
     display_name = models.CharField(max_length=120)
     biography = models.TextField(validators=[MinLengthValidator(50)], max_length=2000)
     profile_picture = models.ImageField(
-        upload_to=UUIDFilenameUploadTo("speaker_profiles"), blank=True, null=True
+        upload_to=UUIDFilenameUploadTo("speaker_profiles"),
+        validators=IMAGE_FILE_VALIDATORS,
+        blank=True,
+        null=True,
     )
     use_gravatar = models.BooleanField(default=False)
 
@@ -225,7 +233,10 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
     internal_notes = models.TextField(blank=True, max_length=2000)
     occurrence_count = models.PositiveSmallIntegerField(default=0)
     photo = models.ImageField(
-        upload_to=UUIDFilenameUploadTo("proposal_photos"), blank=True, null=True
+        upload_to=UUIDFilenameUploadTo("proposal_photos"),
+        validators=IMAGE_FILE_VALIDATORS,
+        blank=True,
+        null=True,
     )
     duration_days = models.PositiveSmallIntegerField(default=1)
     duration_time_per_day = models.CharField(

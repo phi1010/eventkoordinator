@@ -129,6 +129,25 @@ class ProposalModelTests(TestCase):
         UUID(Path(filename).stem)
         self.assertEqual(Path(filename).suffix, ".jpeg")
 
+    def test_photo_validator_allows_png_jpg_jpeg(self):
+        field = Proposal._meta.get_field("photo")
+
+        field.run_validators(SimpleUploadedFile("allowed.png", b"img", content_type="image/png"))
+        field.run_validators(SimpleUploadedFile("allowed.jpg", b"img", content_type="image/jpeg"))
+        field.run_validators(SimpleUploadedFile("allowed.jpeg", b"img", content_type="image/jpeg"))
+
+    def test_photo_validator_rejects_svg(self):
+        field = Proposal._meta.get_field("photo")
+
+        with self.assertRaises(ValidationError):
+            field.run_validators(
+                SimpleUploadedFile(
+                    "blocked.svg",
+                    b"<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+                    content_type="image/svg+xml",
+                )
+            )
+
 
 class ImportIcalTests(TestCase):
     def test_parse_calendar_data_expands_rrule_within_requested_window(self):
