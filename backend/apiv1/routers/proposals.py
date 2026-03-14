@@ -110,7 +110,7 @@ def search_proposals(request, q: str = ""):
     return [
         model_proposal_to_schema(p)
         for p in proposals
-        if request.user.has_perm(f"{apiv1.__name__}.view_{type(p).__name__.lower()}", p)
+        if request.user.has_perm((apiv1, "view", ProposalModel), p)
     ]
 
 
@@ -226,9 +226,7 @@ def get_proposal(
     except ProposalModel.DoesNotExist:
         return 404, ErrorOut(error="Proposal not found")
 
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.view_{ProposalModel.__name__.lower()}", proposal
-    ):
+    if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
         return 401, ErrorOut(error="Unauthorized to view this proposal")
 
     return 200, _proposal_to_detail_schema(proposal)
@@ -254,9 +252,7 @@ def upload_proposal_photo(
     except ProposalModel.DoesNotExist:
         return 404, ErrorOut(error="Proposal not found")
 
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.change_{ProposalModel.__name__.lower()}", proposal
-    ):
+    if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
         return 401, ErrorOut(error="Unauthorized to change this proposal")
 
     photo_field = cast(models.FileField, proposal._meta.get_field("photo"))
@@ -299,9 +295,7 @@ def update_proposal(
         ).get(pk=proposal_id)
     except ProposalModel.DoesNotExist:
         return 404, ErrorOut(error="Proposal not found")
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.change_{ProposalModel.__name__.lower()}", proposal
-    ):
+    if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
         return 401, ErrorOut(error="Unauthorized to change this proposal")
 
     # Update fields that were provided
@@ -410,9 +404,7 @@ def delete_proposal(
     except ProposalModel.DoesNotExist:
         return 404, ErrorOut(error="Proposal not found")
 
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.delete_{ProposalModel.__name__.lower()}", proposal
-    ):
+    if not request.user.has_perm((apiv1, "delete", ProposalModel), proposal):
         return 401, ErrorOut(error="Unauthorized to delete this proposal")
 
     proposal.delete()
@@ -458,9 +450,7 @@ def get_proposal_history(
     except ProposalModel.DoesNotExist:
         return 404, ErrorOut(error="Proposal not found")
 
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.view_{ProposalModel.__name__.lower()}", proposal
-    ):
+    if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
         return 401, ErrorOut(error="Unauthorized to view this proposal")
 
     safe_days = max(1, min(30, days))  # Limit to 1-30 days for safety
@@ -546,9 +536,7 @@ def get_proposal_transitions(
     except ProposalModel.DoesNotExist:
         return 404, ErrorOut(error="Proposal not found")
 
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.view_{ProposalModel.__name__.lower()}", proposal
-    ):
+    if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
         return 401, ErrorOut(error="Unauthorized to view this proposal")
 
     # Get available transitions from ProposalFlow
@@ -588,9 +576,7 @@ def _execute_proposal_transition(
         return 404, ErrorOut(error="Proposal not found")
 
     # Check if user can view the proposal
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.view_{ProposalModel.__name__.lower()}", proposal
-    ):
+    if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
         return 401, ErrorOut(error="Unauthorized to view this proposal")
 
     # Create flow and evaluate transition
@@ -706,9 +692,7 @@ def get_proposal_events(
     except ProposalModel.DoesNotExist:
         return 404, ErrorOut(error="Proposal not found")
 
-    if not request.user.has_perm(
-        f"{apiv1.__name__}.view_{ProposalModel.__name__.lower()}", proposal
-    ):
+    if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
         return 401, ErrorOut(error="Unauthorized to view this proposal")
 
     events = (

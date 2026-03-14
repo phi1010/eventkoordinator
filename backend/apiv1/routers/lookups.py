@@ -115,9 +115,7 @@ def get_proposal_areas(request):
 @api_permission_mandatory()
 def search_users(request: HttpRequest, q: str = ""):
     """Search users by username for autocomplete"""
-    if request.user.has_perm(
-        f"{openid_user_management.__name__}.view_{type(OpenIDUser).__name__.lower()}"
-    ):
+    if request.user.has_perm((openid_user_management, "view", OpenIDUser)):
         users = OpenIDUser.objects.filter(username__icontains=q).order_by("username")[
             :20
         ]
