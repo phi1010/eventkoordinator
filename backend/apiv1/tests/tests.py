@@ -1,13 +1,15 @@
+from pathlib import Path
 from datetime import date, datetime, timezone
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest.mock import patch
+from uuid import UUID
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apiv1.management.commands.import_ical import parse_calendar_data
 from apiv1.models import (
@@ -91,6 +93,41 @@ class ProposalModelTests(TestCase):
                     speaker=second,
                     role=ProposalSpeaker.Role.PRIMARY,
                 )
+
+    def test_proposal_photo_filename_uses_uuid_and_preserves_extension(self):
+        with TemporaryDirectory() as tmp_media:
+            with override_settings(MEDIA_ROOT=tmp_media):
+                proposal = self._create_proposal(
+                    photo=SimpleUploadedFile(
+                        "My Summer Photo.PNG",
+                        b"img",
+                        content_type="image/png",
+                    )
+                )
+
+        self.assertTrue(proposal.photo.name.startswith("proposal_photos/"))
+        filename = Path(proposal.photo.name).name
+        UUID(Path(filename).stem)
+        self.assertEqual(Path(filename).suffix, ".png")
+
+    def test_speaker_profile_picture_filename_uses_uuid_and_preserves_extension(self):
+        with TemporaryDirectory() as tmp_media:
+            with override_settings(MEDIA_ROOT=tmp_media):
+                speaker = Speaker.objects.create(
+                    email="photo-speaker@example.com",
+                    display_name="Photo Speaker",
+                    biography="B" * 60,
+                    profile_picture=SimpleUploadedFile(
+                        "avatar.JpEg",
+                        b"img",
+                        content_type="image/jpeg",
+                    ),
+                )
+
+        self.assertTrue(speaker.profile_picture.name.startswith("speaker_profiles/"))
+        filename = Path(speaker.profile_picture.name).name
+        UUID(Path(filename).stem)
+        self.assertEqual(Path(filename).suffix, ".jpeg")
 
 
 class ImportIcalTests(TestCase):

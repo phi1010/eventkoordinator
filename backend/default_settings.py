@@ -175,7 +175,7 @@ OIDC_USERNAME_ALGO = "openid_user_management.auth.generate_username"
 PLAYWRIGHT_HEADLESS = True
 
 MEDIA_ROOT = BASE_DIR / "media"
-# MEDIA_URL = "media/"
+MEDIA_URL = "/media/"
 
 # ================
 # TODO Has to be set by nginx reverse proxy serving the TLS certificate, otherwise it can cause issues when running the app without TLS in development.

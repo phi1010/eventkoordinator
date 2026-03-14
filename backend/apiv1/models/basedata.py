@@ -1,4 +1,6 @@
 import logging
+import os
+import uuid
 from typing import Any
 
 from django.apps import apps
@@ -11,6 +13,7 @@ from django.core.validators import (
 )
 from django.db import models, OperationalError
 from django.db.models import Q
+from django.utils.deconstruct import deconstructible
 from django.utils.translation import gettext_lazy as _
 from django_prometheus.models import ExportModelOperationsMixin
 from prometheus_client import Gauge
@@ -24,6 +27,19 @@ from project.basemodels import HistoricalMetaBase, MetaBase
 from openid_user_management.models import OpenIDUser
 
 logger = logging.getLogger(__name__)
+
+
+@deconstructible
+class UUIDFilenameUploadTo:
+    """Store uploads under a fixed folder using a random UUID filename."""
+
+    def __init__(self, folder: str):
+        self.folder = folder.strip("/")
+
+    def __call__(self, instance: models.Model, filename: str) -> str:
+        _base_name, ext = os.path.splitext(os.path.basename(filename or ""))
+        safe_ext = ext.lower()
+        return f"{self.folder}/{uuid.uuid4()}{safe_ext}"
 
 
 def time_string_to_minutes(time_str: str) -> int:
@@ -137,7 +153,7 @@ class Speaker(HistoricalMetaBase):
     display_name = models.CharField(max_length=120)
     biography = models.TextField(validators=[MinLengthValidator(50)], max_length=2000)
     profile_picture = models.ImageField(
-        upload_to="speaker_profiles/", blank=True, null=True
+        upload_to=UUIDFilenameUploadTo("speaker_profiles"), blank=True, null=True
     )
     use_gravatar = models.BooleanField(default=False)
 
@@ -208,7 +224,9 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
     description = models.TextField(validators=[MinLengthValidator(50)], max_length=1000)
     internal_notes = models.TextField(blank=True, max_length=2000)
     occurrence_count = models.PositiveSmallIntegerField(default=0)
-    photo = models.ImageField(upload_to="proposal_photos/", blank=True, null=True)
+    photo = models.ImageField(
+        upload_to=UUIDFilenameUploadTo("proposal_photos"), blank=True, null=True
+    )
     duration_days = models.PositiveSmallIntegerField(default=1)
     duration_time_per_day = models.CharField(
         max_length=5, default="00:00"
