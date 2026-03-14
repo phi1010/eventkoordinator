@@ -48,7 +48,7 @@ INSTALLED_APPS = [
     "simple_history",
     "viewflow",
     "mailqueue",
-    "pricing",
+    "sync_pretix",
     "solo",
     "django_prometheus",
     # "ninja", # Does not work, attempts to access nonexistent http://localhost:5173/api/v1/static/ninja/swagger-ui.css
