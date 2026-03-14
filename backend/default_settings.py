@@ -100,10 +100,6 @@ WSGI_APPLICATION = "project.wsgi.application"
 AUTH_USER_MODEL = "openid_user_management.OpenIDUser"
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
 }
 
 AUTH_PASSWORD_VALIDATORS = [
