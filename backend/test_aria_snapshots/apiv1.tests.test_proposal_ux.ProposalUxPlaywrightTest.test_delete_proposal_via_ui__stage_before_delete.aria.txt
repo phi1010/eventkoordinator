@@ -50,5 +50,18 @@
       - button "Save Proposal" [disabled]
       - button "Delete Proposal"
     - heading "Submission Checklist" [level=3]
-    - paragraph: Save the proposal to see the checklist
+    - list:
+      - listitem: ✓ Title (max 30 characters)
+      - listitem: ✓ Abstract (50-250 characters)
+      - listitem: ✓ Description (50-1000 characters)
+      - listitem: ✓ Duration set
+      - listitem: ✓ Max participants set
+      - listitem: ✓ Occurrence count set
+      - listitem: ✓ Preferred dates specified
+      - listitem: ✓ Language selected
+      - listitem: ✓ Submission type selected
+      - listitem: ✓ Workshop area selected
+      - listitem: ⚠ At least one speaker added
+      - listitem: ✓ All speakers have biography
     - group: Edit history last changed just now
+    - button "Submit proposal" [disabled]

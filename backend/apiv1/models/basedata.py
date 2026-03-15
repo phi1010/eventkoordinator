@@ -420,7 +420,7 @@ def check_proposal_required_fields(proposal: Proposal) -> dict[Any, Any]:
 
     # Duration validation
     durationset = "Duration set"
-    total_minutes = proposal.total_duration_minutes()
+    total_minutes = proposal.total_duration_minutes
     if total_minutes >= 1:
         checklist[durationset] = {"status": "ok"}
     else:
