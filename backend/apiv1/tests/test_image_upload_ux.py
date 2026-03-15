@@ -19,6 +19,7 @@ from project.test_utils import (
     ViteStaticLiveServerTestCase,
     playwright_launch_options,
     print_aria_on_timeout,
+    wait_for_loading_indicators_to_disappear,
 )
 
 
@@ -159,6 +160,7 @@ class ImageUploadUxTest(ViteStaticLiveServerTestCase):
                             timeout=5000,
                         ):
                             page.wait_for_load_state('networkidle')
+                            wait_for_loading_indicators_to_disappear(page, timeout_ms=1000)
                             page.wait_for_timeout(500)
                             page.locator('#proposal-image-upload').set_input_files(str(image_path))
                             page.get_by_role('progressbar', name='Proposal image upload progress').wait_for(timeout=5000)
