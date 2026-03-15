@@ -375,3 +375,9 @@ class SyncTargetOut(Schema):
     public_properties: dict[str, str]
 
 
+class SyncItemOut(Schema):
+    id: uuid.UUID
+    target_id: uuid.UUID
+    event_id: uuid.UUID
+
+

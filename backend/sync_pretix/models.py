@@ -6,6 +6,7 @@ from decimal import Decimal, ROUND_CEILING
 
 from apiv1.models import SyncBaseTarget, ProposalArea
 from apiv1.models.basedata import time_string_to_minutes
+from apiv1.models.sync.syncbasedata import SyncBaseItem
 from project.basemodels import HistoricalMetaBase
 
 
@@ -33,6 +34,41 @@ class PretixSyncTarget(SyncBaseTarget):
     organizer_slug = models.CharField(
         max_length=255, verbose_name="Organizer Slug", help_text="Organizer Slug"
     )
+
+    def create_new_sync_item(self, event) -> "PretixSyncItem":
+        """Create a PretixSyncItem for *event* using the area-to-event-slug mapping.
+
+        Looks up the event's proposal area and finds the matching
+        ``PretixSyncTargetAreaAssociation`` to determine the correct Pretix
+        event slug.  The call is idempotent: if an item already exists for this
+        (target, event) pair the existing item is returned unchanged.
+
+        Raises ``ValueError`` if the event has no proposal, the proposal has no
+        area, or no association is configured for that area on this target.
+        """
+        proposal = getattr(event, "proposal", None)
+        if proposal is None:
+            raise ValueError(
+                f"Event {event.pk} has no proposal; cannot determine Pretix event slug."
+            )
+        area = getattr(proposal, "area", None)
+        if area is None:
+            raise ValueError(
+                f"Proposal {proposal.pk} has no area; cannot determine Pretix event slug."
+            )
+        try:
+            association = self.area_associations.get(area=area)
+        except PretixSyncTargetAreaAssociation.DoesNotExist:
+            raise ValueError(
+                f"No Pretix event-slug configured for area {area.code!r} "
+                f"on sync target {self.pk}."
+            )
+        item, _created = PretixSyncItem.objects.get_or_create(
+            sync_target=self,
+            related_event=event,
+            defaults={"event_slug": association.event_slug},
+        )
+        return item
 
 
 class PretixSyncTargetAreaAssociation(HistoricalMetaBase):
@@ -84,6 +120,24 @@ class PretixSyncTargetAreaAssociation(HistoricalMetaBase):
         blank=True,
         verbose_name="ID of Ticket Product for Businesses",
     )
+
+
+class PretixSyncItem(SyncBaseItem):
+    """Links a Pretix subevent to an internal event via a PretixSyncTarget."""
+
+    sync_target = models.ForeignKey(
+        PretixSyncTarget,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    event_slug = models.CharField(
+        max_length=255,
+        verbose_name="Pretix Event Slug",
+        help_text="Slug of the Pretix event (has_subevents) that hosts the subevent.",
+    )
+
+    def __str__(self):
+        return f"PretixSyncItem(target={self.sync_target_id}, event={self.related_event_id})"
 
 
 class PretixPricingConfiguration(HistoricalMetaBase):

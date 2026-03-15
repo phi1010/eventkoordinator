@@ -22,6 +22,7 @@ from apiv1.schemas import (
     SyncPushResult,
     ErrorOut,
     SyncTargetOut,
+    SyncItemOut,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,39 @@ def list_sync_targets(request) -> list[SyncTargetOut]:
         )
         for target in targets
     ]
+
+
+@router.post(
+    "/create/{series_id}/{event_id}/{target_id}",
+    response={200: SyncItemOut, 400: ErrorOut, 401: ErrorOut, 403: ErrorOut, 404: ErrorOut},
+)
+@api_permission_required((apiv1, "add", SyncBaseItem))
+def create_sync_item(request, series_id: UUID, event_id: UUID, target_id: UUID):
+    """Create a sync item for an event on a specific target.
+
+    Delegates to the target's ``create_new_sync_item`` method, which knows
+    how to build the correct subclass instance.  The call is idempotent: if an
+    item already exists it is returned without modification.
+
+    Returns 400 if the target does not support API-driven creation (e.g. iCal)
+    or if the event cannot be mapped to a target-specific configuration (e.g.
+    missing proposal area).
+    """
+    event = get_object_or_404(Event, pk=event_id, series_id=series_id)
+    target = get_object_or_404(SyncBaseTarget, pk=target_id)
+
+    try:
+        item = target.get_real_instance().create_new_sync_item(event)
+    except NotImplementedError as exc:
+        return 400, ErrorOut(error=str(exc))
+    except ValueError as exc:
+        return 400, ErrorOut(error=str(exc))
+
+    return 200, SyncItemOut(
+        id=item.pk,
+        target_id=target.pk,
+        event_id=event.pk,
+    )
 
 
 

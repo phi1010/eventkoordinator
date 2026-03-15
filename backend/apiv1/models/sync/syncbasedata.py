@@ -87,7 +87,13 @@ class SyncBaseTarget(PolymorphicMetaBase):
                 return self.SyncTargetStatus.ENTRY_DIFFERS
 
         return self.SyncTargetStatus.ENTRY_UP_TO_DATE
+    def create_new_sync_item(self, event: Event) -> "SyncBaseItem":
+        """Create a new SyncBaseItem for the given event and this target.
 
+        Subclasses must override this to return an instance of their specific
+        SyncBaseItem subclass, with the appropriate sync_target FK set.
+        """
+        raise NotImplementedError("Subclasses must implement create_new_sync_item()")
 
 class SyncBaseItem(PolymorphicMetaBase):
     flag_push = models.BooleanField(default=False)

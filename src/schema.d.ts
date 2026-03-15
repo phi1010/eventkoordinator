@@ -765,6 +765,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/create/{series_id}/{event_id}/{target_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Sync Item
+         * @description Create a sync item for an event on a specific target.
+         *
+         *     Delegates to the target's ``create_new_sync_item`` method, which knows
+         *     how to build the correct subclass instance.  The call is idempotent: if an
+         *     item already exists it is returned without modification.
+         *
+         *     Returns 400 if the target does not support API-driven creation (e.g. iCal)
+         *     or if the event cannot be mapped to a target-specific configuration (e.g.
+         *     missing proposal area).
+         */
+        post: operations["apiv1_routers_sync_create_sync_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/diff/{series_id}/{event_id}/{target_id}": {
         parameters: {
             query?: never;
@@ -1616,6 +1644,24 @@ export interface components {
              * Format: uuid
              */
             series_id: string;
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+        };
+        /** SyncItemOut */
+        SyncItemOut: {
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
             /**
              * Target Id
              * Format: uuid
@@ -3927,6 +3973,66 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_sync_create_sync_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+                event_id: string;
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncItemOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

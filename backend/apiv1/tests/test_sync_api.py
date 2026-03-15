@@ -8,10 +8,11 @@ from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.utils import timezone
 
-from apiv1.models.basedata import Event, Series
+from apiv1.models.basedata import Event, Proposal, Series
 from apiv1.models.sync.syncbasedata import SyncBaseTarget
 from sync_ical.models import IcalCalendarSyncTarget, IcalCalenderSyncItem
-from sync_pretix.models import PretixSyncTarget
+from sync_pretix.models import PretixSyncItem, PretixSyncTarget, PretixSyncTargetAreaAssociation
+from apiv1.models.basedata import ProposalArea
 
 
 class SyncTargetsApiTest(TestCase):
@@ -369,6 +370,9 @@ class SyncTargetsApiTest(TestCase):
         payload = response.json()
         self.assertEqual(payload["target_id"], str(target2.pk))
         self.assertEqual(payload["properties"], [])
+
+
+class SyncBaseTargetModelTest(TestCase):
     """Unit tests for SyncBaseTarget model methods."""
 
     def test_type_property_returns_concrete_class_name(self) -> None:
@@ -456,3 +460,333 @@ class SyncTargetsApiTest(TestCase):
         self.assertIn("url", props)
 
 
+# ---------------------------------------------------------------------------
+# POST /sync/create/{series_id}/{event_id}/{target_id}
+# ---------------------------------------------------------------------------
+
+class CreateSyncItemEndpointTest(TestCase):
+    """Tests for the POST /sync/create endpoint."""
+
+    def setUp(self) -> None:
+        user_model = get_user_model()
+        self.user = user_model.objects.create_user(
+            username="create-item-user",
+            password="create-item-pass-123",
+            email="create-item-user@example.com",
+        )
+        self.area = ProposalArea.objects.create(code="laser", label="Laser")
+        self.series = Series.objects.create(name="Create Item Series")
+        now = timezone.now()
+        self.proposal = Proposal.objects.create(
+            title="Workshop",
+            abstract="a" * 50,
+            description="d" * 50,
+            material_cost_eur="0.00",
+            preferred_dates="Any",
+            area=self.area,
+        )
+        self.event = Event.objects.create(
+            series=self.series,
+            proposal=self.proposal,
+            name="Create Item Event",
+            start_time=now,
+            end_time=now + timezone.timedelta(hours=2),
+        )
+        self.pretix_target = PretixSyncTarget.objects.create(
+            api_token="token",
+            api_url="https://pretix.example.com/api/v1",
+            organizer_slug="zam",
+        )
+        PretixSyncTargetAreaAssociation.objects.create(
+            sync_target=self.pretix_target,
+            area=self.area,
+            event_slug="laser-2026",
+        )
+
+    def _login(self) -> None:
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["oidc_id_token_expiration"] = time.time() + 3600
+        session.save()
+
+    def _grant_permissions(self, *codenames: str) -> None:
+        perms = Permission.objects.filter(codename__in=codenames)
+        self.user.user_permissions.add(*perms)
+        self.user = get_user_model().objects.get(pk=self.user.pk)
+
+    def _url(self, target=None):
+        t = target or self.pretix_target
+        return f"/api/v1/sync/create/{self.series.pk}/{self.event.pk}/{t.pk}"
+
+    # ------------------------------------------------------------------
+    # Auth / permission guards
+    # ------------------------------------------------------------------
+
+    def test_requires_auth(self) -> None:
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, 401)
+
+    def test_requires_add_syncbaseitem_permission(self) -> None:
+        self._login()
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, 403)
+
+    def test_returns_404_for_unknown_target(self) -> None:
+        self._grant_permissions("add_syncbaseitem")
+        self._login()
+        response = self.client.post(
+            f"/api/v1/sync/create/{self.series.pk}/{self.event.pk}/00000000-0000-0000-0000-000000000000"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_returns_404_for_wrong_series(self) -> None:
+        self._grant_permissions("add_syncbaseitem")
+        self._login()
+        other_series = Series.objects.create(name="Other")
+        response = self.client.post(
+            f"/api/v1/sync/create/{other_series.pk}/{self.event.pk}/{self.pretix_target.pk}"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    # ------------------------------------------------------------------
+    # Pretix target – success path
+    # ------------------------------------------------------------------
+
+    def test_creates_pretix_sync_item_and_returns_it(self) -> None:
+        self._grant_permissions("add_syncbaseitem")
+        self._login()
+
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("id", payload)
+        self.assertEqual(payload["target_id"], str(self.pretix_target.pk))
+        self.assertEqual(payload["event_id"], str(self.event.pk))
+
+        self.assertTrue(
+            PretixSyncItem.objects.filter(
+                sync_target=self.pretix_target,
+                related_event=self.event,
+                event_slug="laser-2026",
+            ).exists()
+        )
+
+    def test_create_is_idempotent(self) -> None:
+        self._grant_permissions("add_syncbaseitem")
+        self._login()
+
+        r1 = self.client.post(self._url())
+        r2 = self.client.post(self._url())
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r1.json()["id"], r2.json()["id"])
+        self.assertEqual(PretixSyncItem.objects.filter(related_event=self.event).count(), 1)
+
+    # ------------------------------------------------------------------
+    # Pretix target – error paths
+    # ------------------------------------------------------------------
+
+    def test_returns_400_when_event_has_no_proposal(self) -> None:
+        self._grant_permissions("add_syncbaseitem")
+        self._login()
+        now = timezone.now()
+        event_no_proposal = Event.objects.create(
+            series=self.series,
+            name="No Proposal Event",
+            start_time=now,
+            end_time=now + timezone.timedelta(hours=1),
+        )
+        response = self.client.post(
+            f"/api/v1/sync/create/{self.series.pk}/{event_no_proposal.pk}/{self.pretix_target.pk}"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+
+    def test_returns_400_when_proposal_has_no_area(self) -> None:
+        self._grant_permissions("add_syncbaseitem")
+        self._login()
+        proposal_no_area = Proposal.objects.create(
+            title="No Area",
+            abstract="a" * 50,
+            description="d" * 50,
+            material_cost_eur="0.00",
+            preferred_dates="Any",
+        )
+        now = timezone.now()
+        event = Event.objects.create(
+            series=self.series,
+            proposal=proposal_no_area,
+            name="No Area Event",
+            start_time=now,
+            end_time=now + timezone.timedelta(hours=1),
+        )
+        response = self.client.post(
+            f"/api/v1/sync/create/{self.series.pk}/{event.pk}/{self.pretix_target.pk}"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+
+    def test_returns_400_when_no_association_for_area(self) -> None:
+        self._grant_permissions("add_syncbaseitem")
+        self._login()
+        other_area = ProposalArea.objects.create(code="wood", label="Wood")
+        proposal = Proposal.objects.create(
+            title="Wood Workshop",
+            abstract="a" * 50,
+            description="d" * 50,
+            material_cost_eur="0.00",
+            preferred_dates="Any",
+            area=other_area,
+        )
+        now = timezone.now()
+        event = Event.objects.create(
+            series=self.series,
+            proposal=proposal,
+            name="Wood Event",
+            start_time=now,
+            end_time=now + timezone.timedelta(hours=1),
+        )
+        response = self.client.post(
+            f"/api/v1/sync/create/{self.series.pk}/{event.pk}/{self.pretix_target.pk}"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+
+    # ------------------------------------------------------------------
+    # iCal target – not implemented
+    # ------------------------------------------------------------------
+
+    def test_returns_400_for_ical_target(self) -> None:
+        self._grant_permissions("add_syncbaseitem")
+        self._login()
+        ical_target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        response = self.client.post(
+            f"/api/v1/sync/create/{self.series.pk}/{self.event.pk}/{ical_target.pk}"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+
+
+# ---------------------------------------------------------------------------
+# PretixSyncTarget.create_new_sync_item – unit tests
+# ---------------------------------------------------------------------------
+
+class PretixCreateNewSyncItemTest(TestCase):
+    """Unit tests for PretixSyncTarget.create_new_sync_item."""
+
+    def setUp(self) -> None:
+        self.area = ProposalArea.objects.create(code="metal", label="Metal")
+        self.series = Series.objects.create(name="Pretix Create Test Series")
+        now = timezone.now()
+        self.proposal = Proposal.objects.create(
+            title="Metal Workshop",
+            abstract="a" * 50,
+            description="d" * 50,
+            material_cost_eur="0.00",
+            preferred_dates="Any",
+            area=self.area,
+        )
+        self.event = Event.objects.create(
+            series=self.series,
+            proposal=self.proposal,
+            name="Metal Event",
+            start_time=now,
+            end_time=now + timezone.timedelta(hours=2),
+        )
+        self.target = PretixSyncTarget.objects.create(
+            api_token="token",
+            api_url="https://pretix.example.com/api/v1",
+            organizer_slug="zam",
+        )
+        PretixSyncTargetAreaAssociation.objects.create(
+            sync_target=self.target,
+            area=self.area,
+            event_slug="metal-2026",
+        )
+
+    def test_creates_pretix_sync_item_with_correct_slug(self) -> None:
+        item = self.target.create_new_sync_item(self.event)
+        self.assertIsInstance(item, PretixSyncItem)
+        self.assertEqual(item.sync_target, self.target)
+        self.assertEqual(item.related_event, self.event)
+        self.assertEqual(item.event_slug, "metal-2026")
+
+    def test_is_idempotent(self) -> None:
+        item1 = self.target.create_new_sync_item(self.event)
+        item2 = self.target.create_new_sync_item(self.event)
+        self.assertEqual(item1.pk, item2.pk)
+        self.assertEqual(PretixSyncItem.objects.filter(related_event=self.event).count(), 1)
+
+    def test_raises_for_event_without_proposal(self) -> None:
+        now = timezone.now()
+        event = Event.objects.create(
+            series=self.series,
+            name="No Proposal",
+            start_time=now,
+            end_time=now + timezone.timedelta(hours=1),
+        )
+        with self.assertRaises(ValueError):
+            self.target.create_new_sync_item(event)
+
+    def test_raises_for_proposal_without_area(self) -> None:
+        proposal = Proposal.objects.create(
+            title="No Area",
+            abstract="a" * 50,
+            description="d" * 50,
+            material_cost_eur="0.00",
+            preferred_dates="Any",
+        )
+        now = timezone.now()
+        event = Event.objects.create(
+            series=self.series,
+            proposal=proposal,
+            name="No Area",
+            start_time=now,
+            end_time=now + timezone.timedelta(hours=1),
+        )
+        with self.assertRaises(ValueError):
+            self.target.create_new_sync_item(event)
+
+    def test_raises_when_no_association_for_area(self) -> None:
+        other_area = ProposalArea.objects.create(code="wood", label="Wood")
+        proposal = Proposal.objects.create(
+            title="Wood",
+            abstract="a" * 50,
+            description="d" * 50,
+            material_cost_eur="0.00",
+            preferred_dates="Any",
+            area=other_area,
+        )
+        now = timezone.now()
+        event = Event.objects.create(
+            series=self.series,
+            proposal=proposal,
+            name="Wood",
+            start_time=now,
+            end_time=now + timezone.timedelta(hours=1),
+        )
+        with self.assertRaises(ValueError):
+            self.target.create_new_sync_item(event)
+
+
+class IcalCreateNewSyncItemTest(TestCase):
+    """IcalCalendarSyncTarget.create_new_sync_item must raise NotImplementedError."""
+
+    def test_raises_not_implemented(self) -> None:
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        series = Series.objects.create(name="iCal Test")
+        now = timezone.now()
+        event = Event.objects.create(
+            series=series,
+            name="Event",
+            start_time=now,
+            end_time=now + timezone.timedelta(hours=1),
+        )
+        with self.assertRaises(NotImplementedError):
+            target.create_new_sync_item(event)
