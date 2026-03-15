@@ -20,6 +20,7 @@ from apiv1.schemas import (
     EventSyncInfo,
     SyncStatus,
     SyncPushResult,
+    SyncDeleteResult,
     ErrorOut,
     SyncTargetOut,
     SyncItemOut,
@@ -131,6 +132,42 @@ def get_sync_status(request, series_id: UUID, event_id: UUID) -> EventSyncInfo:
         series_id=series_id,
         event_id=event_id,
         sync_statuses=statuses,
+    )
+
+
+@router.delete(
+    "/delete/{series_id}/{event_id}/{target_id}",
+    response={200: SyncDeleteResult, 400: ErrorOut, 401: ErrorOut, 403: ErrorOut, 404: ErrorOut},
+)
+@api_permission_required((apiv1, "change", Event))
+def delete_remote_sync_item(
+    request, series_id: UUID, event_id: UUID, target_id: UUID
+) -> SyncDeleteResult:
+    """Delete the remote resource for all sync items linking this event to the target.
+
+    Calls ``delete_remote()`` on each matching sync item, which removes the
+    remote object (e.g. a Pretix subevent) and resets any stored remote IDs.
+    """
+    event = get_object_or_404(Event, pk=event_id, series_id=series_id)
+    target = get_object_or_404(SyncBaseTarget, pk=target_id)
+
+    matching = _items_for_target_and_event(target, event)
+    for item in matching:
+        item.get_real_instance().delete_remote()
+        item.get_real_instance().delete()
+
+    deleted = len(matching) > 0
+    return SyncDeleteResult(
+        success=deleted,
+        message=(
+            f"Remote resource deleted for {target.type}"
+            if deleted
+            else f"No sync items found for target {target_id}"
+        ),
+        timestamp=django.utils.timezone.now().isoformat(),
+        target_id=target_id,
+        series_id=series_id,
+        event_id=event_id,
     )
 
 

@@ -167,6 +167,14 @@ class PretixApiClient:
             json_payload=payload,
         )
 
+    def delete_subevent(
+        self, *, organizer_slug: str, event_slug: str, subevent_id: str
+    ) -> None:
+        self._request(
+            "DELETE",
+            f"/organizers/{organizer_slug}/events/{event_slug}/subevents/{subevent_id}/",
+        )
+
     # ------------------------------------------------------------------ #
     # Quotas                                                               #
     # ------------------------------------------------------------------ #

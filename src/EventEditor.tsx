@@ -7,6 +7,7 @@ import {
   createSyncItem,
   fetchExternalCalendarEvents,
   pushToPlatform,
+  deleteRemoteSyncItem,
   updateEvent,
   fetchCalculatedPrices,
   createCalculatedPrices,
@@ -88,6 +89,7 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pushing, setPushing] = useState<string | null>(null)
+  const [deletingRemote, setDeletingRemote] = useState<string | null>(null)
   const [syncTargets, setSyncTargets] = useState<SyncTarget[]>([])
   const [creatingSyncItem, setCreatingSyncItem] = useState<string | null>(null)
 
@@ -509,6 +511,26 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
 
   const handleViewDiff = (targetId: string) => {
     navigate(`/sync/diff/${series.id}/${event.id}/${encodeURIComponent(targetId)}`)
+  }
+
+  const handleDeleteRemote = async (targetId: string, platform: string) => {
+    const confirmed = window.confirm(
+      `Delete the remote entry for "${event.name}" on ${platform}? This cannot be undone.`
+    )
+    if (!confirmed) return
+
+    try {
+      setDeletingRemote(targetId)
+      await deleteRemoteSyncItem(series.id, event.id, targetId)
+
+      // Refresh sync status so the card reflects the deleted state
+      const data = await fetchSyncStatus(series.id, event.id)
+      setSyncInfo(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete remote sync item')
+    } finally {
+      setDeletingRemote(null)
+    }
   }
 
   const handleCalculatedPriceFieldChange = (field: keyof CalculatedPricesFormValues, value: string) => {
@@ -1018,7 +1040,7 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
                         type="button"
                         className={styles.pushButton}
                         onClick={() => handlePush(sync.target_id)}
-                        disabled={pushing === sync.target_id}
+                        disabled={pushing === sync.target_id || deletingRemote === sync.target_id}
                         aria-label={`Push or update event to ${sync.platform}`}
                       >
                         {pushing === sync.target_id ? 'Pushing...' : 'Push/Update'}
@@ -1028,10 +1050,20 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
                         type="button"
                         className={styles.diffButton}
                         onClick={() => handleViewDiff(sync.target_id)}
-                        disabled={pushing === sync.target_id}
+                        disabled={pushing === sync.target_id || deletingRemote === sync.target_id}
                         aria-label={`View differences for ${sync.platform}`}
                       >
                         View Diff
+                      </button>
+
+                      <button
+                        type="button"
+                        className={styles.deleteSyncButton}
+                        onClick={() => void handleDeleteRemote(sync.target_id, sync.platform)}
+                        disabled={pushing === sync.target_id || deletingRemote === sync.target_id}
+                        aria-label={`Delete remote entry for ${sync.platform}`}
+                      >
+                        {deletingRemote === sync.target_id ? 'Deleting...' : 'Delete Remote'}
                       </button>
                     </>
                   )}

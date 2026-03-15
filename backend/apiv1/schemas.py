@@ -100,6 +100,15 @@ class SyncPushResult(Schema):
     event_id: uuid.UUID
 
 
+class SyncDeleteResult(Schema):
+    success: bool
+    message: str
+    timestamp: str
+    target_id: uuid.UUID
+    series_id: uuid.UUID
+    event_id: uuid.UUID
+
+
 class EventWithID(Schema):
     id: uuid.UUID
     name: str

@@ -793,6 +793,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/delete/{series_id}/{event_id}/{target_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Remote Sync Item
+         * @description Delete the remote resource for all sync items linking this event to the target.
+         *
+         *     Calls ``delete_remote()`` on each matching sync item, which removes the
+         *     remote object (e.g. a Pretix subevent) and resets any stored remote IDs.
+         */
+        delete: operations["apiv1_routers_sync_delete_remote_sync_item"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/diff/{series_id}/{event_id}/{target_id}": {
         parameters: {
             query?: never;
@@ -1629,6 +1652,30 @@ export interface components {
             profile_picture?: string | null;
             /** Use Gravatar */
             use_gravatar: boolean;
+        };
+        /** SyncDeleteResult */
+        SyncDeleteResult: {
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Message */
+            message: string;
+            /**
+             * Series Id
+             * Format: uuid
+             */
+            series_id: string;
+            /** Success */
+            success: boolean;
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /** Timestamp */
+            timestamp: string;
         };
         /** SyncDiffData */
         SyncDiffData: {
@@ -4002,6 +4049,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SyncItemOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_sync_delete_remote_sync_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+                event_id: string;
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncDeleteResult"];
                 };
             };
             /** @description Bad Request */

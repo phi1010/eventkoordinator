@@ -442,8 +442,30 @@ export async function pushToPlatform(
   return data as unknown as SyncPushResult
 }
 
-export async function fetchSyncDiff(
+export async function deleteRemoteSyncItem(
   seriesId: string,
+  eventId: string,
+  targetId: string
+): Promise<void> {
+  const { error, response } = await client.DELETE(
+    '/api/v1/sync/delete/{series_id}/{event_id}/{target_id}',
+    {
+      params: {
+        path: {
+          series_id: seriesId,
+          event_id: eventId,
+          target_id: targetId,
+        },
+      },
+    }
+  )
+
+  if (error || !response.ok) {
+    throw new Error(`Failed to delete remote sync item: ${response.statusText}`)
+  }
+}
+
+export async function fetchSyncDiff(
   eventId: string,
   targetId: string
 ): Promise<SyncDiffData> {

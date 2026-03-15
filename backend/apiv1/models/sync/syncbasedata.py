@@ -114,5 +114,13 @@ class SyncBaseItem(PolymorphicMetaBase):
     def pull_update(self):
         pass
 
+    def delete_remote(self):
+        """Delete the remote resource linked to this sync item.
+
+        Subclasses override this to implement platform-specific deletion.
+        After deleting, implementations should reset any stored remote IDs.
+        """
+        pass
+
     def sync_diff(self) -> SyncDiffData | None:
         return None

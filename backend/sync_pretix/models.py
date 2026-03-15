@@ -154,6 +154,30 @@ class PretixSyncItem(SyncBaseItem):
     def __str__(self):
         return f"PretixSyncItem(target={self.sync_target_id}, event={self.related_event_id})"
 
+    def delete_remote(self) -> None:
+        """Delete the linked Pretix subevent and reset the stored subevent ID."""
+        if not self.subevent_slug:
+            return  # Nothing to delete remotely.
+
+        association = self.area_association
+        if association is None:
+            raise ValueError(
+                f"PretixSyncItem {self.pk} has no area association; cannot delete remote subevent."
+            )
+
+        target = self.sync_target
+        client = PretixApiClient(api_base_url=target.api_url, token=target.api_token)
+        client.delete_subevent(
+            organizer_slug=target.organizer_slug,
+            event_slug=association.event_slug,
+            subevent_id=self.subevent_slug,
+        )
+        logger.info(
+            "Deleted Pretix subevent %s for event %s.", self.subevent_slug, self.related_event_id
+        )
+        self.subevent_slug = None
+        self.save(update_fields=["subevent_slug", "updated_at"])
+
     def push_update(self) -> None:
         """Create or update the linked Pretix subevent, overriding ticket prices."""
         association = self.area_association
