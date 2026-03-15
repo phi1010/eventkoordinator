@@ -45,7 +45,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Show tool versions
         run: |
@@ -96,7 +96,7 @@ jobs:
 
       - name: Upload ARIA snapshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aria-snapshots-${{ github.run_id }}
           if-no-files-found: warn
