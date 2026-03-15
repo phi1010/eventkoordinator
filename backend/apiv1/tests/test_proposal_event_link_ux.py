@@ -161,6 +161,9 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
         wait_for_loading_indicators_to_disappear(page)
 
         # Submit
+        page.locator("body").screenshot(
+            path=self._snapshot_path().with_suffix(".before-submit.png")
+        )
         submit_button = page.get_by_role(
             "button",
             name=re.compile(r"^(Submit proposal|Resubmit proposal)$", re.IGNORECASE),
@@ -172,6 +175,9 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
         wait_for_loading_indicators_to_disappear(page)
 
         # Accept
+        page.locator("body").screenshot(
+            path=self._snapshot_path().with_suffix(".before-accept.png")
+        )
         accept_button = page.get_by_role(
             "button",
             name=re.compile(r"^Accept proposal$", re.IGNORECASE),
@@ -200,6 +206,9 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         # After acceptance, linked events section should appear
                         wait_for_loading_indicators_to_disappear(page)
                         page.get_by_text("Linked Events (0)").wait_for(timeout=5000)
+                        page.locator("body").screenshot(
+                            path=self._snapshot_path().with_suffix(".png")
+                        )
                         self.assert_snapshot(
                             page.locator("body").aria_snapshot()
                         )
@@ -229,6 +238,9 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         ).first.wait_for(timeout=5000)
                         page.wait_for_load_state("networkidle")
                         wait_for_loading_indicators_to_disappear(page)
+                        page.locator("body").screenshot(
+                            path=self._snapshot_path().with_suffix(".png")
+                        )
                         self.assert_snapshot(
                             page.locator("body").aria_snapshot()
                         )
@@ -245,6 +257,9 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                             timeout=5000
                         )
                         page.wait_for_load_state("networkidle")
+                        page.locator("body").screenshot(
+                            path=self._snapshot_path().with_suffix(".png")
+                        )
                         self.assert_snapshot(
                             page.locator("body").aria_snapshot()
                         )

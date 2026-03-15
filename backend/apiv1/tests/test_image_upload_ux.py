@@ -20,6 +20,7 @@ from project.test_utils import (
     playwright_launch_options,
     print_aria_on_timeout,
     wait_for_loading_indicators_to_disappear,
+    SnapshotMixin,
 )
 
 
@@ -34,7 +35,7 @@ def _write_large_noise_png(path: Path) -> None:
     assert file_size >= 9 * 1024 * 1024, f'Generated upload fixture is too small: {file_size} bytes'
 
 
-class ImageUploadUxTest(ViteStaticLiveServerTestCase):
+class ImageUploadUxTest(ViteStaticLiveServerTestCase, SnapshotMixin):
     vite_force_rebuild = True
 
     def setUp(self) -> None:
@@ -164,6 +165,9 @@ class ImageUploadUxTest(ViteStaticLiveServerTestCase):
                             page.wait_for_timeout(500)
                             page.locator('#proposal-image-upload').set_input_files(str(image_path))
                             page.get_by_role('progressbar', name='Proposal image upload progress').wait_for(timeout=5000)
+                            page.locator("body").screenshot(
+                                path=self._snapshot_path().with_suffix(".upload.png")
+                            )
 
                         page.get_by_role('img', name='Proposal image preview').wait_for(timeout=5000)
                         page.get_by_role('progressbar', name='Proposal image upload progress').wait_for(

@@ -73,4 +73,5 @@
         - /placeholder: Filter series...
       - combobox "Series":
         - option "-- Select a series --" [selected]
+        - option "Test Workshop Series"
       - button "Create New Event" [disabled]
