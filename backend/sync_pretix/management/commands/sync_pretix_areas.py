@@ -6,19 +6,16 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 import random
 
-import requests
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.text import slugify
 
 from apiv1.models.basedata import ProposalArea
 from sync_pretix.models import PretixSyncTarget, PretixSyncTargetAreaAssociation
+from sync_pretix.pretix_client import PretixApiClient, PretixApiError
 
 logger = logging.getLogger(__name__)
 
-
-def _normalize_api_base_url(url: str) -> str:
-    return url.rstrip("/")
 
 
 def _build_event_slug(prefix: str, area_code: str) -> str:
@@ -41,122 +38,6 @@ class PretixSettings:
     organizer_name: str = "ZAM"
     event_slug_prefix: str = "area-"
 
-
-class PretixApiClient:
-    def __init__(self, *, api_base_url: str, token: str, timeout_seconds: float = 15.0):
-        self.api_base_url = _normalize_api_base_url(api_base_url)
-        self.timeout_seconds = timeout_seconds
-        self.session = requests.Session()
-        self.token = token
-        logger.info(
-            f"Connecting to Pretix API at {self.api_base_url} with token {token!r}"
-        )
-        self.session.headers.update(self._get_headers(token))
-
-    def _get_headers(self, token: str) -> dict[str, str]:
-        return {
-            "Authorization": f"Token {token}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
-
-    def _url(self, path: str) -> str:
-        return f"{self.api_base_url}{path}"
-
-    def _request(
-        self, method: str, path: str, *, json_payload: dict | None = None
-    ) -> dict:
-        try:
-            response = self.session.request(
-                method,
-                self._url(path),
-                json=json_payload,
-                timeout=self.timeout_seconds,
-                headers=self._get_headers(self.token),
-            )
-            response.raise_for_status()
-            return response.json() if response.content else {}
-        except requests.RequestException as exc:
-            raise CommandError(
-                f"Pretix API request failed for {method} {path}: {exc}"
-            ) from exc
-
-    def _request_paginated(self, path: str) -> list[dict]:
-        payload = self._request("GET", path)
-        if isinstance(payload, list):
-            return payload
-        if not isinstance(payload, dict):
-            raise CommandError(
-                f"Unexpected Pretix API response for {path}: {payload!r}"
-            )
-
-        results = list(payload.get("results") or [])
-        next_url = payload.get("next")
-        while next_url:
-            try:
-                response = self.session.get(next_url, timeout=self.timeout_seconds)
-                response.raise_for_status()
-                page = response.json()
-            except requests.RequestException as exc:
-                raise CommandError(
-                    f"Pretix API pagination failed for {path}: {exc}"
-                ) from exc
-
-            if not isinstance(page, dict):
-                raise CommandError(
-                    f"Unexpected Pretix API response page for {path}: {page!r}"
-                )
-
-            results.extend(page.get("results") or [])
-            next_url = page.get("next")
-
-        return results
-
-    def get_organizer(self, organizer_slug: str) -> dict | None:
-        organizers = self._request_paginated("/organizers/")
-        for organizer in organizers:
-            if organizer.get("slug") == organizer_slug:
-                return organizer
-        return None
-
-    def create_organizer(self, *, slug: str, name: str) -> dict:
-        return self._request(
-            "POST", "/organizers/", json_payload={"slug": slug, "name": name}
-        )
-
-    def patch_organizer(self, *, slug: str, payload: dict) -> dict:
-        return self._request("PATCH", f"/organizers/{slug}/", json_payload=payload)
-
-    def list_events(self, organizer_slug: str) -> list[dict]:
-        return self._request_paginated(f"/organizers/{organizer_slug}/events/")
-
-    def create_event(self, *, organizer_slug: str, payload: dict) -> dict:
-        return self._request(
-            "POST", f"/organizers/{organizer_slug}/events/", json_payload=payload
-        )
-
-    def patch_event(
-        self, *, organizer_slug: str, event_slug: str, payload: dict
-    ) -> dict:
-        return self._request(
-            "PATCH",
-            f"/organizers/{organizer_slug}/events/{event_slug}/",
-            json_payload=payload,
-        )
-
-    def list_items(self, *, organizer_slug: str, event_slug: str) -> list[dict]:
-        return self._request_paginated(
-            f"/organizers/{organizer_slug}/events/{event_slug}/items/"
-        )
-
-    def create_item(
-        self, *, organizer_slug: str, event_slug: str, payload: dict
-    ) -> dict:
-        return self._request(
-            "POST",
-            f"/organizers/{organizer_slug}/events/{event_slug}/items/",
-            json_payload=payload,
-        )
 
 
 class Command(BaseCommand):
@@ -292,6 +173,12 @@ class Command(BaseCommand):
         return created_count
 
     def handle(self, *args, **options):
+        try:
+            self._run(*args, **options)
+        except PretixApiError as exc:
+            raise CommandError(str(exc)) from exc
+
+    def _run(self, *args, **options):
         runtime_settings = self._read_settings(options)
 
         dry_run = bool(options.get("dry_run"))

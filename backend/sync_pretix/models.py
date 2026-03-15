@@ -1,13 +1,17 @@
 from django.db import models
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_CEILING
+import logging
 
 from apiv1.models import SyncBaseTarget, ProposalArea
 from apiv1.models.basedata import time_string_to_minutes
 from apiv1.models.sync.syncbasedata import SyncBaseItem
 from project.basemodels import HistoricalMetaBase
+from sync_pretix.pretix_client import PretixApiClient, PretixApiError
+
+logger = logging.getLogger(__name__)
 
 
 def default_min_participants_params():
@@ -66,7 +70,7 @@ class PretixSyncTarget(SyncBaseTarget):
         item, _created = PretixSyncItem.objects.get_or_create(
             sync_target=self,
             related_event=event,
-            defaults={"event_slug": association.event_slug, "flag_push": True},
+            defaults={"area_association": association, "flag_push": True},
         )
         return item
 
@@ -130,14 +134,247 @@ class PretixSyncItem(SyncBaseItem):
         on_delete=models.CASCADE,
         related_name="items",
     )
-    event_slug = models.CharField(
+    area_association = models.ForeignKey(
+        "PretixSyncTargetAreaAssociation",
+        on_delete=models.DO_NOTHING,
+        null=True,
+        blank=True,
+        related_name="sync_items",
+        verbose_name="Area Association",
+        help_text="The area-to-event-slug mapping used when pushing to Pretix.",
+    )
+    subevent_slug = models.CharField(
         max_length=255,
-        verbose_name="Pretix Event Slug",
-        help_text="Slug of the Pretix event (has_subevents) that hosts the subevent.",
+        blank=True,
+        null=True,
+        verbose_name="Pretix Subevent ID",
+        help_text="ID of the Pretix subevent created for this event. Set on first push.",
     )
 
     def __str__(self):
         return f"PretixSyncItem(target={self.sync_target_id}, event={self.related_event_id})"
+
+    def push_update(self) -> None:
+        """Create or update the linked Pretix subevent, overriding ticket prices."""
+        association = self.area_association
+        if association is None:
+            raise ValueError(
+                f"PretixSyncItem {self.pk} has no area association; cannot push."
+            )
+
+        target = self.sync_target
+        event = self.related_event
+        client = PretixApiClient(api_base_url=target.api_url, token=target.api_token)
+
+        # Determine the event locale from the proposal language; fall back to "de".
+        event_locale = "de"
+        proposal = getattr(event, "proposal", None)
+        if proposal is not None:
+            lang = getattr(proposal, "language", None)
+            if lang is not None:
+                event_locale = lang.code
+
+        # Fetch the Pretix parent event to get its configured locales.
+        pretix_event = client.get_event(
+            organizer_slug=target.organizer_slug,
+            event_slug=association.event_slug,
+        )
+        configured_locales = pretix_event.get("locales") or [event_locale]
+        # Apply the same name to every configured locale; ensure the event's own locale is present.
+        name_dict = {locale: event.name for locale in configured_locales}
+        name_dict[event_locale] = event.name
+
+        # Always fetch items — needed for both price overrides and the quota.
+        items = client.list_items(
+            organizer_slug=target.organizer_slug,
+            event_slug=association.event_slug,
+        )
+        logger.debug(
+            "Fetched %d item(s) from Pretix event %r: %s",
+            len(items),
+            association.event_slug,
+            [(i.get("id"), i.get("name")) for i in items],
+        )
+
+        # Build price overrides from CalculatedPrices if available.
+        item_overrides: list[dict] = []
+        try:
+            prices = event.calculated_prices
+            item_overrides = self._build_item_overrides(association, prices, items)
+            logger.debug(
+                "Built %d item_override(s) for subevent: %s",
+                len(item_overrides), item_overrides,
+            )
+            if not item_overrides:
+                logger.warning(
+                    "CalculatedPrices exist for event %s but produced no item overrides. "
+                    "Check that prices are non-null and product names match Pretix items.",
+                    event.pk,
+                )
+        except ObjectDoesNotExist:
+            logger.warning(
+                "No CalculatedPrices found for event %s; subevent will use default item prices.",
+                event.pk,
+            )
+
+        payload = {
+            "name": name_dict,
+            "date_from": event.start_time.isoformat(),
+            "date_to": event.end_time.isoformat(),
+            "active": True,
+            "meta_data": {},
+            "item_price_overrides": item_overrides,
+        }
+
+        # Create the subevent if this is the first push.
+        if not self.subevent_slug:
+            result = client.create_subevent(
+                organizer_slug=target.organizer_slug,
+                event_slug=association.event_slug,
+                payload=payload,
+            )
+            self.subevent_slug = str(result["id"])
+            self.save(update_fields=["subevent_slug", "updated_at"])
+
+        # Always patch to ensure item_overrides (prices) are applied.
+        # Pretix may ignore item_overrides on creation, so we patch unconditionally.
+        client.patch_subevent(
+            organizer_slug=target.organizer_slug,
+            event_slug=association.event_slug,
+            subevent_id=self.subevent_slug,
+            payload=payload,
+        )
+
+        # Create or update the quota so price overrides take effect.
+        max_participants = getattr(proposal, "max_participants", None)
+        all_item_ids = self._resolve_all_item_ids(association, items)
+        if not all_item_ids:
+            logger.warning(
+                "No Pretix item IDs could be resolved for PretixSyncItem %s "
+                "(event %r, association event_slug %r). "
+                "Expected product names: %s. Fetched items: %s. "
+                "Quota will be created without products.",
+                self.pk,
+                event.name,
+                association.event_slug,
+                [
+                    association.ticket_product_member_regular_id,
+                    association.ticket_product_member_discounted_id,
+                    association.ticket_product_guest_regular_id,
+                    association.ticket_product_guest_discounted_id,
+                    association.ticket_product_business_id,
+                ],
+                [(i.get("id"), i.get("name")) for i in items],
+            )
+        else:
+            logger.debug("Resolved %d item ID(s) for quota: %s", len(all_item_ids), all_item_ids)
+        self._create_or_update_quota(
+            client, target, association, self.subevent_slug,
+            event.name, all_item_ids, max_participants,
+        )
+
+    def _create_or_update_quota(
+        self,
+        client: PretixApiClient,
+        target: "PretixSyncTarget",
+        association: "PretixSyncTargetAreaAssociation",
+        subevent_id: str,
+        quota_name: str,
+        item_ids: list[int],
+        max_participants: int | None,
+    ) -> None:
+        """Create or update the subevent quota covering all five ticket products."""
+        quota_payload = {
+            "name": quota_name,
+            "size": max_participants,
+            "items": item_ids,
+            "subevent": int(subevent_id),
+        }
+        existing = client.list_quotas(
+            organizer_slug=target.organizer_slug,
+            event_slug=association.event_slug,
+            subevent_id=subevent_id,
+        )
+        if existing:
+            logger.info(
+                "Updating existing quota %s for subevent %s with %d product(s), size=%s.",
+                existing[0]["id"], subevent_id, len(item_ids), max_participants,
+            )
+            client.patch_quota(
+                organizer_slug=target.organizer_slug,
+                event_slug=association.event_slug,
+                quota_id=str(existing[0]["id"]),
+                payload=quota_payload,
+            )
+        else:
+            logger.info(
+                "Creating quota for subevent %s with %d product(s), size=%s.",
+                subevent_id, len(item_ids), max_participants,
+            )
+            client.create_quota(
+                organizer_slug=target.organizer_slug,
+                event_slug=association.event_slug,
+                payload=quota_payload,
+            )
+
+    @staticmethod
+    def _resolve_all_item_ids(
+        association: "PretixSyncTargetAreaAssociation",
+        items: list[dict],
+    ) -> list[int]:
+        """Return resolved Pretix item IDs for all five ticket products in the association."""
+        product_names_or_ids = [
+            association.ticket_product_member_regular_id,
+            association.ticket_product_member_discounted_id,
+            association.ticket_product_guest_regular_id,
+            association.ticket_product_guest_discounted_id,
+            association.ticket_product_business_id,
+        ]
+        return [
+            item_id
+            for name_or_id in product_names_or_ids
+            if (item_id := PretixSyncItem._resolve_item_id(items, name_or_id)) is not None
+        ]
+
+    @staticmethod
+    def _resolve_item_id(items: list[dict], name_or_id: str | None) -> int | None:
+        """Resolve a Pretix item ID from a numeric ID string or a localized display name.
+
+        Name matching is case-insensitive and whitespace-stripped to tolerate
+        minor differences between what the management command stored and what
+        Pretix returns.
+        """
+        if not name_or_id:
+            return None
+        if name_or_id.isdigit():
+            return int(name_or_id)
+        needle = name_or_id.strip().lower()
+        for item in items:
+            names = item.get("name") or {}
+            if any(v.strip().lower() == needle for v in names.values()):
+                return int(item["id"])
+        return None
+
+    @staticmethod
+    def _build_item_overrides(
+        association: "PretixSyncTargetAreaAssociation",
+        prices: "CalculatedPrices",
+        items: list[dict],
+    ) -> list[dict]:
+        """Map each ticket product in the association to a Pretix price override entry."""
+        price_mapping = [
+            (association.ticket_product_member_regular_id, prices.member_regular_gross_eur),
+            (association.ticket_product_member_discounted_id, prices.member_discounted_gross_eur),
+            (association.ticket_product_guest_regular_id, prices.guest_regular_gross_eur),
+            (association.ticket_product_guest_discounted_id, prices.guest_discounted_gross_eur),
+            (association.ticket_product_business_id, prices.business_net_eur),
+        ]
+        overrides = []
+        for name_or_id, price in price_mapping:
+            item_id = PretixSyncItem._resolve_item_id(items, name_or_id)
+            if item_id is not None and price is not None:
+                overrides.append({"item": item_id, "price": str(price)})
+        return overrides
 
 
 class PretixPricingConfiguration(HistoricalMetaBase):

@@ -57,7 +57,7 @@ class LinkedSyncItemsInline(StackedPolymorphicInline):
 
     class PretixSyncItemInline(StackedPolymorphicInline.Child):
         model = PretixSyncItem
-        readonly_fields = ("sync_target", "event_slug", "flag_push")
+        readonly_fields = ("sync_target", "area_association", "subevent_slug", "flag_push")
 
         def has_add_permission(self, request, obj=None):
             return False

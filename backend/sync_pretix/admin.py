@@ -83,7 +83,7 @@ class CalculatedPricesAdmin(SimpleHistoryAdmin):
 
 @admin.register(models.PretixSyncItem)
 class PretixSyncItemAdmin(SimpleHistoryAdmin):
-	list_display = ("sync_target", "event_slug", "flag_push", "updated_at")
+	list_display = ("sync_target", "area_association", "subevent_slug", "flag_push", "updated_at")
 	list_filter = ("sync_target", "flag_push")
-	search_fields = ("sync_target__organizer_slug", "event_slug")
+	search_fields = ("sync_target__organizer_slug", "area_association__event_slug", "subevent_slug")
 	ordering = ("-updated_at",)
