@@ -1,6 +1,6 @@
 from django.db import models
 
-from apiv1.models.sync.syncbasedata import SyncBaseItem, SyncBaseTarget
+from apiv1.models.sync.syncbasedata import SyncBaseItem, SyncBaseTarget, SyncDiffData
 
 
 class IcalCalendarSyncTarget(SyncBaseTarget):
@@ -18,3 +18,13 @@ class IcalCalenderSyncItem(SyncBaseItem):
     uid = models.CharField(max_length=255, unique=True)
     sync_target = models.ForeignKey(IcalCalendarSyncTarget, on_delete=models.CASCADE, related_name="items")
     ical_definition = models.TextField(max_length=10000)
+
+    def sync_diff(self) -> SyncDiffData | None:
+        """iCal items are imported, not pushed; their existence means they are in sync."""
+        return SyncDiffData(
+            series_id=self.related_event.series_id,
+            event_id=self.related_event.pk,
+            target_id=self.sync_target.pk,
+            properties=[],
+        )
+

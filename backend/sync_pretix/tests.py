@@ -1,11 +1,527 @@
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
 from apiv1.models.basedata import Event, Proposal, Series
-from sync_pretix.models import CalculatedPrices, PretixPricingConfiguration
+from apiv1.models.sync.syncbasedata import SyncBaseTarget
+from sync_pretix.models import (
+    CalculatedPrices,
+    PretixPricingConfiguration,
+    PretixSyncItem,
+    PretixSyncTarget,
+    PretixSyncTargetAreaAssociation,
+)
+from apiv1.models.basedata import ProposalArea
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by multiple test classes
+# ---------------------------------------------------------------------------
+
+def _make_pretix_client_mock(
+    *,
+    subevent: dict | None = None,
+    quotas: list | None = None,
+    pretix_event: dict | None = None,
+    items: list | None = None,
+    created_subevent_id: str = "7",
+):
+    """Return a MagicMock that mimics PretixApiClient."""
+    client = MagicMock()
+    client.get_subevent.return_value = subevent or {
+        "id": 7,
+        "name": {"de": "Workshop"},
+        "date_from": "2026-05-01T10:00:00+02:00",
+        "date_to": "2026-05-01T12:00:00+02:00",
+        "active": True,
+        "item_price_overrides": [],
+    }
+    client.list_quotas.return_value = quotas if quotas is not None else [
+        {"id": 1, "size": 10, "items": []}
+    ]
+    client.get_event.return_value = pretix_event or {"locales": ["de"]}
+    client.list_items.return_value = items or []
+    client.create_subevent.return_value = {"id": int(created_subevent_id)}
+    client.patch_subevent.return_value = {}
+    client.list_quotas.return_value = quotas if quotas is not None else [
+        {"id": 1, "size": 10, "items": []}
+    ]
+    client.patch_quota.return_value = {}
+    client.create_quota.return_value = {}
+    return client
+
+
+class _PretixSyncItemTestBase(TestCase):
+    """Shared setUp for PretixSyncItem tests."""
+
+    def setUp(self):
+        self.area = ProposalArea.objects.create(code="metal", label="Metal")
+        self.series = Series.objects.create(name="Test Series")
+        now = timezone.now().replace(microsecond=0)
+        self.start_time = now
+        self.end_time = now + timezone.timedelta(hours=2)
+        self.proposal = Proposal.objects.create(
+            title="Metal Workshop",
+            abstract="a" * 50,
+            description="d" * 50,
+            material_cost_eur=Decimal("3.00"),
+            preferred_dates="Any",
+            max_participants=10,
+        )
+        self.event = Event.objects.create(
+            series=self.series,
+            proposal=self.proposal,
+            name="Metal Workshop",
+            start_time=self.start_time,
+            end_time=self.end_time,
+        )
+        self.target = PretixSyncTarget.objects.create(
+            api_token="test-token",
+            api_url="https://pretix.example.com/api/v1",
+            organizer_slug="zam",
+        )
+        self.association = PretixSyncTargetAreaAssociation.objects.create(
+            sync_target=self.target,
+            area=self.area,
+            event_slug="area-metal",
+        )
+        self.item = PretixSyncItem.objects.create(
+            sync_target=self.target,
+            related_event=self.event,
+            area_association=self.association,
+        )
+
+
+# ---------------------------------------------------------------------------
+# PretixSyncItem.pull_update()
+# ---------------------------------------------------------------------------
+
+class PretixSyncItemPullUpdateTest(_PretixSyncItemTestBase):
+    """Tests for PretixSyncItem.pull_update()."""
+
+    def test_pull_update_no_op_when_no_subevent_slug(self):
+        """pull_update() must be silent when subevent_slug is not set."""
+        self.assertIsNone(self.item.subevent_slug)
+        with patch("sync_pretix.models.PretixApiClient") as mock_cls:
+            self.item.pull_update()
+        mock_cls.assert_not_called()
+        self.item.refresh_from_db()
+        self.assertIsNone(self.item.pretix_data)
+
+    def test_pull_update_fetches_and_stores_subevent_and_quotas(self):
+        """pull_update() fetches subevent + quotas and persists them as pretix_data."""
+        self.item.subevent_slug = "7"
+        self.item.save(update_fields=["subevent_slug"])
+
+        fake_subevent = {
+            "id": 7,
+            "name": {"de": "Metal Workshop"},
+            "date_from": self.start_time.isoformat(),
+            "date_to": self.end_time.isoformat(),
+        }
+        fake_quotas = [{"id": 1, "size": 10, "items": []}]
+        fake_client = _make_pretix_client_mock(
+            subevent=fake_subevent,
+            quotas=fake_quotas,
+        )
+
+        with patch("sync_pretix.models.PretixApiClient", return_value=fake_client):
+            self.item.pull_update()
+
+        self.item.refresh_from_db()
+        self.assertIsNotNone(self.item.pretix_data)
+        self.assertEqual(self.item.pretix_data["subevent"], fake_subevent)
+        self.assertEqual(self.item.pretix_data["quotas"], fake_quotas)
+
+        fake_client.get_subevent.assert_called_once_with(
+            organizer_slug="zam",
+            event_slug="area-metal",
+            subevent_id="7",
+        )
+        fake_client.list_quotas.assert_called_once_with(
+            organizer_slug="zam",
+            event_slug="area-metal",
+            subevent_id="7",
+        )
+
+    def test_pull_update_raises_when_no_association(self):
+        """pull_update() raises ValueError when area_association is not set."""
+        self.item.subevent_slug = "99"
+        self.item.area_association = None
+        self.item.save(update_fields=["subevent_slug", "area_association"])
+
+        with self.assertRaises(ValueError):
+            self.item.pull_update()
+
+
+# ---------------------------------------------------------------------------
+# PretixSyncItem.sync_diff()
+# ---------------------------------------------------------------------------
+
+class PretixSyncItemSyncDiffTest(_PretixSyncItemTestBase):
+    """Tests for PretixSyncItem.sync_diff()."""
+
+    def test_sync_diff_returns_creation_preview_when_no_subevent_slug(self):
+        """sync_diff() returns a creation preview diff when subevent_slug is None."""
+        self.assertIsNone(self.item.subevent_slug)
+        diff = self.item.sync_diff()
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertIn("name", prop_names)
+        self.assertIn("date_from", prop_names)
+        self.assertIn("date_to", prop_names)
+        # All remote values are empty (nothing in Pretix yet)
+        for p in diff.properties:
+            self.assertEqual(p.remote_value, "", f"Expected empty remote_value for {p.property_name}")
+        # Local values are populated from the event
+        name_diff = next(p for p in diff.properties if p.property_name == "name")
+        self.assertEqual(name_diff.local_value, self.event.name)
+
+    def test_sync_diff_returns_none_when_no_pretix_data(self):
+        """sync_diff() must return None when pretix_data has not been pulled yet."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = None
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+        self.assertIsNone(self.item.sync_diff())
+
+    def test_sync_diff_returns_empty_properties_when_in_sync(self):
+        """sync_diff() returns SyncDiffData with no properties when everything matches."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = {
+            "subevent": {
+                "name": {"de": self.event.name},
+                "date_from": self.start_time.isoformat(),
+                "date_to": self.end_time.isoformat(),
+            },
+            "quotas": [{"id": 1, "size": int(self.proposal.max_participants), "items": []}],
+        }
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        self.assertIsNotNone(diff)
+        self.assertEqual(diff.properties, [])
+
+    def test_sync_diff_detects_date_from_difference(self):
+        """sync_diff() reports a property diff when date_from is wrong in Pretix."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = {
+            "subevent": {
+                "name": {"de": self.event.name},
+                "date_from": "2020-01-01T00:00:00+00:00",  # wrong date
+                "date_to": self.end_time.isoformat(),
+            },
+            "quotas": [{"id": 1, "size": int(self.proposal.max_participants), "items": []}],
+        }
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertIn("date_from", prop_names)
+
+    def test_sync_diff_detects_date_to_difference(self):
+        """sync_diff() reports a property diff when date_to is wrong in Pretix."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = {
+            "subevent": {
+                "name": {"de": self.event.name},
+                "date_from": self.start_time.isoformat(),
+                "date_to": "2020-01-01T00:00:00+00:00",  # wrong date
+            },
+            "quotas": [{"id": 1, "size": int(self.proposal.max_participants), "items": []}],
+        }
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertIn("date_to", prop_names)
+
+    def test_sync_diff_detects_name_difference(self):
+        """sync_diff() reports a property diff when the subevent name in Pretix differs."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = {
+            "subevent": {
+                "name": {"de": "Wrong Name"},  # wrong name
+                "date_from": self.start_time.isoformat(),
+                "date_to": self.end_time.isoformat(),
+            },
+            "quotas": [{"id": 1, "size": int(self.proposal.max_participants), "items": []}],
+        }
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertIn("name", prop_names)
+        name_diff = next(p for p in diff.properties if p.property_name == "name")
+        self.assertEqual(name_diff.local_value, self.event.name)
+        self.assertEqual(name_diff.remote_value, "Wrong Name")
+
+    def test_sync_diff_detects_quota_size_difference(self):
+        """sync_diff() reports a property diff when the quota size in Pretix differs."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = {
+            "subevent": {
+                "name": {"de": self.event.name},
+                "date_from": self.start_time.isoformat(),
+                "date_to": self.end_time.isoformat(),
+            },
+            "quotas": [{"id": 1, "size": 999, "items": []}],  # wrong size
+        }
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertIn("quota_size", prop_names)
+        quota_diff = next(p for p in diff.properties if p.property_name == "quota_size")
+        self.assertEqual(quota_diff.local_value, str(self.proposal.max_participants))
+        self.assertEqual(quota_diff.remote_value, "999")
+
+    def test_sync_diff_handles_timezone_equivalent_dates_as_equal(self):
+        """sync_diff() must not flag dates that represent the same instant in different TZs."""
+        from datetime import datetime, timezone as _tz, timedelta
+        utc_start = self.start_time.astimezone(_tz.utc)
+        berlin_offset = timedelta(hours=2)
+        berlin_start = utc_start.astimezone(_tz(berlin_offset))
+
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = {
+            "subevent": {
+                "name": {"de": self.event.name},
+                "date_from": berlin_start.isoformat(),  # same instant, different TZ repr
+                "date_to": self.end_time.isoformat(),
+            },
+            "quotas": [{"id": 1, "size": int(self.proposal.max_participants), "items": []}],
+        }
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertNotIn("date_from", prop_names)
+
+
+# ---------------------------------------------------------------------------
+# SyncBaseItem.get_status()
+# ---------------------------------------------------------------------------
+
+class PretixSyncItemGetStatusTest(_PretixSyncItemTestBase):
+    """Tests for PretixSyncItem.get_status() (item-level status)."""
+
+    def test_get_status_returns_creation_pending_when_no_subevent_slug(self):
+        """Status is CREATION_PENDING when the item has been created locally but not pushed."""
+        self.assertIsNone(self.item.subevent_slug)
+        self.assertEqual(
+            self.item.get_status(),
+            SyncBaseTarget.SyncTargetStatus.CREATION_PENDING,
+        )
+
+    def test_get_status_returns_status_unknown_when_pretix_data_is_none(self):
+        """Status is STATUS_UNKNOWN when subevent_slug is set but pretix_data not pulled yet."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = None
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        self.assertEqual(
+            self.item.get_status(),
+            SyncBaseTarget.SyncTargetStatus.STATUS_UNKNOWN,
+        )
+
+    def test_get_status_returns_up_to_date_when_in_sync(self):
+        """Status is ENTRY_UP_TO_DATE when all compared fields match."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = {
+            "subevent": {
+                "name": {"de": self.event.name},
+                "date_from": self.start_time.isoformat(),
+                "date_to": self.end_time.isoformat(),
+            },
+            "quotas": [{"id": 1, "size": int(self.proposal.max_participants), "items": []}],
+        }
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        self.assertEqual(
+            self.item.get_status(),
+            SyncBaseTarget.SyncTargetStatus.ENTRY_UP_TO_DATE,
+        )
+
+    def test_get_status_returns_differs_when_name_mismatch(self):
+        """Status is ENTRY_DIFFERS when the subevent name in Pretix is wrong."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = {
+            "subevent": {
+                "name": {"de": "Wrong Name"},
+                "date_from": self.start_time.isoformat(),
+                "date_to": self.end_time.isoformat(),
+            },
+            "quotas": [{"id": 1, "size": int(self.proposal.max_participants), "items": []}],
+        }
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        self.assertEqual(
+            self.item.get_status(),
+            SyncBaseTarget.SyncTargetStatus.ENTRY_DIFFERS,
+        )
+
+
+# ---------------------------------------------------------------------------
+# SyncBaseTarget.get_status() now aggregates item.get_status()
+# ---------------------------------------------------------------------------
+
+class PretixSyncTargetGetStatusTest(_PretixSyncItemTestBase):
+    """Tests for SyncBaseTarget.get_status() delegating to item.get_status()."""
+
+    def test_target_status_no_entry_when_no_items(self):
+        """NO_ENTRY_EXISTS only when there are no sync items at all."""
+        PretixSyncItem.objects.filter(related_event=self.event).delete()
+        self.assertEqual(
+            self.target.get_status(self.event),
+            SyncBaseTarget.SyncTargetStatus.NO_ENTRY_EXISTS,
+        )
+
+    def test_target_status_creation_pending_when_item_not_pushed(self):
+        """When all items have no subevent_slug, aggregate is CREATION_PENDING."""
+        self.assertIsNone(self.item.subevent_slug)
+        self.assertEqual(
+            self.target.get_status(self.event),
+            SyncBaseTarget.SyncTargetStatus.CREATION_PENDING,
+        )
+
+    def test_target_status_unknown_when_slug_set_but_no_data(self):
+        """STATUS_UNKNOWN bubbles up to the target when an item has slug but no pretix_data."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = None
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        self.assertEqual(
+            self.target.get_status(self.event),
+            SyncBaseTarget.SyncTargetStatus.STATUS_UNKNOWN,
+        )
+
+    def test_target_status_up_to_date_when_in_sync(self):
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = {
+            "subevent": {
+                "name": {"de": self.event.name},
+                "date_from": self.start_time.isoformat(),
+                "date_to": self.end_time.isoformat(),
+            },
+            "quotas": [{"id": 1, "size": int(self.proposal.max_participants), "items": []}],
+        }
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        self.assertEqual(
+            self.target.get_status(self.event),
+            SyncBaseTarget.SyncTargetStatus.ENTRY_UP_TO_DATE,
+        )
+
+    def test_target_status_differs_when_any_item_differs(self):
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = {
+            "subevent": {
+                "name": {"de": "Wrong Name"},
+                "date_from": self.start_time.isoformat(),
+                "date_to": self.end_time.isoformat(),
+            },
+            "quotas": [],
+        }
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        self.assertEqual(
+            self.target.get_status(self.event),
+            SyncBaseTarget.SyncTargetStatus.ENTRY_DIFFERS,
+        )
+
+
+# ---------------------------------------------------------------------------
+# push_update() triggers pull_update()
+# ---------------------------------------------------------------------------
+
+class PretixSyncItemPushCallsPullTest(_PretixSyncItemTestBase):
+    """push_update() must call pull_update() at the end to refresh pretix_data."""
+
+    def test_push_update_calls_pull_after_push(self):
+        """After a successful push, pretix_data is populated via pull_update()."""
+        pulled_subevent = {
+            "id": 7,
+            "name": {"de": self.event.name},
+            "date_from": self.start_time.isoformat(),
+            "date_to": self.end_time.isoformat(),
+        }
+        pulled_quotas = [{"id": 1, "size": int(self.proposal.max_participants), "items": []}]
+        fake_client = _make_pretix_client_mock(
+            subevent=pulled_subevent,
+            quotas=pulled_quotas,
+            created_subevent_id="7",
+        )
+
+        with patch("sync_pretix.models.PretixApiClient", return_value=fake_client):
+            self.item.push_update()
+
+        self.item.refresh_from_db()
+        self.assertIsNotNone(self.item.pretix_data)
+        self.assertEqual(self.item.pretix_data["subevent"], pulled_subevent)
+        self.assertEqual(self.item.pretix_data["quotas"], pulled_quotas)
+        # Verify pull was called with the correct subevent id
+        fake_client.get_subevent.assert_called_with(
+            organizer_slug="zam",
+            event_slug="area-metal",
+            subevent_id=self.item.subevent_slug,
+        )
+
+    def test_push_update_calls_pull_even_when_push_fails(self):
+        """pull_update() must run in the finally block even when push_update() raises."""
+        pulled_subevent = {
+            "id": 7,
+            "name": {"de": self.event.name},
+            "date_from": self.start_time.isoformat(),
+            "date_to": self.end_time.isoformat(),
+        }
+        pulled_quotas = [{"id": 1, "size": int(self.proposal.max_participants), "items": []}]
+
+        fake_client = _make_pretix_client_mock(
+            subevent=pulled_subevent,
+            quotas=pulled_quotas,
+            created_subevent_id="7",
+        )
+        # Make patch_subevent fail after the subevent has been created.
+        fake_client.patch_subevent.side_effect = Exception("Pretix API error")
+
+        with patch("sync_pretix.models.PretixApiClient", return_value=fake_client):
+            with self.assertRaises(Exception, msg="Pretix API error"):
+                self.item.push_update()
+
+        self.item.refresh_from_db()
+        # subevent was created (slug stored) but patch failed — pull still ran
+        self.assertIsNotNone(self.item.subevent_slug)
+        self.assertIsNotNone(self.item.pretix_data)
+        fake_client.get_subevent.assert_called()
+
+    def test_status_is_unknown_between_push_and_pull_when_pull_fails(self):
+        """If pull_update() fails, pretix_data stays None → STATUS_UNKNOWN."""
+        fake_client = _make_pretix_client_mock(created_subevent_id="7")
+        # Simulate pull failure
+        fake_client.get_subevent.side_effect = Exception("Network error")
+
+        with patch("sync_pretix.models.PretixApiClient", return_value=fake_client):
+            # push should still succeed (pull failure is swallowed in finally)
+            self.item.push_update()
+
+        self.item.refresh_from_db()
+        # subevent_slug was set by the successful push
+        self.assertIsNotNone(self.item.subevent_slug)
+        # pretix_data is still None because pull failed
+        self.assertIsNone(self.item.pretix_data)
+        # status should be STATUS_UNKNOWN
+        self.assertEqual(
+            self.item.get_status(),
+            SyncBaseTarget.SyncTargetStatus.STATUS_UNKNOWN,
+        )
 
 
 class PretixPricingConfigurationTests(TestCase):

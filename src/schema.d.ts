@@ -777,14 +777,6 @@ export interface paths {
         /**
          * Create Sync Item
          * @description Create a sync item for an event on a specific target.
-         *
-         *     Delegates to the target's ``create_new_sync_item`` method, which knows
-         *     how to build the correct subclass instance.  The call is idempotent: if an
-         *     item already exists it is returned without modification.
-         *
-         *     Returns 400 if the target does not support API-driven creation (e.g. iCal)
-         *     or if the event cannot be mapped to a target-specific configuration (e.g.
-         *     missing proposal area).
          */
         post: operations["apiv1_routers_sync_create_sync_item"];
         delete?: never;
@@ -807,8 +799,8 @@ export interface paths {
          * Delete Remote Sync Item
          * @description Delete the remote resource for all sync items linking this event to the target.
          *
-         *     Calls ``delete_remote()`` on each matching sync item, which removes the
-         *     remote object (e.g. a Pretix subevent) and resets any stored remote IDs.
+         *     Requires at minimum ``view_event`` permission. Additionally checks
+         *     ``delete_syncbaseitem`` on each real instance before deletion.
          */
         delete: operations["apiv1_routers_sync_delete_remote_sync_item"];
         options?: never;
@@ -848,6 +840,9 @@ export interface paths {
         /**
          * Push To Platform
          * @description Push/update event data to a specific sync target.
+         *
+         *     Requires at minimum ``view_event`` permission. Additionally checks
+         *     ``push_syncbaseitem`` on each real instance before pushing.
          */
         post: operations["apiv1_routers_sync_push_to_platform"];
         delete?: never;
@@ -866,6 +861,8 @@ export interface paths {
         /**
          * Get Sync Status
          * @description Get synchronization status for an event across all sync targets.
+         *     Each status entry also reports ``can_push`` and ``can_delete`` by querying
+         *     the permissions of the real sync item instances for the requesting user.
          */
         get: operations["apiv1_routers_sync_get_sync_status"];
         put?: never;
@@ -1761,7 +1758,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "no entry exists" | "entry up-to-date" | "entry differs";
+            status: "no entry exists" | "status unknown" | "entry up-to-date" | "entry differs";
             /**
              * Target Id
              * Format: uuid

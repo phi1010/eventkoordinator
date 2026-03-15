@@ -643,7 +643,11 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
       case 'entry differs':
         return '#ff9800' // orange
       case 'no entry exists':
-        return '#2196f3' // blue
+        return '#9e9e9e' // grey – no sync item yet
+      case 'creation pending':
+        return '#2196f3' // blue – item created locally, not yet pushed
+      case 'status unknown':
+        return '#9c27b0' // purple – pushed but state not yet verified
       default:
         return '#666'
     }
@@ -657,6 +661,10 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
         return '⚠ Differs'
       case 'no entry exists':
         return '⊘ No entry'
+      case 'creation pending':
+        return '⏳ Creation pending'
+      case 'status unknown':
+        return '? Status unknown'
       default:
         return status
     }
@@ -1025,6 +1033,7 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
                   </div>
 
                   {sync.status === 'no entry exists' && matchingTarget ? (
+                    // No sync item exists yet → offer to create one.
                     <button
                       type="button"
                       className={styles.pushButton}
@@ -1035,6 +1044,8 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
                       {creatingSyncItem === matchingTarget.id ? 'Creating...' : 'Create Sync Entry'}
                     </button>
                   ) : (
+                    // Sync item exists (pending, unknown, up-to-date, or differs) →
+                    // offer push (creates or updates remote) and diff (preview or compare).
                     <>
                       <button
                         type="button"
@@ -1043,7 +1054,11 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
                         disabled={pushing === sync.target_id || deletingRemote === sync.target_id || !sync.can_push}
                         aria-label={`Push or update event to ${sync.platform}`}
                       >
-                        {pushing === sync.target_id ? 'Pushing...' : 'Push/Update'}
+                        {pushing === sync.target_id
+                          ? 'Pushing...'
+                          : sync.status === 'creation pending'
+                            ? 'Create in Pretix'
+                            : 'Push/Update'}
                       </button>
 
                       <button
@@ -1053,7 +1068,7 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
                         disabled={pushing === sync.target_id || deletingRemote === sync.target_id}
                         aria-label={`View differences for ${sync.platform}`}
                       >
-                        View Diff
+                        {sync.status === 'creation pending' ? 'Preview' : 'View Diff'}
                       </button>
 
                       <button

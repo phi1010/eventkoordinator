@@ -80,7 +80,7 @@ class CreateEventOut(Schema):
 class SyncStatus(Schema):
     target_id: uuid.UUID
     platform: str
-    status: Literal["no entry exists", "entry up-to-date", "entry differs"]
+    status: Literal["no entry exists", "creation pending", "status unknown", "entry up-to-date", "entry differs"]
     last_synced: Optional[str] = None
     last_error: Optional[str] = None
     can_push: bool = False

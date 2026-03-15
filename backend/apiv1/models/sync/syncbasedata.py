@@ -43,6 +43,8 @@ class SyncBaseTarget(PolymorphicMetaBase):
 
     class SyncTargetStatus(models.TextChoices):
         NO_ENTRY_EXISTS = "no entry exists", "No entry exists"
+        CREATION_PENDING = "creation pending", "Creation pending"
+        STATUS_UNKNOWN = "status unknown", "Status unknown"
         ENTRY_UP_TO_DATE = "entry up-to-date", "Entry up-to-date"
         ENTRY_DIFFERS = "entry differs", "Entry differs"
 
@@ -73,7 +75,15 @@ class SyncBaseTarget(PolymorphicMetaBase):
         return result
 
     def get_status(self, event: Event) -> "SyncBaseTarget.SyncTargetStatus":
-        """Return the sync status for a given event against this target."""
+        """Return the aggregate sync status for *event* across all items on this target.
+
+        Aggregation rules (highest severity wins):
+        - Any item DIFFERS          → ENTRY_DIFFERS
+        - Any item UNKNOWN          → STATUS_UNKNOWN
+        - Any item CREATION_PENDING → CREATION_PENDING
+        - All items NO_ENTRY        → NO_ENTRY_EXISTS
+        - Otherwise                 → ENTRY_UP_TO_DATE
+        """
         matching_items = [
             item for item in SyncBaseItem.objects.filter(related_event=event)
             if getattr(item.sync_target, "pk", None) == self.pk
@@ -81,12 +91,17 @@ class SyncBaseTarget(PolymorphicMetaBase):
         if not matching_items:
             return self.SyncTargetStatus.NO_ENTRY_EXISTS
 
-        for item in matching_items:
-            diff = item.sync_diff()
-            if diff is not None and len(diff.properties) > 0:
-                return self.SyncTargetStatus.ENTRY_DIFFERS
-
+        item_statuses = [item.get_status() for item in matching_items]
+        if any(s == self.SyncTargetStatus.ENTRY_DIFFERS for s in item_statuses):
+            return self.SyncTargetStatus.ENTRY_DIFFERS
+        if any(s == self.SyncTargetStatus.STATUS_UNKNOWN for s in item_statuses):
+            return self.SyncTargetStatus.STATUS_UNKNOWN
+        if any(s == self.SyncTargetStatus.CREATION_PENDING for s in item_statuses):
+            return self.SyncTargetStatus.CREATION_PENDING
+        if all(s == self.SyncTargetStatus.NO_ENTRY_EXISTS for s in item_statuses):
+            return self.SyncTargetStatus.NO_ENTRY_EXISTS
         return self.SyncTargetStatus.ENTRY_UP_TO_DATE
+
     def create_new_sync_item(self, event: Event) -> "SyncBaseItem":
         """Create a new SyncBaseItem for the given event and this target.
 
@@ -126,6 +141,21 @@ class SyncBaseItem(PolymorphicMetaBase):
         After deleting, implementations should reset any stored remote IDs.
         """
         pass
+
+    def get_status(self) -> "SyncBaseTarget.SyncTargetStatus":
+        """Return the sync status for this individual item.
+
+        Semantics of ``sync_diff()`` return values:
+        - ``None``               → no remote entry exists yet (not pushed / not pulled).
+        - empty ``SyncDiffData``  → remote entry is in sync with local configuration.
+        - non-empty ``SyncDiffData`` → remote entry differs from local configuration.
+        """
+        diff = self.sync_diff()
+        if diff is None:
+            return SyncBaseTarget.SyncTargetStatus.NO_ENTRY_EXISTS
+        if len(diff.properties) > 0:
+            return SyncBaseTarget.SyncTargetStatus.ENTRY_DIFFERS
+        return SyncBaseTarget.SyncTargetStatus.ENTRY_UP_TO_DATE
 
     def sync_diff(self) -> SyncDiffData | None:
         return None

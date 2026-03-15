@@ -305,7 +305,7 @@ export async function loadSeriesFromAPI(): Promise<Series[]> {
 export interface SyncStatus {
   target_id: string
   platform: string
-  status: 'no entry exists' | 'entry up-to-date' | 'entry differs'
+  status: 'no entry exists' | 'creation pending' | 'status unknown' | 'entry up-to-date' | 'entry differs'
   last_synced?: string
   last_error?: string
   can_push: boolean

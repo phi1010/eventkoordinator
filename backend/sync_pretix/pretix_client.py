@@ -153,6 +153,14 @@ class PretixApiClient:
             json_payload=payload,
         )
 
+    def get_subevent(
+        self, *, organizer_slug: str, event_slug: str, subevent_id: str
+    ) -> dict:
+        return self._request(
+            "GET",
+            f"/organizers/{organizer_slug}/events/{event_slug}/subevents/{subevent_id}/",
+        )
+
     def patch_subevent(
         self,
         *,

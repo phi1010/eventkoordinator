@@ -84,9 +84,25 @@ def get_sync_status(request, series_id: UUID, event_id: UUID) -> EventSyncInfo:
     targets = SyncBaseTarget.objects.all()
     statuses = []
     for target in targets:
-        status = target.get_status(event)
         matching = _items_for_target_and_event(target, event)
         latest_item = max(matching, key=lambda i: i.updated_at) if matching else None
+
+        # Aggregate item-level statuses (highest severity wins).
+        if not matching:
+            agg_status = SyncBaseTarget.SyncTargetStatus.NO_ENTRY_EXISTS
+        else:
+            item_statuses = [item.get_status() for item in matching]
+            if any(s == SyncBaseTarget.SyncTargetStatus.ENTRY_DIFFERS for s in item_statuses):
+                agg_status = SyncBaseTarget.SyncTargetStatus.ENTRY_DIFFERS
+            elif any(s == SyncBaseTarget.SyncTargetStatus.STATUS_UNKNOWN for s in item_statuses):
+                agg_status = SyncBaseTarget.SyncTargetStatus.STATUS_UNKNOWN
+            elif any(s == SyncBaseTarget.SyncTargetStatus.CREATION_PENDING for s in item_statuses):
+                agg_status = SyncBaseTarget.SyncTargetStatus.CREATION_PENDING
+            elif all(s == SyncBaseTarget.SyncTargetStatus.NO_ENTRY_EXISTS for s in item_statuses):
+                agg_status = SyncBaseTarget.SyncTargetStatus.NO_ENTRY_EXISTS
+            else:
+                agg_status = SyncBaseTarget.SyncTargetStatus.ENTRY_UP_TO_DATE
+
         # Determine push/delete capability by querying real instance permissions.
         if matching:
             can_push = any(
@@ -109,7 +125,7 @@ def get_sync_status(request, series_id: UUID, event_id: UUID) -> EventSyncInfo:
             SyncStatus(
                 target_id=target.pk,
                 platform=target.type,
-                status=status.value,
+                status=agg_status.value,
                 last_synced=(
                     latest_item.updated_at.isoformat() if latest_item else None
                 ),

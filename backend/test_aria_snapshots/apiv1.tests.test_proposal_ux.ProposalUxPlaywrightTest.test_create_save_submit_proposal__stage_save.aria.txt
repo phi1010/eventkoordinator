@@ -10,58 +10,39 @@
     - heading "Proposals" [level=2]
     - button "Create New Proposal"
     - listbox "Proposals":
-      - option "Intro to wood joints Workshop" [selected]
+      - option [selected]
   - main "Proposals content":
     - heading "Proposal Editor" [level=1]
     - form "Proposal editor":
-      - group:
-        - text: General Information Title (max 30 characters)
-        - textbox "Title (max 30 characters)": Intro to wood joints
-        - text: 20/30 No image uploaded yet. Proposal image
-        - button "Proposal image"
-        - text: Upload a JPG or PNG image up to 10 MB for this proposal. Submission Type
-        - combobox "Submission Type":
-          - option "-- Select submission type --"
-          - option "Workshop" [selected]
-        - text: "Workshop: Fixed booking, fee required, providers receive a remuneration; Open offer: No booking or fee required; takes place in the main building. Area (optional)"
-        - combobox "Area (optional)":
-          - option "-- Select an area --"
-          - option "Woodworking" [selected]
-        - text: Language
-        - combobox "Language":
-          - option "-- Select language --"
-          - option "German" [selected]
-        - text: Abstract (50-250 characters)
-        - textbox "Abstract (50-250 characters)": A hands-on workshop introducing simple woodworking joints for beginners.
-        - text: This will be published on our website in the program overview. (50–250 characters) 72/250 Description (50-1000 characters)
-        - textbox "Description (50-1000 characters)": Participants learn safe tool handling and build sample joints with guided practice and feedback.
-        - text: This will be published on our website in the detailed description. Please include goal, prerequisites and whether participants take something home. (50–1000 characters) 96/1000 Internal Notes (optional)
-        - textbox "Internal Notes (optional)"
-        - text: Internal notes are not public. Mention equipment needs (e.g., laptops, projector, laser cutter). Number of Days
-        - spinbutton "Number of Days": "1"
-        - text: Number of days for the event (minimum 1). Time per Day (HH:MM or minutes)
-        - textbox "Time per Day (HH:MM or minutes)":
-          - /placeholder: HH:MM
-          - text: 02:00
-        - text: "Time per day in HH:MM format. Product of days and time should be greater than zero. (Example: 08:30 for 8 hours 30 minutes) How often would you offer this event?"
-        - spinbutton "How often would you offer this event?": "1"
+      - group: General Information
       - group: Additional Information
-      - group: About Yourself
+      - group:
+        - text: About Yourself
+        - checkbox "Are you a regular member?"
+        - text: Are you a regular member?
+        - checkbox "Do you have ZAM-building access?"
+        - text: Do you have ZAM-building access? Owner proposalux-user The owner is automatically set to the user who creates the proposal and cannot be changed. Editors Editors can view and modify this proposal. Add users who should be able to edit the proposal content.
+        - combobox "Editors"
+        - text: Editors can view and modify this proposal. Add users who should be able to edit the proposal content.
+        - heading "Speakers" [level=3]
+        - heading "Added Speakers (1)" [level=4]
+        - text: Sample Speaker speaker@example.com Sample Speaker has many years of workshop facilitation and practical making experience.
+        - button "Edit"
+        - button "Remove"
+        - heading "Add New Speaker" [level=4]
+        - text: "You can upload or change a speaker image after adding the speaker via Edit. Email (required):"
+        - textbox "Email (required):"
+        - text: "e.g., john@example.com Display Name:"
+        - textbox "Display Name:"
+        - text: "e.g., John Doe Biography:"
+        - textbox "Biography:"
+        - text: Brief speaker biography (minimum 50 characters recommended)
+        - checkbox "Use Gravatar for profile picture"
+        - text: Use Gravatar for profile picture
+        - button "+ Add Speaker"
+      - alert: "Failed to fetch proposal checklist: Internal Server Error"
       - button "Save Proposal" [disabled]
       - button "Delete Proposal"
     - heading "Submission Checklist" [level=3]
-    - list:
-      - listitem: ✓ Title (max 30 characters)
-      - listitem: ✓ Abstract (50-250 characters)
-      - listitem: ✓ Description (50-1000 characters)
-      - listitem: ✓ Duration set
-      - listitem: ✓ Max participants set
-      - listitem: ✓ Occurrence count set
-      - listitem: ✓ Preferred dates specified
-      - listitem: ✓ Language selected
-      - listitem: ✓ Submission type selected
-      - listitem: ✓ Workshop area selected
-      - listitem: ✓ At least one speaker added
-      - listitem: ✓ All speakers have biography
+    - paragraph: Save the proposal to see the checklist
     - group: Edit history last changed just now
-    - button "Submit proposal"
