@@ -96,6 +96,16 @@
         - cell "Change":
           - link "Change":
             - /url: /admin/apiv1/submissiontype/
+      - row "Sync base targets Add Change":
+        - rowheader "Sync base targets":
+          - link "Sync base targets":
+            - /url: /admin/apiv1/syncbasetarget/
+        - cell "Add":
+          - link "Add":
+            - /url: /admin/apiv1/syncbasetarget/add/
+        - cell "Change":
+          - link "Change":
+            - /url: /admin/apiv1/syncbasetarget/
   - table "Authentication and Authorization":
     - caption:
       - link "Authentication and Authorization":
@@ -166,6 +176,26 @@
         - cell "Change":
           - link "Change":
             - /url: /admin/openid_user_management/openiduser/
+  - table "Sync_Ical":
+    - caption:
+      - link "Sync_Ical":
+        - /url: /admin/sync_ical/
+    - rowgroup:
+      - row "Model name Add link Change or view list link":
+        - columnheader "Model name"
+        - columnheader "Add link"
+        - columnheader "Change or view list link"
+    - rowgroup:
+      - row "Ical calender sync items Add Change":
+        - rowheader "Ical calender sync items":
+          - link "Ical calender sync items":
+            - /url: /admin/sync_ical/icalcalendersyncitem/
+        - cell "Add":
+          - link "Add":
+            - /url: /admin/sync_ical/icalcalendersyncitem/add/
+        - cell "Change":
+          - link "Change":
+            - /url: /admin/sync_ical/icalcalendersyncitem/
   - table "Sync_Pretix":
     - caption:
       - link "Sync_Pretix":
@@ -196,6 +226,26 @@
         - cell "Change":
           - link "Change":
             - /url: /admin/sync_pretix/pretixpricingconfiguration/
+      - row "Pretix sync items Add Change":
+        - rowheader "Pretix sync items":
+          - link "Pretix sync items":
+            - /url: /admin/sync_pretix/pretixsyncitem/
+        - cell "Add":
+          - link "Add":
+            - /url: /admin/sync_pretix/pretixsyncitem/add/
+        - cell "Change":
+          - link "Change":
+            - /url: /admin/sync_pretix/pretixsyncitem/
+      - row "Pretix sync target area associations Add Change":
+        - rowheader "Pretix sync target area associations":
+          - link "Pretix sync target area associations":
+            - /url: /admin/sync_pretix/pretixsynctargetareaassociation/
+        - cell "Add":
+          - link "Add":
+            - /url: /admin/sync_pretix/pretixsynctargetareaassociation/add/
+        - cell "Change":
+          - link "Change":
+            - /url: /admin/sync_pretix/pretixsynctargetareaassociation/
   - heading "Recent actions" [level=2]
   - heading "My actions" [level=3]
   - paragraph: None available
