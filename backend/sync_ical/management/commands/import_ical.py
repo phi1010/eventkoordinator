@@ -9,6 +9,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone as django_timezone
 
 from apiv1.models import Event, Series
+from sync_ical.models import IcalCalendarSyncTarget, IcalCalenderSyncItem
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,7 @@ def parse_calendar_data(
                 "uid": uid,
                 "description": _read_text_field(component, "DESCRIPTION"),
                 "categories": _read_categories(component),
+                "ical_definition": component.to_ical().decode("utf-8"),
             }
         )
 
@@ -124,17 +126,23 @@ class Command(BaseCommand):
             "--url",
             type=str,
             default="https://www.zam.haus/?mec-ical-feed=1",
-            help="URL to fetch iCalendar data from (default: ZAM Haus)",
+            help="URL of the iCalendar feed – used as the canonical identifier for the sync target",
         )
         parser.add_argument(
             "--file",
             type=str,
-            help="Path to local iCalendar file (if provided, --url is ignored)",
+            help="Path to a local iCalendar file (content source; --url still identifies the sync target)",
         )
         parser.add_argument(
             "--clear",
             action="store_true",
             help="Clear existing series and events before importing",
+        )
+        parser.add_argument(
+            "--calendar-name",
+            type=str,
+            default="",
+            help="Human-readable name for the sync target calendar",
         )
 
     def handle(self, *args, **options):
@@ -143,13 +151,20 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING("Clearing existing series and events...")
             )
+            IcalCalenderSyncItem.objects.all().delete()
+            IcalCalendarSyncTarget.objects.all().delete()
             Event.objects.all().delete()
             Series.objects.all().delete()
             self.stdout.write(self.style.SUCCESS("Cleared."))
 
+        source_url = options["url"]
+
         # Fetch or load iCalendar data
         if options["file"]:
-            self.stdout.write(f"Loading iCalendar from file: {options['file']}")
+            self.stdout.write(
+                f"Loading iCalendar from file: {options['file']} "
+                f"(sync target URL: {source_url})"
+            )
             try:
                 with open(options["file"], "r", encoding="utf-8") as f:
                     ics_content = f.read()
@@ -157,15 +172,28 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR(f"Failed to read file: {e}"))
                 return
         else:
-            url = options["url"]
-            self.stdout.write(f"Fetching iCalendar from URL: {url}")
+            self.stdout.write(f"Fetching iCalendar from URL: {source_url}")
             try:
-                response = requests.get(url)
+                response = requests.get(source_url)
                 response.raise_for_status()
                 ics_content = response.text
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"Failed to fetch calendar: {e}"))
                 return
+
+        # Create or update the sync target
+        calendar_name = options.get("calendar_name") or source_url
+        sync_target, target_created = IcalCalendarSyncTarget.objects.get_or_create(
+            url=source_url,
+            defaults={"name": calendar_name},
+        )
+        if not target_created and options.get("calendar_name"):
+            sync_target.name = calendar_name
+            sync_target.save()
+
+        self.stdout.write(
+            f"{'Created' if target_created else 'Using existing'} sync target: {sync_target.name}"
+        )
 
         # Parse calendar data
         self.stdout.write("Parsing calendar data...")
@@ -182,7 +210,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Found {len(raw_events)} events")
 
         # Group events by series (by title)
-        series_map = {}
+        series_map: dict[str, dict] = {}
         for raw_event in raw_events:
             title = raw_event["summary"]
 
@@ -200,6 +228,9 @@ class Command(BaseCommand):
                     "start_time": raw_event["dtstart"],
                     "end_time": raw_event["dtend"],
                     "tag": tag,
+                    # Unique occurrence key: uid + dtstart handles recurring events
+                    "occurrence_uid": f"{raw_event['uid']}_{raw_event['dtstart'].isoformat()}",
+                    "ical_definition": raw_event["ical_definition"],
                 }
             )
 
@@ -207,18 +238,14 @@ class Command(BaseCommand):
         created_count = 0
         for series_name, series_data in series_map.items():
             try:
-                # Create or update series
                 series = Series.objects.create(
-                    **{
-                        "name": series_data["name"],
-                        "description": series_data["description"],
-                    }
+                    name=series_data["name"],
+                    description=series_data["description"],
                 )
                 created_count += 1
 
-                # Create events for this series
                 for event_data in series_data["events"]:
-                    Event.objects.create(
+                    event = Event.objects.create(
                         series=series,
                         name=event_data["name"],
                         start_time=event_data["start_time"],
@@ -226,10 +253,18 @@ class Command(BaseCommand):
                         tag=event_data["tag"],
                         use_full_days=True,
                     )
+                    IcalCalenderSyncItem.objects.get_or_create(
+                        uid=event_data["occurrence_uid"],
+                        defaults={
+                            "calendar": sync_target,
+                            "related_event": event,
+                            "ical_definition": event_data["ical_definition"],
+                        },
+                    )
 
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f"{'Created'} series: {series.name} "
+                        f"Created series: {series.name} "
                         f"with {len(series_data['events'])} events"
                     )
                 )
@@ -243,3 +278,4 @@ class Command(BaseCommand):
                 f"\nImport complete! Created {created_count} new series."
             )
         )
+

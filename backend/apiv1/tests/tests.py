@@ -12,7 +12,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 
-from apiv1.management.commands.import_ical import parse_calendar_data
+from sync_ical.management.commands.import_ical import parse_calendar_data
 from apiv1.models import (
     Event,
     Proposal,
@@ -200,7 +200,7 @@ END:VCALENDAR
             calendar_file.write(ics_content)
             calendar_file.flush()
 
-            with patch("apiv1.management.commands.import_ical.django_timezone.now", return_value=fixed_now):
+            with patch("sync_ical.management.commands.import_ical.django_timezone.now", return_value=fixed_now):
                 call_command("import_ical", file=calendar_file.name)
 
         series = Series.objects.get(name="Recurring Import")

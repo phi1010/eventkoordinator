@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import type { Event, Series, ExternalCalendarEvent } from './api'
 import {
   fetchSyncStatus,
+  fetchSyncTargets,
+  createSyncItem,
   fetchExternalCalendarEvents,
   pushToPlatform,
   updateEvent,
@@ -14,6 +16,7 @@ import {
   checkObjectPermission,
   type CalculatedPrices,
   type EventSyncInfo,
+  type SyncTarget,
 } from './api'
 import type { CalendarEvent, Resource } from './calendarTypes'
 import WeekViewCombined from './WeekViewCombined'
@@ -85,6 +88,8 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pushing, setPushing] = useState<string | null>(null)
+  const [syncTargets, setSyncTargets] = useState<SyncTarget[]>([])
+  const [creatingSyncItem, setCreatingSyncItem] = useState<string | null>(null)
 
   // Edit form state
   const [name, setName] = useState(event.name)
@@ -232,11 +237,15 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
   }, [event.id, event.name, event.startTime, event.endTime, event.tag, event.useFullDays])
 
   useEffect(() => {
-    const loadSyncStatus = async () => {
+    const loadSyncData = async () => {
       try {
         setLoading(true)
-        const data = await fetchSyncStatus(series.id, event.id)
-        setSyncInfo(data)
+        const [statusData, targetsData] = await Promise.all([
+          fetchSyncStatus(series.id, event.id),
+          fetchSyncTargets().catch(() => [] as SyncTarget[]),
+        ])
+        setSyncInfo(statusData)
+        setSyncTargets(targetsData)
         setError(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch sync status')
@@ -245,7 +254,7 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
       }
     }
 
-    loadSyncStatus()
+    loadSyncData()
   }, [series.id, event.id])
 
   useEffect(() => {
@@ -465,6 +474,21 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
       setEditError(err instanceof Error ? err.message : 'Failed to delete event')
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  const handleCreateSyncItem = async (targetId: string) => {
+    try {
+      setCreatingSyncItem(targetId)
+      await createSyncItem(targetId, event.id)
+
+      // Refresh sync status after creating the item
+      const data = await fetchSyncStatus(series.id, event.id)
+      setSyncInfo(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create sync entry')
+    } finally {
+      setCreatingSyncItem(null)
     }
   }
 
@@ -928,62 +952,92 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
 
         {syncInfo && (
           <div className={styles.syncGrid}>
-            {syncInfo.sync_statuses.map((sync) => (
-              <div key={sync.platform} className={styles.syncCard}>
-                <div className={styles.cardHeader}>
-                  <h4>{sync.platform}</h4>
-                  <div
-                    className={styles.statusBadge}
-                    style={{ backgroundColor: getStatusColor(sync.status) }}
-                  >
-                    {getStatusLabel(sync.status)}
+            {syncInfo.sync_statuses.map((sync) => {
+              // Find the matching sync target for this platform
+              const matchingTarget = syncTargets.find((t) => t.type === sync.platform)
+
+              return (
+                <div key={sync.platform} className={styles.syncCard}>
+                  <div className={styles.cardHeader}>
+                    <h4>{sync.platform}</h4>
+                    <div
+                      className={styles.statusBadge}
+                      style={{ backgroundColor: getStatusColor(sync.status) }}
+                    >
+                      {getStatusLabel(sync.status)}
+                    </div>
                   </div>
-                </div>
 
-                <div className={styles.cardBody}>
-                  {sync.last_synced && (
-                    <div className={styles.info}>
-                      <span className={styles.infoLabel}>Last synced:</span>
-                      <span className={styles.infoValue}>
-                        {new Date(sync.last_synced).toLocaleDateString('de-DE', {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
+                  {matchingTarget && Object.keys(matchingTarget.public_properties).length > 0 && (
+                    <div className={styles.cardBody}>
+                      {Object.entries(matchingTarget.public_properties).map(([key, value]) => (
+                        <div key={key} className={styles.info}>
+                          <span className={styles.infoLabel}>{key}:</span>
+                          <span className={styles.infoValue}>{value}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
 
-                  {sync.last_error && (
-                    <div className={styles.error}>
-                      <span className={styles.infoLabel}>Error:</span>
-                      <span className={styles.infoValue}>{sync.last_error}</span>
-                    </div>
+                  <div className={styles.cardBody}>
+                    {sync.last_synced && (
+                      <div className={styles.info}>
+                        <span className={styles.infoLabel}>Last synced:</span>
+                        <span className={styles.infoValue}>
+                          {new Date(sync.last_synced).toLocaleDateString('de-DE', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                    )}
+
+                    {sync.last_error && (
+                      <div className={styles.error}>
+                        <span className={styles.infoLabel}>Error:</span>
+                        <span className={styles.infoValue}>{sync.last_error}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {sync.status === 'no entry exists' && matchingTarget ? (
+                    <button
+                      type="button"
+                      className={styles.pushButton}
+                      onClick={() => handleCreateSyncItem(matchingTarget.id)}
+                      disabled={creatingSyncItem === matchingTarget.id}
+                      aria-label={`Create sync entry for ${sync.platform}`}
+                    >
+                      {creatingSyncItem === matchingTarget.id ? 'Creating...' : 'Create Sync Entry'}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className={styles.pushButton}
+                        onClick={() => handlePush(sync.platform)}
+                        disabled={pushing === sync.platform}
+                        aria-label={`Push or update event to ${sync.platform}`}
+                      >
+                        {pushing === sync.platform ? 'Pushing...' : 'Push/Update'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className={styles.diffButton}
+                        onClick={() => handleViewDiff(sync.platform)}
+                        disabled={pushing === sync.platform}
+                        aria-label={`View differences for ${sync.platform}`}
+                      >
+                        View Diff
+                      </button>
+                    </>
                   )}
                 </div>
-
-                <button
-                  type="button"
-                  className={styles.pushButton}
-                  onClick={() => handlePush(sync.platform)}
-                  disabled={pushing === sync.platform}
-                  aria-label={`Push or update event to ${sync.platform}`}
-                >
-                  {pushing === sync.platform ? 'Pushing...' : 'Push/Update'}
-                </button>
-
-                <button
-                  type="button"
-                  className={styles.diffButton}
-                  onClick={() => handleViewDiff(sync.platform)}
-                  disabled={pushing === sync.platform}
-                  aria-label={`View differences for ${sync.platform}`}
-                >
-                  View Diff
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

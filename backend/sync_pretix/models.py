@@ -20,6 +20,8 @@ def default_min_participants_params():
 
 
 class PretixSyncTarget(SyncBaseTarget):
+    secret_field_names = ["api_token"]
+
     api_token = models.CharField(
         max_length=255,
         verbose_name="Pretix API Token",

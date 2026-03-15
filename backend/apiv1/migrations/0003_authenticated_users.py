@@ -46,7 +46,7 @@ def add_authenticated_users_group(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('apiv1', '0009_remove_historicalproposal_associated_event_and_more'),
+        ('apiv1', '0002_initial'),
         ('auth', '__latest__'),
         ('contenttypes', '__latest__'),
         ('openid_user_management', '__latest__'),

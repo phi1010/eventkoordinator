@@ -49,25 +49,18 @@ docker container prune -f
 # Delete volumes if requested
 if [[ "$DELETE_VOLUMES" == "true" ]]; then
   echo "Deleting volumes..."
-  ./debug-docker-compose.sh down -v
+  ./debug-docker-compose.sh down -v db
 fi
+./debug-docker-compose.sh up -d db pretix
 
-# Restart
-./debug-docker-compose.sh build
-./debug-docker-compose.sh run --rm backend ./manage.py migrate
+pushd backend
+./manage.py migrate
 
 # Delete volumes if requested
 if [[ "$DELETE_VOLUMES" == "true" ]]; then
   echo "Recreating database and creating admin user..."
-  ./debug-docker-compose.sh run --rm backend ./manage.py create_openid_user --username admin --email mail@phi010.com --is-staff --is-superuser --password admin
-  ./debug-docker-compose.sh run --rm backend ./manage.py import_ical
-  ./debug-docker-compose.sh up pretix -d
-  # wait for pretix to be up and running
-  until curl -s http://localhost:8282/api/v1/; do
-    echo "Waiting for pretix to be up..."
-    sleep 5
-  done
-  # playwright is not installed in the container
-  (cd backend && DJANGO_PRETIX_API_BASE_URL="http://localhost:8282/api/v1" ./manage.py sync_pretix_areas)
+  ./manage.py create_openid_user --username admin --email mail@phi010.com --is-staff --is-superuser --password admin
+  ./manage.py import_ical
+DJANGO_PRETIX_API_BASE_URL="http://localhost:8282/api/v1" ./manage.py sync_pretix_areas
 fi
-./debug-docker-compose.sh up
+popd

@@ -338,10 +338,50 @@ export interface SyncDiffData {
   properties: PropertyDiff[]
 }
 
+export interface SyncTarget {
+  id: string
+  type: string
+  public_properties: Record<string, string>
+}
+
+export interface CreateSyncItemResult {
+  id: string
+  sync_target_id: string
+  event_id: string
+}
+
 export interface ProposalSummary {
   id: string
   title: string
   submission_type: string
+}
+
+export async function fetchSyncTargets(): Promise<SyncTarget[]> {
+  const { data, error, response } = await client.GET('/api/v1/sync/targets')
+
+  if (error || !response.ok) {
+    throw new Error(`Failed to fetch sync targets: ${response.statusText}`)
+  }
+
+  return data as unknown as SyncTarget[]
+}
+
+export async function createSyncItem(
+  syncTargetId: string,
+  eventId: string
+): Promise<CreateSyncItemResult> {
+  const { data, error, response } = await client.POST('/api/v1/sync/items', {
+    body: {
+      sync_target_id: syncTargetId,
+      event_id: eventId,
+    },
+  })
+
+  if (error || !response.ok) {
+    throw new Error(`Failed to create sync item: ${response.statusText}`)
+  }
+
+  return data as unknown as CreateSyncItemResult
 }
 
 export async function fetchSyncStatus(

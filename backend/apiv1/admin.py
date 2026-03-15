@@ -4,6 +4,7 @@ from polymorphic.admin import PolymorphicParentModelAdmin
 from simple_history.admin import SimpleHistoryAdmin
 from viewflow import fsm
 
+from sync_ical.models import IcalCalendarSyncTarget
 from . import models
 from .flows import ProposalFlow
 from sync_pretix.models import PretixSyncTargetAreaAssociation, PretixSyncTarget
@@ -146,6 +147,9 @@ class SyncBaseTargetAdmin(PolymorphicParentModelAdmin, SimpleHistoryAdmin):
         "type",
         "created_at",
     )
-    child_models = (PretixSyncTarget,)
+    child_models = (
+        PretixSyncTarget,
+        IcalCalendarSyncTarget,
+    )
     readonly_fields = ("id", "type", "created_at")
     fields = ("id", "type", "created_at")

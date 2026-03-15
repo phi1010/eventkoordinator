@@ -4,6 +4,7 @@ Centralized schema definitions for the API.
 This module contains all Pydantic schema definitions used across the API
 to avoid circular imports and serve as a single source of truth for API contracts.
 """
+
 import uuid
 
 from ninja import Schema
@@ -35,7 +36,7 @@ class Event(Schema):
     id: uuid.UUID
     name: str
     startTime: str  # ISO format string
-    endTime: str    # ISO format string
+    endTime: str  # ISO format string
     tag: Optional[str] = None
     useFullDays: bool = False
     proposal_id: Optional[uuid.UUID] = None
@@ -106,20 +107,6 @@ class EventWithID(Schema):
     tag: Optional[str] = None
 
 
-class PropertyDiff(Schema):
-    property_name: str
-    local_value: str
-    remote_value: str
-    file_type: str
-
-
-class SyncDiffData(Schema):
-    series_id: uuid.UUID
-    event_id: uuid.UUID
-    platform: str
-    properties: list[PropertyDiff]
-
-
 class UpdateSeriesIn(Schema):
     name: Optional[str] = None
     description: Optional[str] = None
@@ -139,7 +126,6 @@ class ProposalSummary(Schema):
     id: uuid.UUID
     title: str
     submission_type: str
-
 
 
 class ProposalChecklistItem(Schema):
@@ -289,6 +275,7 @@ class ExternalCalendarEvent(Schema):
 
 class ProposalHistoryEntry(Schema):
     """Represents a single change in the proposal's history."""
+
     timestamp: str  # ISO format datetime
     changed_by: str  # username of user who made the change
     change_type: str  # 'create', 'change', 'delete'
@@ -300,12 +287,14 @@ class ProposalHistoryEntry(Schema):
 
 class ProposalHistory(Schema):
     """List of historical changes for a proposal."""
+
     proposal_id: uuid.UUID
     entries: list[ProposalHistoryEntry]
 
 
 class ProposalTransitionOut(Schema):
     """Information about a single available or unavailable transition."""
+
     action: str  # 'submit', 'accept', 'reject', 'revise'
     label: str  # human-readable label
     target_status: str  # target status
@@ -315,6 +304,7 @@ class ProposalTransitionOut(Schema):
 
 class ProposalTransitions(Schema):
     """List of available transitions for a proposal."""
+
     proposal_id: uuid.UUID
     current_status: str
     transitions: list[ProposalTransitionOut]
@@ -322,6 +312,7 @@ class ProposalTransitions(Schema):
 
 class ProposalEventSummary(Schema):
     """Summary of an event linked to a proposal."""
+
     id: uuid.UUID
     name: str
     startTime: str
@@ -333,6 +324,7 @@ class ProposalEventSummary(Schema):
 
 class EventTransitionOut(Schema):
     """Information about a single available or unavailable event transition."""
+
     action: str
     label: str
     target_status: str
@@ -342,6 +334,7 @@ class EventTransitionOut(Schema):
 
 class EventTransitions(Schema):
     """List of available transitions for an event."""
+
     event_id: uuid.UUID
     current_status: str
     transitions: list[EventTransitionOut]
@@ -363,8 +356,6 @@ class UpdateCalculatedPricesIn(Schema):
     guest_discounted_gross_eur: Optional[str] = None
     business_net_eur: Optional[str] = None
 
-    model_config = {"extra": "forbid"}
-
 
 class CalculatedPricesOut(Schema):
     id: uuid.UUID
@@ -375,4 +366,21 @@ class CalculatedPricesOut(Schema):
     guest_regular_gross_eur: Optional[str] = None
     guest_discounted_gross_eur: Optional[str] = None
     business_net_eur: Optional[str] = None
+
+
+class SyncTargetOut(Schema):
+    id: uuid.UUID
+    type: str
+    public_properties: dict[str, str]
+
+
+class CreateSyncItemIn(Schema):
+    sync_target_id: uuid.UUID
+    event_id: uuid.UUID
+
+
+class CreateSyncItemOut(Schema):
+    id: uuid.UUID
+    sync_target_id: uuid.UUID
+    event_id: uuid.UUID
 
