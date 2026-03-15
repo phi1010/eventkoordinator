@@ -2,27 +2,38 @@
 Sync router.
 Handles endpoints for synchronization status, pushing to platforms, and diffing.
 """
+
 import logging
 from uuid import UUID
+
 import django
 import django.utils.timezone
 from django.shortcuts import get_object_or_404
 from ninja import Router
+
 import apiv1
-from apiv1.api_utils import api_permission_required, api_permission_mandatory
+from apiv1.api_utils import api_permission_mandatory, api_permission_required
 from apiv1.models import Event
-from apiv1.models.sync.syncbasedata import SyncBaseTarget, SyncBaseItem, SyncDiffData, PropertyDiff
-from apiv1.schemas import (
-    EventSyncInfo,
-    SyncStatus,
-    SyncPushResult,
-    SyncDeleteResult,
-    ErrorOut,
-    SyncTargetOut,
-    SyncItemOut,
+from apiv1.models.sync.syncbasedata import (
+    PropertyDiff,
+    SyncBaseItem,
+    SyncBaseTarget,
+    SyncDiffData,
 )
+from apiv1.schemas import (
+    ErrorOut,
+    EventSyncInfo,
+    SyncDeleteResult,
+    SyncItemOut,
+    SyncPushResult,
+    SyncStatus,
+    SyncTargetOut,
+)
+
 logger = logging.getLogger(__name__)
 router = Router()
+
+
 def _items_for_target_and_event(
     target: SyncBaseTarget, event: Event
 ) -> list[SyncBaseItem]:
@@ -32,6 +43,8 @@ def _items_for_target_and_event(
         for item in SyncBaseItem.objects.filter(related_event=event)
         if getattr(item.sync_target, "pk", None) == target.pk
     ]
+
+
 @router.get(
     "/targets",
     response={200: list[SyncTargetOut], 401: ErrorOut, 403: ErrorOut},
@@ -48,9 +61,17 @@ def list_sync_targets(request) -> list[SyncTargetOut]:
         )
         for target in targets
     ]
+
+
 @router.post(
     "/create/{series_id}/{event_id}/{target_id}",
-    response={200: SyncItemOut, 400: ErrorOut, 401: ErrorOut, 403: ErrorOut, 404: ErrorOut},
+    response={
+        200: SyncItemOut,
+        400: ErrorOut,
+        401: ErrorOut,
+        403: ErrorOut,
+        404: ErrorOut,
+    },
 )
 @api_permission_required((apiv1, "add", SyncBaseItem))
 def create_sync_item(request, series_id: UUID, event_id: UUID, target_id: UUID):
@@ -70,6 +91,8 @@ def create_sync_item(request, series_id: UUID, event_id: UUID, target_id: UUID):
         target_id=target.pk,
         event_id=event.pk,
     )
+
+
 @router.get(
     "/status/{series_id}/{event_id}",
     response={200: EventSyncInfo, 401: ErrorOut, 403: ErrorOut, 404: ErrorOut},
@@ -92,13 +115,25 @@ def get_sync_status(request, series_id: UUID, event_id: UUID) -> EventSyncInfo:
             agg_status = SyncBaseTarget.SyncTargetStatus.NO_ENTRY_EXISTS
         else:
             item_statuses = [item.get_status() for item in matching]
-            if any(s == SyncBaseTarget.SyncTargetStatus.ENTRY_DIFFERS for s in item_statuses):
+            if any(
+                s == SyncBaseTarget.SyncTargetStatus.ENTRY_DIFFERS
+                for s in item_statuses
+            ):
                 agg_status = SyncBaseTarget.SyncTargetStatus.ENTRY_DIFFERS
-            elif any(s == SyncBaseTarget.SyncTargetStatus.STATUS_UNKNOWN for s in item_statuses):
+            elif any(
+                s == SyncBaseTarget.SyncTargetStatus.STATUS_UNKNOWN
+                for s in item_statuses
+            ):
                 agg_status = SyncBaseTarget.SyncTargetStatus.STATUS_UNKNOWN
-            elif any(s == SyncBaseTarget.SyncTargetStatus.CREATION_PENDING for s in item_statuses):
+            elif any(
+                s == SyncBaseTarget.SyncTargetStatus.CREATION_PENDING
+                for s in item_statuses
+            ):
                 agg_status = SyncBaseTarget.SyncTargetStatus.CREATION_PENDING
-            elif all(s == SyncBaseTarget.SyncTargetStatus.NO_ENTRY_EXISTS for s in item_statuses):
+            elif all(
+                s == SyncBaseTarget.SyncTargetStatus.NO_ENTRY_EXISTS
+                for s in item_statuses
+            ):
                 agg_status = SyncBaseTarget.SyncTargetStatus.NO_ENTRY_EXISTS
             else:
                 agg_status = SyncBaseTarget.SyncTargetStatus.ENTRY_UP_TO_DATE
@@ -139,9 +174,17 @@ def get_sync_status(request, series_id: UUID, event_id: UUID) -> EventSyncInfo:
         event_id=event_id,
         sync_statuses=statuses,
     )
+
+
 @router.delete(
     "/delete/{series_id}/{event_id}/{target_id}",
-    response={200: SyncDeleteResult, 400: ErrorOut, 401: ErrorOut, 403: ErrorOut, 404: ErrorOut},
+    response={
+        200: SyncDeleteResult,
+        400: ErrorOut,
+        401: ErrorOut,
+        403: ErrorOut,
+        404: ErrorOut,
+    },
 )
 @api_permission_mandatory()
 def delete_remote_sync_item(
@@ -219,6 +262,8 @@ def push_to_platform(
         series_id=series_id,
         event_id=event_id,
     )
+
+
 @router.get(
     "/diff/{series_id}/{event_id}/{target_id}",
     response={200: SyncDiffData, 401: ErrorOut, 403: ErrorOut, 404: ErrorOut},
