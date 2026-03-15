@@ -480,7 +480,7 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
   const handleCreateSyncItem = async (targetId: string) => {
     try {
       setCreatingSyncItem(targetId)
-      await createSyncItem(targetId, event.id)
+      await createSyncItem(targetId, series.id, event.id)
 
       // Refresh sync status after creating the item
       const data = await fetchSyncStatus(series.id, event.id)

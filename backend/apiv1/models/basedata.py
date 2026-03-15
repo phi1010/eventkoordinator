@@ -380,7 +380,8 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
             ),
         ]
 
-    def get_total_duration_minutes(self) -> int:
+    @property
+    def total_duration_minutes(self) -> int:
         """Calculate total duration in minutes."""
         time_minutes = time_string_to_minutes(self.duration_time_per_day)
         return self.duration_days * time_minutes
@@ -419,7 +420,7 @@ def check_proposal_required_fields(proposal: Proposal) -> dict[Any, Any]:
 
     # Duration validation
     durationset = "Duration set"
-    total_minutes = proposal.get_total_duration_minutes()
+    total_minutes = proposal.total_duration_minutes()
     if total_minutes >= 1:
         checklist[durationset] = {"status": "ok"}
     else:

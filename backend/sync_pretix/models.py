@@ -66,7 +66,7 @@ class PretixSyncTarget(SyncBaseTarget):
         item, _created = PretixSyncItem.objects.get_or_create(
             sync_target=self,
             related_event=event,
-            defaults={"event_slug": association.event_slug},
+            defaults={"event_slug": association.event_slug, "flag_push": True},
         )
         return item
 

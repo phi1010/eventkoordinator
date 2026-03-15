@@ -86,9 +86,11 @@ def create_sync_item(request, series_id: UUID, event_id: UUID, target_id: UUID):
     try:
         item = target.get_real_instance().create_new_sync_item(event)
     except NotImplementedError as exc:
-        return 400, ErrorOut(error=str(exc))
+        logger.warning(f"Failed to create sync item: {exc}")
+        return 400, ErrorOut(error="Not implemented")
     except ValueError as exc:
-        return 400, ErrorOut(error=str(exc))
+        logger.warning(f"Failed to create sync item: {exc}")
+        return 400, ErrorOut(error="Value error")
 
     return 200, SyncItemOut(
         id=item.pk,

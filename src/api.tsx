@@ -347,7 +347,7 @@ export interface SyncTarget {
 
 export interface CreateSyncItemResult {
   id: string
-  sync_target_id: string
+  target_id: string
   event_id: string
 }
 
@@ -368,15 +368,22 @@ export async function fetchSyncTargets(): Promise<SyncTarget[]> {
 }
 
 export async function createSyncItem(
-  syncTargetId: string,
+  targetId: string,
+  seriesId: string,
   eventId: string
 ): Promise<CreateSyncItemResult> {
-  const { data, error, response } = await client.POST('/api/v1/sync/items', {
-    body: {
-      sync_target_id: syncTargetId,
-      event_id: eventId,
-    },
-  })
+  const { data, error, response } = await client.POST(
+    '/api/v1/sync/create/{series_id}/{event_id}/{target_id}',
+    {
+      params: {
+        path: {
+          series_id: seriesId,
+          event_id: eventId,
+          target_id: targetId,
+        },
+      },
+    }
+  )
 
   if (error || !response.ok) {
     throw new Error(`Failed to create sync item: ${response.statusText}`)

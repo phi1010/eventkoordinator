@@ -1,14 +1,28 @@
 from django.contrib import admin
 from django.contrib.admin import ModelAdmin
-from polymorphic.admin import PolymorphicParentModelAdmin
+from polymorphic.admin import PolymorphicInlineSupportMixin, PolymorphicParentModelAdmin, StackedPolymorphicInline
 from simple_history.admin import SimpleHistoryAdmin
 from viewflow import fsm
 
-from sync_ical.models import IcalCalendarSyncTarget
+from sync_ical.models import IcalCalendarSyncTarget, IcalCalenderSyncItem
 from . import models
 from .flows import ProposalFlow
-from sync_pretix.models import PretixSyncTargetAreaAssociation, PretixSyncTarget
+from sync_pretix.models import PretixSyncTargetAreaAssociation, PretixSyncTarget, PretixSyncItem
 from .models import SyncBaseTarget, SyncBaseItem
+
+
+class LinkedEventsInline(admin.TabularInline):
+    model = models.Event
+    extra = 0
+    ordering = ("start_time",)
+    fields = ("name", "series", "start_time", "end_time", "status")
+    readonly_fields = ("name", "series", "start_time", "end_time", "status")
+    show_change_link = True
+    verbose_name = "Linked Event"
+    verbose_name_plural = "Linked Events"
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 class SpeakerInline(admin.TabularInline):
@@ -38,12 +52,54 @@ class SeriesAdmin(SimpleHistoryAdmin):
     ordering = ("name",)
 
 
+class LinkedSyncItemsInline(StackedPolymorphicInline):
+    model = SyncBaseItem
+
+    class PretixSyncItemInline(StackedPolymorphicInline.Child):
+        model = PretixSyncItem
+        readonly_fields = ("sync_target", "event_slug", "flag_push")
+
+        def has_add_permission(self, request, obj=None):
+            return False
+
+        def has_change_permission(self, request, obj=None):
+            return False
+
+        def has_delete_permission(self, request, obj=None):
+            return False
+
+    class IcalCalenderSyncItemInline(StackedPolymorphicInline.Child):
+        model = IcalCalenderSyncItem
+        readonly_fields = ("uid", "sync_target", "ical_definition", "flag_push")
+
+        def has_add_permission(self, request, obj=None):
+            return False
+
+        def has_change_permission(self, request, obj=None):
+            return False
+
+        def has_delete_permission(self, request, obj=None):
+            return False
+
+    child_inlines = (PretixSyncItemInline, IcalCalenderSyncItemInline)
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(models.Event)
-class EventAdmin(SimpleHistoryAdmin):
+class EventAdmin(PolymorphicInlineSupportMixin, SimpleHistoryAdmin):
     list_display = ("id", "name", "series", "start_time", "end_time")
     list_filter = ("series", "tag")
     search_fields = ("name", "tag")
     ordering = ("start_time",)
+    inlines = (LinkedSyncItemsInline,)
 
 
 @admin.register(models.SubmissionType)
@@ -106,7 +162,7 @@ class ProposalAdmin(fsm.FlowAdminMixin, SimpleHistoryAdmin):
     readonly_fields = ("created_at", "updated_at", "status")
     raw_id_fields = ("owner",)
     filter_horizontal = ("editors",)
-    inlines = (SpeakerInline,)
+    inlines = (SpeakerInline, LinkedEventsInline)
     fieldsets = (
         (
             "General",
@@ -126,7 +182,6 @@ class ProposalAdmin(fsm.FlowAdminMixin, SimpleHistoryAdmin):
             "Details",
             {
                 "fields": (
-                    "duration_minutes",
                     "occurrence_count",
                     "is_basic_course",
                     "max_participants",
