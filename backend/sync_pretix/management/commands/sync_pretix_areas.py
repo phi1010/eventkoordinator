@@ -54,9 +54,13 @@ class Command(BaseCommand):
     def _read_settings(self, options: dict) -> PretixSettings:
         return PretixSettings(
             api_base_url=options.get("api_base_url") or settings.PRETIX_API_BASE_URL,
-            event_currency="EUR",
-            event_timezone="Europe/Berlin",
-            event_locale="en",
+            api_token=options.get("api_token") or getattr(settings, "PRETIX_API_TOKEN", None),
+            organizer_slug=options.get("organizer_slug") or getattr(settings, "PRETIX_ORGANIZER_SLUG", "zam"),
+            organizer_name=options.get("organizer_name") or getattr(settings, "PRETIX_ORGANIZER_NAME", "ZAM"),
+            event_slug_prefix=options.get("event_slug_prefix") or getattr(settings, "PRETIX_EVENT_SLUG_PREFIX", "area"),
+            event_currency=getattr(settings, "PRETIX_EVENT_CURRENCY", "EUR"),
+            event_timezone=getattr(settings, "PRETIX_EVENT_TIMEZONE", "Europe/Berlin"),
+            event_locale=getattr(settings, "PRETIX_EVENT_LOCALE", "en"),
         )
 
     def _build_client(self, runtime_settings: PretixSettings) -> PretixApiClient:
