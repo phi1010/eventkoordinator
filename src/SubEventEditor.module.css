@@ -524,7 +524,7 @@
   line-height: 1;
 }
 
-.calendarSection {
+.workflowSection {
   background-color: #f5f5f5;
   border-radius: 8px;
   padding: 20px;
@@ -562,7 +562,7 @@
   gap: 12px;
 }
 
-.calendarSection h3 {
+.workflowSection h3 {
   margin: 0 0 8px 0;
   font-size: 1.1rem;
   color: #333;
@@ -643,13 +643,13 @@
 
   .editSection,
   .calculatedPricesSection,
-  .calendarSection {
+  .workflowSection {
     background-color: #1e1e2e;
   }
 
   .editSection h3,
   .calculatedPricesSection h3,
-  .calendarSection h3 {
+  .workflowSection h3 {
     color: #e0e0e0;
   }
 

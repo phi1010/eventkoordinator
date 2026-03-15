@@ -568,12 +568,14 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
       {/* ── Navigation ─────────────────────────────────────────────────────── */}
       <div className={styles.wvcNav}>
         <button
+          type="button"
           className={styles.wvcNavBtn}
           onClick={() => setWeekStart(d => addDays(d, -7))}
           aria-label="Previous week"
         >&#8249;</button>
         <span className={styles.wvcWeekLabel}>{weekLabel}</span>
         <button
+          type="button"
           className={styles.wvcNavBtn}
           onClick={() => setWeekStart(d => addDays(d, 7))}
           aria-label="Next week"
