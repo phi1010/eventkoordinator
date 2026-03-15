@@ -35,26 +35,26 @@
     - checkbox "Span full days"
     - text: Span full days
     - paragraph: When checked, the event spans continuously over midnight (e.g. Mon 08:00 → Tue 16:00 shows as one block). When unchecked, multi-day events are split into daily blocks using the same daily start/end hours (e.g. Mon <time-range> and Tue <time-range>).
+    - text: Displayed in local time. Stored in UTC. Drag on the calendar to update start and end.
+    - button "Previous week": ‹
+    - text: <week-range>
+    - button "Next week": ›
+    - text: "New events for:"
+    - combobox "New events for:":
+      - option "Event Schedule" [selected]
+    - text: Event Schedule
+    - grid:
+      - text: Mon 16 Mar <hour-grid>
+      - button "Test Event Link Session (internal-calendar), <time-range>": Test Event Link Session (internal-calendar)
+      - button "Test Event Link Session, <time-range>": Test Event Link Session
+      - text: Tue 17 Mar <hour-grid> Wed 18 Mar <hour-grid> Thu 19 Mar <hour-grid> Fri 20 Mar <hour-grid> Sat 21 Mar <hour-grid> Sun 22 Mar <hour-grid>
     - button "Save Changes" [disabled]
+  - heading "Workflow Status and Transitions" [level=3]
   - text: "Status: Draft"
   - button "Submit event" [disabled]
   - button "▶ Event lifecycle diagram"
   - heading "Calculated Prices" [level=3]
   - paragraph: No calculated prices exist for this event yet.
   - paragraph: You do not have permission to create calculated prices.
-  - heading "Pick Time in Calendar" [level=3]
-  - paragraph: Displayed in local time. Stored in UTC. Drag on the calendar to update start and end.
-  - button "Previous week": ‹
-  - text: <week-range>
-  - button "Next week": ›
-  - text: "New events for:"
-  - combobox "New events for:":
-    - option "Event Schedule" [selected]
-  - text: Event Schedule
-  - grid:
-    - text: Mon 16 Mar <hour-grid>
-    - button "Test Event Link Session (internal-calendar), <time-range>": Test Event Link Session (internal-calendar)
-    - button "Test Event Link Session, <time-range>": Test Event Link Session
-    - text: Tue 17 Mar <hour-grid> Wed 18 Mar <hour-grid> Thu 19 Mar <hour-grid> Fri 20 Mar <hour-grid> Sat 21 Mar <hour-grid> Sun 22 Mar <hour-grid>
   - heading "Synchronization Status" [level=3]
   - paragraph: Changes to this event will be synchronized across all platforms.

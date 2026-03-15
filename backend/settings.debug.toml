@@ -52,6 +52,7 @@ django = { level = "INFO", handlers = ["console"], propagate = false }
 "django.db.backends" = { level = "INFO", handlers = ["console"], propagate = false }
 mozilla_django_oidc = { level = "INFO", handlers = ["console"], propagate = false }
 "openid_user_management.models.has_perm" = { level = "INFO", handlers = ["console"], propagate = false }
+"apiv1.models.basedata.has_object_permission" = { level = "INFO", handlers = ["console"], propagate = false }
 
 [LOGGING.formatters]
 simple = { format = "[{asctime}] {levelname: <10} | {name: <32}: {message}", style = "{" }
