@@ -83,6 +83,8 @@ class SyncStatus(Schema):
     status: Literal["no entry exists", "entry up-to-date", "entry differs"]
     last_synced: Optional[str] = None
     last_error: Optional[str] = None
+    can_push: bool = False
+    can_delete: bool = False
 
 
 class EventSyncInfo(Schema):

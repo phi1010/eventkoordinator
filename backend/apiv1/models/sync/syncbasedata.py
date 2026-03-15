@@ -99,6 +99,11 @@ class SyncBaseItem(PolymorphicMetaBase):
     flag_push = models.BooleanField(default=False)
     related_event = models.ForeignKey(Event, on_delete=models.CASCADE)
 
+    class Meta:
+        permissions = [
+            ("push_syncbaseitem", "Can push sync item to remote platform"),
+        ]
+
     @property
     def sync_target(self) -> SyncBaseTarget | None:
         """Return the sync target for this item.

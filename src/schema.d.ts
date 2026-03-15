@@ -1741,6 +1741,16 @@ export interface components {
         };
         /** SyncStatus */
         SyncStatus: {
+            /**
+             * Can Delete
+             * @default false
+             */
+            can_delete: boolean;
+            /**
+             * Can Push
+             * @default false
+             */
+            can_push: boolean;
             /** Last Error */
             last_error?: string | null;
             /** Last Synced */

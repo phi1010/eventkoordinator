@@ -212,6 +212,189 @@ class SyncTargetsApiTest(TestCase):
         self.assertEqual(by_target[str(target2.pk)]["status"], "no entry exists")
 
     # ------------------------------------------------------------------ #
+    # GET /sync/status – can_push / can_delete permission flags
+    # ------------------------------------------------------------------ #
+
+    def test_sync_status_can_push_false_for_existing_item_without_permission(self) -> None:
+        """can_push must be False when items exist and user lacks push_syncbaseitem."""
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        IcalCalenderSyncItem.objects.create(
+            sync_target=target,
+            related_event=self.event,
+            uid="perm-push-uid",
+            ical_definition="BEGIN:VEVENT\nEND:VEVENT",
+        )
+        self._grant_permissions("view_event")
+        self._login(self.user)
+
+        response = self.client.get(f"/api/v1/sync/status/{self.series.pk}/{self.event.pk}")
+        self.assertEqual(response.status_code, 200)
+        status = response.json()["sync_statuses"][0]
+        self.assertFalse(status["can_push"])
+        self.assertFalse(status["can_delete"])
+
+    def test_sync_status_can_push_true_for_existing_item_with_permission(self) -> None:
+        """can_push must be True when items exist and user has push_syncbaseitem."""
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        IcalCalenderSyncItem.objects.create(
+            sync_target=target,
+            related_event=self.event,
+            uid="perm-push-uid2",
+            ical_definition="BEGIN:VEVENT\nEND:VEVENT",
+        )
+        self._grant_permissions("view_event", "push_syncbaseitem")
+        self._login(self.user)
+
+        response = self.client.get(f"/api/v1/sync/status/{self.series.pk}/{self.event.pk}")
+        self.assertEqual(response.status_code, 200)
+        status = response.json()["sync_statuses"][0]
+        self.assertTrue(status["can_push"])
+
+    def test_sync_status_can_delete_true_with_delete_permission(self) -> None:
+        """can_delete must be True when user has delete_syncbaseitem."""
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        IcalCalenderSyncItem.objects.create(
+            sync_target=target,
+            related_event=self.event,
+            uid="perm-delete-uid",
+            ical_definition="BEGIN:VEVENT\nEND:VEVENT",
+        )
+        self._grant_permissions("view_event", "delete_syncbaseitem")
+        self._login(self.user)
+
+        response = self.client.get(f"/api/v1/sync/status/{self.series.pk}/{self.event.pk}")
+        self.assertEqual(response.status_code, 200)
+        status = response.json()["sync_statuses"][0]
+        self.assertTrue(status["can_delete"])
+
+    def test_sync_status_can_push_true_when_no_items_and_add_permission(self) -> None:
+        """When no items exist, can_push reflects the global add_syncbaseitem perm."""
+        IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        self._grant_permissions("view_event", "add_syncbaseitem")
+        self._login(self.user)
+
+        response = self.client.get(f"/api/v1/sync/status/{self.series.pk}/{self.event.pk}")
+        self.assertEqual(response.status_code, 200)
+        status = response.json()["sync_statuses"][0]
+        self.assertEqual(status["status"], "no entry exists")
+        self.assertTrue(status["can_push"])
+        self.assertFalse(status["can_delete"])
+
+    def test_sync_status_can_push_false_when_no_items_and_no_add_permission(self) -> None:
+        """When no items exist and user lacks add_syncbaseitem, can_push is False."""
+        IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        self._grant_permissions("view_event")
+        self._login(self.user)
+
+        response = self.client.get(f"/api/v1/sync/status/{self.series.pk}/{self.event.pk}")
+        self.assertEqual(response.status_code, 200)
+        status = response.json()["sync_statuses"][0]
+        self.assertEqual(status["status"], "no entry exists")
+        self.assertFalse(status["can_push"])
+        self.assertFalse(status["can_delete"])
+
+    # ------------------------------------------------------------------ #
+    # DELETE /sync/delete/{series_id}/{event_id}/{target_id}
+    # ------------------------------------------------------------------ #
+
+    def test_delete_remote_requires_auth(self) -> None:
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        response = self.client.delete(
+            f"/api/v1/sync/delete/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_delete_remote_requires_view_event_permission(self) -> None:
+        """Authenticated user without view_event cannot access delete endpoint."""
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        self._login(self.user)
+        response = self.client.delete(
+            f"/api/v1/sync/delete/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_delete_remote_requires_delete_syncbaseitem_permission_when_items_exist(self) -> None:
+        """Deleting remote items requires delete_syncbaseitem on the instances."""
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        IcalCalenderSyncItem.objects.create(
+            sync_target=target,
+            related_event=self.event,
+            uid="del-perm-uid",
+            ical_definition="BEGIN:VEVENT\nEND:VEVENT",
+        )
+        self._login(self.user)
+        response = self.client.delete(
+            f"/api/v1/sync/delete/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_delete_remote_returns_success_false_when_no_items(self) -> None:
+        """Deleting with no items returns success=False without a per-instance permission check."""
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        self._grant_permissions("view_event")
+        self._login(self.user)
+        response = self.client.delete(
+            f"/api/v1/sync/delete/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["success"])
+
+    def test_delete_remote_succeeds_with_permission(self) -> None:
+        """User with delete_syncbaseitem can delete the remote item."""
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        IcalCalenderSyncItem.objects.create(
+            sync_target=target,
+            related_event=self.event,
+            uid="del-ok-uid",
+            ical_definition="BEGIN:VEVENT\nEND:VEVENT",
+        )
+        self._grant_permissions("view_event", "delete_syncbaseitem")
+        self._login(self.user)
+        response = self.client.delete(
+            f"/api/v1/sync/delete/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+
+    def test_delete_remote_returns_404_for_unknown_target(self) -> None:
+        self._grant_permissions("view_event")
+        self._login(self.user)
+        response = self.client.delete(
+            f"/api/v1/sync/delete/{self.series.pk}/{self.event.pk}/00000000-0000-0000-0000-000000000000"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    # ------------------------------------------------------------------ #
     # POST /sync/push/{series_id}/{event_id}/{target_id}
     # ------------------------------------------------------------------ #
 
@@ -225,7 +408,8 @@ class SyncTargetsApiTest(TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
-    def test_push_requires_change_event_permission(self) -> None:
+    def test_push_requires_view_event_permission(self) -> None:
+        """Authenticated user without view_event cannot access push endpoint."""
         target = IcalCalendarSyncTarget.objects.create(
             name="Calendar",
             url="https://example.com/cal.ics",
@@ -236,8 +420,26 @@ class SyncTargetsApiTest(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_push_requires_push_syncbaseitem_permission_when_items_exist(self) -> None:
+        """Pushing to a target with existing items requires push_syncbaseitem permission."""
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        IcalCalenderSyncItem.objects.create(
+            sync_target=target,
+            related_event=self.event,
+            uid="perm-test-uid",
+            ical_definition="BEGIN:VEVENT\nEND:VEVENT",
+        )
+        self._login(self.user)
+        response = self.client.post(
+            f"/api/v1/sync/push/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 403)
+
     def test_push_returns_404_for_unknown_target(self) -> None:
-        self._grant_permissions("change_event")
+        self._grant_permissions("view_event")
         self._login(self.user)
         response = self.client.post(
             f"/api/v1/sync/push/{self.series.pk}/{self.event.pk}/00000000-0000-0000-0000-000000000000"
@@ -249,7 +451,7 @@ class SyncTargetsApiTest(TestCase):
             name="Calendar",
             url="https://example.com/cal.ics",
         )
-        self._grant_permissions("change_event")
+        self._grant_permissions("view_event")
         self._login(self.user)
         response = self.client.post(
             f"/api/v1/sync/push/{self.series.pk}/{self.event.pk}/{target.pk}"
@@ -275,7 +477,7 @@ class SyncTargetsApiTest(TestCase):
             uid="push-test-uid",
             ical_definition="BEGIN:VEVENT\nEND:VEVENT",
         )
-        self._grant_permissions("change_event")
+        self._grant_permissions("view_event", "push_syncbaseitem")
         self._login(self.user)
 
         # Push to target2 (no items there)
@@ -567,7 +769,6 @@ class CreateSyncItemEndpointTest(TestCase):
             PretixSyncItem.objects.filter(
                 sync_target=self.pretix_target,
                 related_event=self.event,
-                event_slug="laser-2026",
             ).exists()
         )
 
@@ -712,7 +913,7 @@ class PretixCreateNewSyncItemTest(TestCase):
         self.assertIsInstance(item, PretixSyncItem)
         self.assertEqual(item.sync_target, self.target)
         self.assertEqual(item.related_event, self.event)
-        self.assertEqual(item.event_slug, "metal-2026")
+        self.assertEqual(item.area_association.event_slug, "metal-2026")
 
     def test_is_idempotent(self) -> None:
         item1 = self.target.create_new_sync_item(self.event)

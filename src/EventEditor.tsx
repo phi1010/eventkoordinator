@@ -1029,7 +1029,7 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
                       type="button"
                       className={styles.pushButton}
                       onClick={() => handleCreateSyncItem(matchingTarget.id)}
-                      disabled={creatingSyncItem === matchingTarget.id}
+                      disabled={creatingSyncItem === matchingTarget.id || !sync.can_push}
                       aria-label={`Create sync entry for ${sync.platform}`}
                     >
                       {creatingSyncItem === matchingTarget.id ? 'Creating...' : 'Create Sync Entry'}
@@ -1040,7 +1040,7 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
                         type="button"
                         className={styles.pushButton}
                         onClick={() => handlePush(sync.target_id)}
-                        disabled={pushing === sync.target_id || deletingRemote === sync.target_id}
+                        disabled={pushing === sync.target_id || deletingRemote === sync.target_id || !sync.can_push}
                         aria-label={`Push or update event to ${sync.platform}`}
                       >
                         {pushing === sync.target_id ? 'Pushing...' : 'Push/Update'}
@@ -1060,7 +1060,7 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
                         type="button"
                         className={styles.deleteSyncButton}
                         onClick={() => void handleDeleteRemote(sync.target_id, sync.platform)}
-                        disabled={pushing === sync.target_id || deletingRemote === sync.target_id}
+                        disabled={pushing === sync.target_id || deletingRemote === sync.target_id || !sync.can_delete}
                         aria-label={`Delete remote entry for ${sync.platform}`}
                       >
                         {deletingRemote === sync.target_id ? 'Deleting...' : 'Delete Remote'}

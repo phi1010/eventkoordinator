@@ -308,6 +308,8 @@ export interface SyncStatus {
   status: 'no entry exists' | 'entry up-to-date' | 'entry differs'
   last_synced?: string
   last_error?: string
+  can_push: boolean
+  can_delete: boolean
 }
 
 export interface EventSyncInfo {
@@ -466,6 +468,7 @@ export async function deleteRemoteSyncItem(
 }
 
 export async function fetchSyncDiff(
+  seriesId: string,
   eventId: string,
   targetId: string
 ): Promise<SyncDiffData> {
