@@ -1,6 +1,8 @@
 import logging
 import os
 import uuid
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Any
 
 from django.apps import apps
@@ -97,6 +99,17 @@ class Series(HistoricalMetaBase):
 
     def __str__(self):
         return self.name
+
+
+@dataclass
+class TimeBlock:
+    """A single contiguous calendar time block."""
+
+    start: datetime
+    end: datetime
+
+    def __str__(self) -> str:
+        return f"{self.start.isoformat()}–{self.end.isoformat()}"
 
 
 class Event(HistoricalMetaBase):
@@ -204,8 +217,97 @@ class Event(HistoricalMetaBase):
             ("archive_event", "Can archive events (Completed/Canceled/Rejected → Archived)"),
         ]
 
+    def get_time_blocks(self) -> list[TimeBlock]:
+        """Return the effective calendar time blocks for this event.
+
+        * Full-day events (``use_full_days=True``): one block spanning the
+          full ``start_time`` → ``end_time`` range.
+        * Single-day events: one block.
+        * Multi-day non-full-day events: one block per calendar day, each
+          reusing the time-of-day from the original start and end times
+          (matching the calendar display logic in the API and the frontend).
+        """
+
+        def _aware(d: datetime) -> datetime:
+            return d if d.tzinfo else d.replace(tzinfo=dt_timezone.utc)
+
+        ev_start = _aware(self.start_time)
+        ev_end = _aware(self.end_time)
+
+        if self.use_full_days:
+            return [TimeBlock(start=ev_start, end=ev_end)]
+
+        start_date = ev_start.date()
+        end_date = ev_end.date()
+        day_count = (end_date - start_date).days + 1
+
+        if day_count <= 1:
+            return [TimeBlock(start=ev_start, end=ev_end)]
+
+        # Multi-day: replicate the same time-of-day on every calendar day.
+        start_time_of_day = ev_start.timetz()
+        end_time_of_day = ev_end.timetz()
+        blocks: list[TimeBlock] = []
+        for i in range(day_count):
+            day = start_date + timedelta(days=i)
+            block_start = datetime.combine(day, start_time_of_day)
+            block_end = datetime.combine(day, end_time_of_day)
+            if block_end <= block_start:
+                block_end += timedelta(days=1)
+            blocks.append(TimeBlock(start=block_start, end=block_end))
+        return blocks
+
+    def find_active_conflicts(self) -> "list[EventConflict]":
+        """Return all conflicts between this event's blocks and other active events.
+
+        Active states are PLANNED, PUBLISHED, and CONFIRMED.  Both sides of
+        the comparison use ``get_time_blocks()`` so that multi-day non-full-day
+        events are compared at the per-day block level rather than by their
+        raw ``start_time``/``end_time`` DB columns.
+        """
+        active_statuses = [
+            Event.Status.PLANNED,
+            Event.Status.PUBLISHED,
+            Event.Status.CONFIRMED,
+        ]
+
+        my_blocks = self.get_time_blocks()
+        conflicts: list[EventConflict] = []
+
+        for my_block in my_blocks:
+            # Use the raw DB range as a broad pre-filter to avoid loading
+            # every active event in the system.
+            candidates = Event.objects.filter(
+                status__in=active_statuses,
+                start_time__lt=my_block.end,
+                end_time__gt=my_block.start,
+            ).exclude(pk=self.pk)
+
+            for candidate in candidates:
+                for cand_block in candidate.get_time_blocks():
+                    if cand_block.start < my_block.end and cand_block.end > my_block.start:
+                        conflicts.append(
+                            EventConflict(
+                                conflicting_event=candidate,
+                                my_block=my_block,
+                                conflicting_block=cand_block,
+                            )
+                        )
+                        break  # one conflict per (my_block, candidate) is enough
+
+        return conflicts
+
     def __str__(self):
         return f"{self.name} ({self.start_time.strftime('%Y-%m-%d %H:%M')})"
+
+
+@dataclass
+class EventConflict:
+    """Describes an overlap between one block of an event and one block of another active event."""
+
+    conflicting_event: Event
+    my_block: TimeBlock
+    conflicting_block: TimeBlock
 
 
 class LookupBase(HistoricalMetaBase):

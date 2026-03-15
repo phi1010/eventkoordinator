@@ -410,6 +410,35 @@ class EventFlow:
     def approve(self):
         logger.info(f"Approving event: {self.object!r}")
         self.object.save()
+        # if there are no overlapping events for the block (or any blocks, if a multiday block event that does not span full days),
+        # publish automatically. This allows events that are not in conflict with others to skip the "planned" state and be published immediately.
+        conflicts = self.object.find_active_conflicts()
+        if conflicts:
+            for conflict in conflicts:
+                logger.debug(
+                    "Auto-publish blocked for %r: block %s conflicts with %r (status=%s) block %s",
+                    self.object,
+                    conflict.my_block,
+                    conflict.conflicting_event,
+                    conflict.conflicting_event.status,
+                    conflict.conflicting_block,
+                )
+            logger.info(
+                "Not auto-publishing %r: %d conflict(s) found",
+                self.object,
+                len(conflicts),
+            )
+        else:
+            logger.info(
+                "Auto-publishing %r: no overlapping active events found",
+                self.object,
+            )
+            self.publish()
+
+    def _has_overlapping_events(self) -> bool:
+        """Thin wrapper kept for backwards compatibility. Prefer find_active_conflicts() directly."""
+        return bool(self.object.find_active_conflicts())
+
 
     @status.transition(
         source=Event.Status.PROPOSED,
@@ -442,6 +471,12 @@ class EventFlow:
         logger.info(f"Confirming event: {self.object!r}")
         self.object.save()
 
+    @status.transition(
+        source=Event.Status.PLANNED,
+        target=Event.Status.CANCELED,
+        label="Cancel event",
+        permission=has_permission((apiv1, "cancel", Event)),
+    )
     @status.transition(
         source=Event.Status.PUBLISHED,
         target=Event.Status.CANCELED,
