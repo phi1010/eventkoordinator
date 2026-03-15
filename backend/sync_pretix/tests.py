@@ -112,7 +112,7 @@ class PretixSyncItemPullUpdateTest(_PretixSyncItemTestBase):
         self.assertIsNone(self.item.pretix_data)
 
     def test_pull_update_fetches_and_stores_subevent_and_quotas(self):
-        """pull_update() fetches subevent + quotas and persists them as pretix_data."""
+        """pull_update() fetches subevent + quotas + items and persists them as pretix_data."""
         self.item.subevent_slug = "7"
         self.item.save(update_fields=["subevent_slug"])
 
@@ -123,9 +123,11 @@ class PretixSyncItemPullUpdateTest(_PretixSyncItemTestBase):
             "date_to": self.end_time.isoformat(),
         }
         fake_quotas = [{"id": 1, "size": 10, "items": []}]
+        fake_items = [{"id": 101, "name": {"de": "Regular Member Ticket"}}]
         fake_client = _make_pretix_client_mock(
             subevent=fake_subevent,
             quotas=fake_quotas,
+            items=fake_items,
         )
 
         with patch("sync_pretix.models.PretixApiClient", return_value=fake_client):
@@ -135,6 +137,7 @@ class PretixSyncItemPullUpdateTest(_PretixSyncItemTestBase):
         self.assertIsNotNone(self.item.pretix_data)
         self.assertEqual(self.item.pretix_data["subevent"], fake_subevent)
         self.assertEqual(self.item.pretix_data["quotas"], fake_quotas)
+        self.assertEqual(self.item.pretix_data["items"], fake_items)
 
         fake_client.get_subevent.assert_called_once_with(
             organizer_slug="zam",
@@ -145,6 +148,10 @@ class PretixSyncItemPullUpdateTest(_PretixSyncItemTestBase):
             organizer_slug="zam",
             event_slug="area-metal",
             subevent_id="7",
+        )
+        fake_client.list_items.assert_called_once_with(
+            organizer_slug="zam",
+            event_slug="area-metal",
         )
 
     def test_pull_update_raises_when_no_association(self):
@@ -525,8 +532,6 @@ class PretixSyncItemPushCallsPullTest(_PretixSyncItemTestBase):
 
 
 class PretixPricingConfigurationTests(TestCase):
-	def setUp(self):
-		self.config = PretixPricingConfiguration.objects.create()
 
 	def test_min_participants_thresholds_are_sorted_and_normalized(self):
 		self.config.min_participants_params = {"7": "2", "0": "1"}
@@ -569,7 +574,192 @@ class PretixPricingConfigurationTests(TestCase):
 		)
 
 
-class CalculatedPricesTests(TestCase):
+class PretixSyncItemPriceDiffTest(_PretixSyncItemTestBase):
+    """Tests for price comparison in PretixSyncItem.sync_diff() and creation preview."""
+
+    ITEMS = [
+        {"id": 101, "name": {"de": "Regular Member Ticket"}},
+        {"id": 102, "name": {"de": "Discounted Member Ticket"}},
+        {"id": 103, "name": {"de": "Regular Guest Ticket"}},
+        {"id": 104, "name": {"de": "Discounted Guest Ticket"}},
+        {"id": 105, "name": {"de": "Business Ticket"}},
+    ]
+
+    def setUp(self):
+        super().setUp()
+        # Assign numeric product IDs to the association so _resolve_item_id matches by int ID.
+        self.association.ticket_product_member_regular_id = "101"
+        self.association.ticket_product_member_discounted_id = "102"
+        self.association.ticket_product_guest_regular_id = "103"
+        self.association.ticket_product_guest_discounted_id = "104"
+        self.association.ticket_product_business_id = "105"
+        self.association.save()
+
+        self.prices = CalculatedPrices.objects.create(
+            event=self.event,
+            member_regular_gross_eur=Decimal("20.00"),
+            member_discounted_gross_eur=Decimal("12.00"),
+            guest_regular_gross_eur=Decimal("25.00"),
+            guest_discounted_gross_eur=Decimal("20.00"),
+            business_net_eur=Decimal("40.00"),
+        )
+
+    def _matching_pretix_data(self, overrides=None):
+        """Build pretix_data that matches the event and association, with custom overrides."""
+        if overrides is None:
+            overrides = [
+                {"item": 101, "price": "20.00"},
+                {"item": 102, "price": "12.00"},
+                {"item": 103, "price": "25.00"},
+                {"item": 104, "price": "20.00"},
+                {"item": 105, "price": "40.00"},
+            ]
+        return {
+            "subevent": {
+                "name": {"de": self.event.name},
+                "date_from": self.start_time.isoformat(),
+                "date_to": self.end_time.isoformat(),
+                "item_price_overrides": overrides,
+            },
+            "quotas": [{"id": 1, "size": int(self.proposal.max_participants), "items": []}],
+            "items": self.ITEMS,
+        }
+
+    def test_sync_diff_no_price_diff_when_prices_match(self):
+        """sync_diff() reports no price diffs when stored prices match calculated prices."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = self._matching_pretix_data()
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        for name in ("price_member_regular", "price_member_discounted",
+                     "price_guest_regular", "price_guest_discounted", "price_business"):
+            self.assertNotIn(name, prop_names)
+
+    def test_sync_diff_detects_price_difference(self):
+        """sync_diff() reports a price diff when a stored price differs from calculated."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = self._matching_pretix_data(overrides=[
+            {"item": 101, "price": "99.00"},  # wrong
+            {"item": 102, "price": "12.00"},
+            {"item": 103, "price": "25.00"},
+            {"item": 104, "price": "20.00"},
+            {"item": 105, "price": "40.00"},
+        ])
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertIn("price_member_regular", prop_names)
+        price_diff = next(p for p in diff.properties if p.property_name == "price_member_regular")
+        self.assertEqual(price_diff.local_value, "20.00")
+        self.assertEqual(price_diff.remote_value, "99.00")
+
+    def test_sync_diff_detects_all_five_price_differences(self):
+        """sync_diff() reports diffs for all five ticket types when all prices are wrong."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = self._matching_pretix_data(overrides=[
+            {"item": 101, "price": "1.00"},
+            {"item": 102, "price": "1.00"},
+            {"item": 103, "price": "1.00"},
+            {"item": 104, "price": "1.00"},
+            {"item": 105, "price": "1.00"},
+        ])
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        prop_names = [p.property_name for p in diff.properties]
+        for name in ("price_member_regular", "price_member_discounted",
+                     "price_guest_regular", "price_guest_discounted", "price_business"):
+            self.assertIn(name, prop_names)
+
+    def test_sync_diff_detects_missing_price_override(self):
+        """sync_diff() reports a diff when no item_price_override exists for a product."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = self._matching_pretix_data(overrides=[])
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertIn("price_member_regular", prop_names)
+        price_diff = next(p for p in diff.properties if p.property_name == "price_member_regular")
+        self.assertEqual(price_diff.local_value, "20.00")
+        self.assertEqual(price_diff.remote_value, "")
+
+    def test_sync_diff_skips_price_comparison_without_calculated_prices(self):
+        """sync_diff() skips price comparison when no CalculatedPrices exist for the event."""
+        self.prices.delete()
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = self._matching_pretix_data()
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertNotIn("price_member_regular", prop_names)
+
+    def test_sync_diff_skips_price_comparison_when_items_not_stored(self):
+        """sync_diff() skips price comparison when pretix_data contains no items list."""
+        self.item.subevent_slug = "7"
+        data = self._matching_pretix_data()
+        data["items"] = []
+        self.item.pretix_data = data
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertNotIn("price_member_regular", prop_names)
+
+    def test_sync_diff_price_comparison_tolerates_equivalent_decimal_strings(self):
+        """sync_diff() treats '20.0' and '20.00' as equal prices."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = self._matching_pretix_data(overrides=[
+            {"item": 101, "price": "20.0"},   # equivalent to "20.00"
+            {"item": 102, "price": "12.00"},
+            {"item": 103, "price": "25.00"},
+            {"item": 104, "price": "20.00"},
+            {"item": 105, "price": "40.00"},
+        ])
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertNotIn("price_member_regular", prop_names)
+
+    def test_creation_preview_includes_prices_when_calculated_prices_exist(self):
+        """_build_creation_preview_diff() includes price properties when CalculatedPrices exist."""
+        self.assertIsNone(self.item.subevent_slug)
+        diff = self.item.sync_diff()
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        for name in ("price_member_regular", "price_member_discounted",
+                     "price_guest_regular", "price_guest_discounted", "price_business"):
+            self.assertIn(name, prop_names)
+        # All price remote_values must be empty in a creation preview.
+        for p in diff.properties:
+            if p.property_name.startswith("price_"):
+                self.assertEqual(p.remote_value, "",
+                                 f"Expected empty remote_value for {p.property_name}")
+                self.assertNotEqual(p.local_value, "",
+                                    f"Expected non-empty local_value for {p.property_name}")
+
+    def test_creation_preview_omits_prices_without_calculated_prices(self):
+        """_build_creation_preview_diff() omits price properties when no CalculatedPrices exist."""
+        self.prices.delete()
+        # Refresh to clear Django's cached reverse-relation on the related_event instance.
+        self.item.refresh_from_db()
+        self.assertIsNone(self.item.subevent_slug)
+        diff = self.item.sync_diff()
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        for name in ("price_member_regular", "price_member_discounted",
+                     "price_guest_regular", "price_guest_discounted", "price_business"):
+            self.assertNotIn(name, prop_names)
+
+
+class PretixPricingConfigurationTests(TestCase):
 	def setUp(self):
 		self.config = PretixPricingConfiguration.objects.create()
 		self.series = Series.objects.create(name="Series")

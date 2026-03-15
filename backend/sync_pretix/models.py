@@ -303,15 +303,24 @@ class PretixSyncItem(SyncBaseItem):
             "PretixSyncItem %s: fetched %d quota(s) for subevent %s.",
             self.pk, len(quotas), self.subevent_slug,
         )
+        items = client.list_items(
+            organizer_slug=target.organizer_slug,
+            event_slug=association.event_slug,
+        )
+        logger.debug(
+            "PretixSyncItem %s: fetched %d item(s) for event %r.",
+            self.pk, len(items), association.event_slug,
+        )
 
         self.pretix_data = {
             "subevent": subevent,
             "quotas": quotas,
+            "items": items,
         }
         self.save(update_fields=["pretix_data", "updated_at"])
         logger.info(
-            "PretixSyncItem %s: pull complete – stored subevent + %d quota(s).",
-            self.pk, len(quotas),
+            "PretixSyncItem %s: pull complete – stored subevent + %d quota(s) + %d item(s).",
+            self.pk, len(quotas), len(items),
         )
 
     def sync_diff(self) -> SyncDiffData | None:
@@ -403,6 +412,12 @@ class PretixSyncItem(SyncBaseItem):
                         remote_value=str(actual_size),
                         file_type="text",
                     ))
+
+        # Compare calculated prices against stored item_price_overrides.
+        stored_items = self.pretix_data.get("items") or []
+        properties.extend(
+            self._compare_prices(event, association, stored_subevent, stored_items)
+        )
 
         return SyncDiffData(
             series_id=event.series_id,
@@ -641,6 +656,27 @@ class PretixSyncItem(SyncBaseItem):
                     file_type="text",
                 ))
 
+        # Include calculated prices when available (remote is empty – nothing pushed yet).
+        try:
+            prices = event.calculated_prices
+            price_mapping = [
+                (prices.member_regular_gross_eur, "price_member_regular"),
+                (prices.member_discounted_gross_eur, "price_member_discounted"),
+                (prices.guest_regular_gross_eur, "price_guest_regular"),
+                (prices.guest_discounted_gross_eur, "price_guest_discounted"),
+                (prices.business_net_eur, "price_business"),
+            ]
+            for price, property_name in price_mapping:
+                if price is not None:
+                    properties.append(PropertyDiff(
+                        property_name=property_name,
+                        local_value=str(price),
+                        remote_value="",
+                        file_type="text",
+                    ))
+        except ObjectDoesNotExist:
+            pass
+
         logger.debug(
             "PretixSyncItem %s: creation preview diff has %d properties.",
             self.pk, len(properties),
@@ -651,6 +687,77 @@ class PretixSyncItem(SyncBaseItem):
             target_id=target.pk,
             properties=properties,
         )
+
+    def _compare_prices(
+        self,
+        event,
+        association: "PretixSyncTargetAreaAssociation",
+        stored_subevent: dict,
+        stored_items: list[dict],
+    ) -> list[PropertyDiff]:
+        """Compare calculated prices against stored Pretix item_price_overrides.
+
+        Returns an empty list when no ``CalculatedPrices`` exist for the event,
+        when ``stored_items`` is empty (item IDs cannot be resolved), or when
+        every price matches the stored override.
+        """
+        try:
+            prices = event.calculated_prices
+        except ObjectDoesNotExist:
+            logger.debug(
+                "PretixSyncItem %s: no CalculatedPrices for event %s; "
+                "skipping price comparison.",
+                self.pk, event.pk,
+            )
+            return []
+
+        actual_overrides: dict[int, str] = {
+            override["item"]: override.get("price", "")
+            for override in stored_subevent.get("item_price_overrides") or []
+        }
+        price_mapping = [
+            (association.ticket_product_member_regular_id,
+             prices.member_regular_gross_eur, "price_member_regular"),
+            (association.ticket_product_member_discounted_id,
+             prices.member_discounted_gross_eur, "price_member_discounted"),
+            (association.ticket_product_guest_regular_id,
+             prices.guest_regular_gross_eur, "price_guest_regular"),
+            (association.ticket_product_guest_discounted_id,
+             prices.guest_discounted_gross_eur, "price_guest_discounted"),
+            (association.ticket_product_business_id,
+             prices.business_net_eur, "price_business"),
+        ]
+
+        diffs: list[PropertyDiff] = []
+        for name_or_id, expected_price, property_name in price_mapping:
+            if expected_price is None:
+                continue
+            item_id = PretixSyncItem._resolve_item_id(stored_items, name_or_id)
+            if item_id is None:
+                continue
+            actual_price_str = actual_overrides.get(item_id)
+            expected_price_str = str(expected_price)
+            try:
+                prices_equal = (
+                    actual_price_str is not None
+                    and Decimal(actual_price_str) == Decimal(expected_price_str)
+                )
+            except Exception:
+                prices_equal = actual_price_str == expected_price_str
+            if not prices_equal:
+                logger.debug(
+                    "PretixSyncItem %s: price diff for %s (item %s): "
+                    "local=%s remote=%s.",
+                    self.pk, property_name, item_id,
+                    expected_price_str, actual_price_str,
+                )
+                diffs.append(PropertyDiff(
+                    property_name=property_name,
+                    local_value=expected_price_str,
+                    remote_value=actual_price_str or "",
+                    file_type="text",
+                ))
+        return diffs
 
     def _create_or_update_quota(
         self,
