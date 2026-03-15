@@ -74,16 +74,15 @@ class SyncBaseTarget(PolymorphicMetaBase):
 
     def get_status(self, event: Event) -> "SyncBaseTarget.SyncTargetStatus":
         """Return the sync status for a given event against this target."""
-        items = SyncBaseItem.objects.filter(
-            sync_target=self,
-            related_event=event,
-        )
-        if not items.exists():
+        matching_items = [
+            item for item in SyncBaseItem.objects.filter(related_event=event)
+            if getattr(item.sync_target, "pk", None) == self.pk
+        ]
+        if not matching_items:
             return self.SyncTargetStatus.NO_ENTRY_EXISTS
 
-        for item in items:
-            real_item = item.get_real_instance()
-            diff = real_item.sync_diff()
+        for item in matching_items:
+            diff = item.sync_diff()
             if diff is not None and len(diff.properties) > 0:
                 return self.SyncTargetStatus.ENTRY_DIFFERS
 
@@ -93,13 +92,15 @@ class SyncBaseTarget(PolymorphicMetaBase):
 class SyncBaseItem(PolymorphicMetaBase):
     flag_push = models.BooleanField(default=False)
     related_event = models.ForeignKey(Event, on_delete=models.CASCADE)
-    sync_target = models.ForeignKey(
-        SyncBaseTarget,
-        on_delete=models.CASCADE,
-        related_name="sync_items",
-        null=True,
-        blank=True,
-    )
+
+    @property
+    def sync_target(self) -> SyncBaseTarget | None:
+        """Return the sync target for this item.
+
+        Subclasses must override this by declaring a ``sync_target``
+        ``ForeignKey`` that shadows this property.
+        """
+        return None
 
     def push_update(self):
         pass

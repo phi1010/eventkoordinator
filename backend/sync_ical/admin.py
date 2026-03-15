@@ -13,8 +13,8 @@ class IcalCalendarSyncTargetAdmin(PolymorphicChildModelAdmin, SimpleHistoryAdmin
 
 @admin.register(models.IcalCalenderSyncItem)
 class IcalCalenderSyncItemAdmin(SimpleHistoryAdmin):
-    list_display = ("uid", "calendar", "related_event", "flag_push", "updated_at")
-    list_filter = ("calendar", "flag_push")
-    search_fields = ("uid", "calendar__name", "related_event__name")
+    list_display = ("uid", "sync_target", "related_event", "flag_push", "updated_at")
+    list_filter = ("sync_target", "flag_push")
+    search_fields = ("uid", "sync_target__name", "related_event__name")
     ordering = ("-updated_at",)
     raw_id_fields = ("related_event",)

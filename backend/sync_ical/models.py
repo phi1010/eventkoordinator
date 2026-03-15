@@ -10,5 +10,5 @@ class IcalCalendarSyncTarget(SyncBaseTarget):
 
 class IcalCalenderSyncItem(SyncBaseItem):
     uid = models.CharField(max_length=255, unique=True)
-    calendar = models.ForeignKey(IcalCalendarSyncTarget, on_delete=models.CASCADE, related_name="items")
+    sync_target = models.ForeignKey(IcalCalendarSyncTarget, on_delete=models.CASCADE, related_name="items")
     ical_definition = models.TextField(max_length=10000)

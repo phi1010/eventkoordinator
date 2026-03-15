@@ -9,8 +9,8 @@ from django.test import TestCase
 from django.utils import timezone
 
 from apiv1.models.basedata import Event, Series
-from apiv1.models.sync.syncbasedata import SyncBaseItem, SyncBaseTarget
-from sync_ical.models import IcalCalendarSyncTarget
+from apiv1.models.sync.syncbasedata import SyncBaseTarget
+from sync_ical.models import IcalCalendarSyncTarget, IcalCalenderSyncItem
 from sync_pretix.models import PretixSyncTarget
 
 
@@ -129,91 +129,6 @@ class SyncTargetsApiTest(TestCase):
         types = {t["type"] for t in targets}
         self.assertEqual(types, {"PretixSyncTarget", "IcalCalendarSyncTarget"})
 
-    # ------------------------------------------------------------------ #
-    # POST /sync/items
-    # ------------------------------------------------------------------ #
-
-    def test_create_sync_item_requires_auth(self) -> None:
-        response = self.client.post(
-            "/api/v1/sync/items",
-            data=json.dumps({"sync_target_id": "00000000-0000-0000-0000-000000000000", "event_id": str(self.event.pk)}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 401)
-
-    def test_create_sync_item_requires_add_syncbaseitem_permission(self) -> None:
-        target = IcalCalendarSyncTarget.objects.create(
-            name="Calendar",
-            url="https://example.com/cal.ics",
-        )
-        self._login(self.user)
-        response = self.client.post(
-            "/api/v1/sync/items",
-            data=json.dumps({"sync_target_id": str(target.pk), "event_id": str(self.event.pk)}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 403)
-
-    def test_create_sync_item_creates_and_returns_item(self) -> None:
-        target = IcalCalendarSyncTarget.objects.create(
-            name="Calendar",
-            url="https://example.com/cal.ics",
-        )
-        self._grant_permissions("add_syncbaseitem")
-        self._login(self.user)
-
-        response = self.client.post(
-            "/api/v1/sync/items",
-            data=json.dumps({"sync_target_id": str(target.pk), "event_id": str(self.event.pk)}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertIn("id", payload)
-        self.assertEqual(payload["sync_target_id"], str(target.pk))
-        self.assertEqual(payload["event_id"], str(self.event.pk))
-
-        # Verify item was created in the database
-        self.assertTrue(
-            SyncBaseItem.objects.filter(
-                sync_target=target, related_event=self.event
-            ).exists()
-        )
-
-    def test_create_sync_item_is_idempotent(self) -> None:
-        target = IcalCalendarSyncTarget.objects.create(
-            name="Calendar",
-            url="https://example.com/cal.ics",
-        )
-        self._grant_permissions("add_syncbaseitem")
-        self._login(self.user)
-
-        body = json.dumps({"sync_target_id": str(target.pk), "event_id": str(self.event.pk)})
-        response1 = self.client.post("/api/v1/sync/items", data=body, content_type="application/json")
-        response2 = self.client.post("/api/v1/sync/items", data=body, content_type="application/json")
-        self.assertEqual(response1.status_code, 200)
-        self.assertEqual(response2.status_code, 200)
-        self.assertEqual(response1.json()["id"], response2.json()["id"])
-
-        # Only one item should exist
-        self.assertEqual(
-            SyncBaseItem.objects.filter(sync_target=target, related_event=self.event).count(),
-            1,
-        )
-
-    def test_create_sync_item_returns_404_for_missing_target(self) -> None:
-        self._grant_permissions("add_syncbaseitem")
-        self._login(self.user)
-
-        response = self.client.post(
-            "/api/v1/sync/items",
-            data=json.dumps({
-                "sync_target_id": "00000000-0000-0000-0000-000000000000",
-                "event_id": str(self.event.pk),
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 404)
 
     # ------------------------------------------------------------------ #
     # GET /sync/status/{series_id}/{event_id}
@@ -242,9 +157,11 @@ class SyncTargetsApiTest(TestCase):
             name="Calendar",
             url="https://example.com/cal.ics",
         )
-        SyncBaseItem.objects.create(
+        IcalCalenderSyncItem.objects.create(
             sync_target=target,
             related_event=self.event,
+            uid="test-uid-status",
+            ical_definition="BEGIN:VEVENT\nEND:VEVENT",
         )
         self._grant_permissions("view_event")
         self._login(self.user)
@@ -314,10 +231,9 @@ class SyncBaseTargetModelTest(TestCase):
         )
 
     def test_get_status_returns_up_to_date_when_item_exists(self) -> None:
-        target = PretixSyncTarget.objects.create(
-            api_token="token",
-            api_url="https://pretix.example.com",
-            organizer_slug="org",
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/status-test.ics",
         )
         series = Series.objects.create(name="Test Series")
         now = timezone.now()
@@ -327,9 +243,11 @@ class SyncBaseTargetModelTest(TestCase):
             start_time=now,
             end_time=now + timezone.timedelta(hours=1),
         )
-        SyncBaseItem.objects.create(
+        IcalCalenderSyncItem.objects.create(
             sync_target=target,
             related_event=event,
+            uid="test-uid-get-status",
+            ical_definition="BEGIN:VEVENT\nEND:VEVENT",
         )
         self.assertEqual(
             target.get_status(event),

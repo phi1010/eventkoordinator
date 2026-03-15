@@ -22,13 +22,27 @@ from apiv1.schemas import (
     SyncPushResult,
     ErrorOut,
     SyncTargetOut,
-    CreateSyncItemIn,
-    CreateSyncItemOut,
 )
 
 logger = logging.getLogger(__name__)
 
 router = Router()
+
+
+def _items_for_target_and_event(
+    target: SyncBaseTarget, event: Event
+) -> list[SyncBaseItem]:
+    """Return all SyncBaseItem instances linking *target* to *event*.
+
+    Because ``sync_target`` is a concrete FK only on each subclass (not on the
+    polymorphic base table), we fetch all items for the event and filter in
+    Python by the resolved ``sync_target`` property.
+    """
+    return [
+        item
+        for item in SyncBaseItem.objects.filter(related_event=event)
+        if getattr(item.sync_target, "pk", None) == target.pk
+    ]
 
 
 @router.get(
@@ -49,38 +63,6 @@ def list_sync_targets(request) -> list[SyncTargetOut]:
     ]
 
 
-@router.post(
-    "/items",
-    response={200: CreateSyncItemOut, 401: ErrorOut, 403: ErrorOut, 404: ErrorOut},
-)
-@api_permission_required((apiv1, "add", SyncBaseItem))
-def create_sync_item(request, payload: CreateSyncItemIn):
-    """Create a new sync item linking a sync target to an event."""
-    target = get_object_or_404(SyncBaseTarget, pk=payload.sync_target_id)
-    event = get_object_or_404(Event, pk=payload.event_id)
-
-    # Check if a sync item already exists for this target + event
-    existing = SyncBaseItem.objects.filter(
-        sync_target=target,
-        related_event=event,
-    )
-    if existing.exists():
-        return 200, CreateSyncItemOut(
-            id=existing.first().pk,
-            sync_target_id=target.pk,
-            event_id=event.pk,
-        )
-
-    item = SyncBaseItem.objects.create(
-        sync_target=target,
-        related_event=event,
-    )
-    return 200, CreateSyncItemOut(
-        id=item.pk,
-        sync_target_id=target.pk,
-        event_id=event.pk,
-    )
-
 
 @router.get(
     "/status/{series_id}/{event_id}",
@@ -95,12 +77,8 @@ def get_sync_status(request, series_id: UUID, event_id: UUID) -> EventSyncInfo:
     statuses = []
     for target in targets:
         status = target.get_status(event)
-        # Find the latest sync item for last_synced timestamp
-        latest_item = (
-            SyncBaseItem.objects.filter(sync_target=target, related_event=event)
-            .order_by("-updated_at")
-            .first()
-        )
+        matching = _items_for_target_and_event(target, event)
+        latest_item = max(matching, key=lambda i: i.updated_at) if matching else None
         statuses.append(
             SyncStatus(
                 platform=target.type,
@@ -130,17 +108,13 @@ def push_to_platform(
     """Push/update event data to a specific platform"""
     event = get_object_or_404(Event, pk=event_id, series_id=series_id)
 
-    # Find sync items for this event belonging to targets of the given type
-    items = SyncBaseItem.objects.filter(
-        related_event=event,
-    ).select_related("sync_target")
+    items = SyncBaseItem.objects.filter(related_event=event)
 
     pushed = False
     for item in items:
-        real_target = item.sync_target.get_real_instance()
-        if real_target.__class__.__name__ == platform:
-            real_item = item.get_real_instance()
-            real_item.push_update()
+        target = item.sync_target
+        if target is not None and target.type == platform:
+            item.push_update()
             pushed = True
 
     return SyncPushResult(
@@ -168,16 +142,13 @@ def get_sync_diff(
     """Get diff data comparing local database properties with remote sync source."""
     event = get_object_or_404(Event, pk=event_id, series_id=series_id)
 
-    items = SyncBaseItem.objects.filter(
-        related_event=event,
-    ).select_related("sync_target")
+    items = SyncBaseItem.objects.filter(related_event=event)
 
     all_properties: list[PropertyDiff] = []
     for item in items:
-        real_target = item.sync_target.get_real_instance()
-        if real_target.__class__.__name__ == platform:
-            real_item = item.get_real_instance()
-            diff = real_item.sync_diff()
+        target = item.sync_target
+        if target is not None and target.type == platform:
+            diff = item.sync_diff()
             if diff is not None:
                 all_properties.extend(diff.properties)
 

@@ -256,7 +256,7 @@ class Command(BaseCommand):
                     IcalCalenderSyncItem.objects.get_or_create(
                         uid=event_data["occurrence_uid"],
                         defaults={
-                            "calendar": sync_target,
+                            "sync_target": sync_target,
                             "related_event": event,
                             "ical_definition": event_data["ical_definition"],
                         },

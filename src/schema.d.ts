@@ -785,26 +785,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/sync/items": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Sync Item
-         * @description Create a new sync item linking a sync target to an event.
-         */
-        post: operations["apiv1_routers_sync_create_sync_item"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/sync/push/{series_id}/{event_id}/{platform}": {
         parameters: {
             query?: never;
@@ -1097,37 +1077,6 @@ export interface components {
             description?: string | null;
             /** Name */
             name?: string | null;
-        };
-        /** CreateSyncItemIn */
-        CreateSyncItemIn: {
-            /**
-             * Event Id
-             * Format: uuid
-             */
-            event_id: string;
-            /**
-             * Sync Target Id
-             * Format: uuid
-             */
-            sync_target_id: string;
-        };
-        /** CreateSyncItemOut */
-        CreateSyncItemOut: {
-            /**
-             * Event Id
-             * Format: uuid
-             */
-            event_id: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Sync Target Id
-             * Format: uuid
-             */
-            sync_target_id: string;
         };
         /** ErrorOut */
         ErrorOut: {
@@ -3996,57 +3945,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SyncDiffData"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-        };
-    };
-    apiv1_routers_sync_create_sync_item: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateSyncItemIn"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreateSyncItemOut"];
                 };
             };
             /** @description Unauthorized */
