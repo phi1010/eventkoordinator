@@ -18,7 +18,7 @@ class PropertyDiff(Schema):
 class SyncDiffData(Schema):
     series_id: uuid.UUID
     event_id: uuid.UUID
-    platform: str
+    target_id: uuid.UUID
     properties: list[PropertyDiff]
 
 

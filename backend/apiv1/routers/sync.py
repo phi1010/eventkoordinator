@@ -81,6 +81,7 @@ def get_sync_status(request, series_id: UUID, event_id: UUID) -> EventSyncInfo:
         latest_item = max(matching, key=lambda i: i.updated_at) if matching else None
         statuses.append(
             SyncStatus(
+                target_id=target.pk,
                 platform=target.type,
                 status=status.value,
                 last_synced=(
@@ -98,63 +99,59 @@ def get_sync_status(request, series_id: UUID, event_id: UUID) -> EventSyncInfo:
 
 
 @router.post(
-    "/push/{series_id}/{event_id}/{platform}",
-    response={200: SyncPushResult, 401: ErrorOut, 403: ErrorOut},
+    "/push/{series_id}/{event_id}/{target_id}",
+    response={200: SyncPushResult, 401: ErrorOut, 403: ErrorOut, 404: ErrorOut},
 )
 @api_permission_required((apiv1, "change", Event))
 def push_to_platform(
-    request, series_id: UUID, event_id: UUID, platform: str
+    request, series_id: UUID, event_id: UUID, target_id: UUID
 ) -> SyncPushResult:
-    """Push/update event data to a specific platform"""
+    """Push/update event data to a specific sync target."""
     event = get_object_or_404(Event, pk=event_id, series_id=series_id)
+    target = get_object_or_404(SyncBaseTarget, pk=target_id)
 
-    items = SyncBaseItem.objects.filter(related_event=event)
+    matching = _items_for_target_and_event(target, event)
+    for item in matching:
+        item.push_update()
 
-    pushed = False
-    for item in items:
-        target = item.sync_target
-        if target is not None and target.type == platform:
-            item.push_update()
-            pushed = True
-
+    pushed = len(matching) > 0
     return SyncPushResult(
         success=pushed,
         message=(
-            f"Event data pushed to {platform}"
+            f"Event data pushed to {target.type}"
             if pushed
-            else f"No sync items found for platform {platform}"
+            else f"No sync items found for target {target_id}"
         ),
         timestamp=django.utils.timezone.now().isoformat(),
-        platform=platform,
+        target_id=target_id,
         series_id=series_id,
         event_id=event_id,
     )
 
 
 @router.get(
-    "/diff/{series_id}/{event_id}/{platform}",
+    "/diff/{series_id}/{event_id}/{target_id}",
     response={200: SyncDiffData, 401: ErrorOut, 403: ErrorOut, 404: ErrorOut},
 )
 @api_permission_required((apiv1, "view", Event))
 def get_sync_diff(
-    request, series_id: UUID, event_id: UUID, platform: str
+    request, series_id: UUID, event_id: UUID, target_id: UUID
 ) -> SyncDiffData:
     """Get diff data comparing local database properties with remote sync source."""
     event = get_object_or_404(Event, pk=event_id, series_id=series_id)
+    target = get_object_or_404(SyncBaseTarget, pk=target_id)
 
-    items = SyncBaseItem.objects.filter(related_event=event)
+    matching = _items_for_target_and_event(target, event)
 
     all_properties: list[PropertyDiff] = []
-    for item in items:
-        target = item.sync_target
-        if target is not None and target.type == platform:
-            diff = item.sync_diff()
-            if diff is not None:
-                all_properties.extend(diff.properties)
+    for item in matching:
+        diff = item.sync_diff()
+        if diff is not None:
+            all_properties.extend(diff.properties)
 
     return SyncDiffData(
         series_id=series_id,
         event_id=event_id,
-        platform=platform,
+        target_id=target_id,
         properties=all_properties,
     )

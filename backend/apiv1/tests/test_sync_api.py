@@ -148,6 +148,7 @@ class SyncTargetsApiTest(TestCase):
 
         statuses = payload["sync_statuses"]
         self.assertEqual(len(statuses), 1)
+        self.assertEqual(statuses[0]["target_id"], str(target.pk))
         self.assertEqual(statuses[0]["platform"], "IcalCalendarSyncTarget")
         self.assertEqual(statuses[0]["status"], "no entry exists")
         self.assertIsNone(statuses[0]["last_synced"])
@@ -172,11 +173,202 @@ class SyncTargetsApiTest(TestCase):
 
         statuses = payload["sync_statuses"]
         self.assertEqual(len(statuses), 1)
+        self.assertEqual(statuses[0]["target_id"], str(target.pk))
         self.assertEqual(statuses[0]["status"], "entry up-to-date")
         self.assertIsNotNone(statuses[0]["last_synced"])
 
+    def test_sync_status_distinguishes_multiple_targets_of_same_type(self) -> None:
+        """Two iCal targets must appear as separate status entries with distinct target_ids."""
+        target1 = IcalCalendarSyncTarget.objects.create(
+            name="Calendar A",
+            url="https://example.com/a.ics",
+        )
+        target2 = IcalCalendarSyncTarget.objects.create(
+            name="Calendar B",
+            url="https://example.com/b.ics",
+        )
+        IcalCalenderSyncItem.objects.create(
+            sync_target=target1,
+            related_event=self.event,
+            uid="test-uid-multi-1",
+            ical_definition="BEGIN:VEVENT\nEND:VEVENT",
+        )
+        self._grant_permissions("view_event")
+        self._login(self.user)
 
-class SyncBaseTargetModelTest(TestCase):
+        response = self.client.get(f"/api/v1/sync/status/{self.series.pk}/{self.event.pk}")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        statuses = payload["sync_statuses"]
+        self.assertEqual(len(statuses), 2)
+        target_ids = {s["target_id"] for s in statuses}
+        self.assertIn(str(target1.pk), target_ids)
+        self.assertIn(str(target2.pk), target_ids)
+
+        by_target = {s["target_id"]: s for s in statuses}
+        self.assertEqual(by_target[str(target1.pk)]["status"], "entry up-to-date")
+        self.assertEqual(by_target[str(target2.pk)]["status"], "no entry exists")
+
+    # ------------------------------------------------------------------ #
+    # POST /sync/push/{series_id}/{event_id}/{target_id}
+    # ------------------------------------------------------------------ #
+
+    def test_push_requires_auth(self) -> None:
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        response = self.client.post(
+            f"/api/v1/sync/push/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_push_requires_change_event_permission(self) -> None:
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        self._login(self.user)
+        response = self.client.post(
+            f"/api/v1/sync/push/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_push_returns_404_for_unknown_target(self) -> None:
+        self._grant_permissions("change_event")
+        self._login(self.user)
+        response = self.client.post(
+            f"/api/v1/sync/push/{self.series.pk}/{self.event.pk}/00000000-0000-0000-0000-000000000000"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_push_returns_success_false_when_no_items(self) -> None:
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        self._grant_permissions("change_event")
+        self._login(self.user)
+        response = self.client.post(
+            f"/api/v1/sync/push/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["target_id"], str(target.pk))
+
+    def test_push_only_pushes_matching_target(self) -> None:
+        """Push to target1 must not affect target2."""
+        target1 = IcalCalendarSyncTarget.objects.create(
+            name="Calendar A",
+            url="https://example.com/a.ics",
+        )
+        target2 = IcalCalendarSyncTarget.objects.create(
+            name="Calendar B",
+            url="https://example.com/b.ics",
+        )
+        IcalCalenderSyncItem.objects.create(
+            sync_target=target1,
+            related_event=self.event,
+            uid="push-test-uid",
+            ical_definition="BEGIN:VEVENT\nEND:VEVENT",
+        )
+        self._grant_permissions("change_event")
+        self._login(self.user)
+
+        # Push to target2 (no items there)
+        response = self.client.post(
+            f"/api/v1/sync/push/{self.series.pk}/{self.event.pk}/{target2.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["target_id"], str(target2.pk))
+
+        # Push to target1 (has an item)
+        response = self.client.post(
+            f"/api/v1/sync/push/{self.series.pk}/{self.event.pk}/{target1.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["target_id"], str(target1.pk))
+
+    # ------------------------------------------------------------------ #
+    # GET /sync/diff/{series_id}/{event_id}/{target_id}
+    # ------------------------------------------------------------------ #
+
+    def test_diff_requires_auth(self) -> None:
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        response = self.client.get(
+            f"/api/v1/sync/diff/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_diff_requires_view_event_permission(self) -> None:
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        self._login(self.user)
+        response = self.client.get(
+            f"/api/v1/sync/diff/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_diff_returns_404_for_unknown_target(self) -> None:
+        self._grant_permissions("view_event")
+        self._login(self.user)
+        response = self.client.get(
+            f"/api/v1/sync/diff/{self.series.pk}/{self.event.pk}/00000000-0000-0000-0000-000000000000"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_diff_returns_empty_properties_when_no_items(self) -> None:
+        target = IcalCalendarSyncTarget.objects.create(
+            name="Calendar",
+            url="https://example.com/cal.ics",
+        )
+        self._grant_permissions("view_event")
+        self._login(self.user)
+        response = self.client.get(
+            f"/api/v1/sync/diff/{self.series.pk}/{self.event.pk}/{target.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["target_id"], str(target.pk))
+        self.assertEqual(payload["properties"], [])
+
+    def test_diff_only_returns_diff_for_requested_target(self) -> None:
+        """Diff for target2 must not include items from target1."""
+        target1 = IcalCalendarSyncTarget.objects.create(
+            name="Calendar A",
+            url="https://example.com/a.ics",
+        )
+        target2 = IcalCalendarSyncTarget.objects.create(
+            name="Calendar B",
+            url="https://example.com/b.ics",
+        )
+        IcalCalenderSyncItem.objects.create(
+            sync_target=target1,
+            related_event=self.event,
+            uid="diff-test-uid",
+            ical_definition="BEGIN:VEVENT\nEND:VEVENT",
+        )
+        self._grant_permissions("view_event")
+        self._login(self.user)
+
+        response = self.client.get(
+            f"/api/v1/sync/diff/{self.series.pk}/{self.event.pk}/{target2.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["target_id"], str(target2.pk))
+        self.assertEqual(payload["properties"], [])
     """Unit tests for SyncBaseTarget model methods."""
 
     def test_type_property_returns_concrete_class_name(self) -> None:

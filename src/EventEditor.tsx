@@ -492,10 +492,10 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
     }
   }
 
-  const handlePush = async (platform: string) => {
+  const handlePush = async (targetId: string) => {
     try {
-      setPushing(platform)
-      await pushToPlatform(series.id, event.id, platform)
+      setPushing(targetId)
+      await pushToPlatform(series.id, event.id, targetId)
 
       // Refresh sync status
       const data = await fetchSyncStatus(series.id, event.id)
@@ -507,8 +507,8 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
     }
   }
 
-  const handleViewDiff = (platform: string) => {
-    navigate(`/sync/diff/${series.id}/${event.id}/${encodeURIComponent(platform)}`)
+  const handleViewDiff = (targetId: string) => {
+    navigate(`/sync/diff/${series.id}/${event.id}/${encodeURIComponent(targetId)}`)
   }
 
   const handleCalculatedPriceFieldChange = (field: keyof CalculatedPricesFormValues, value: string) => {
@@ -953,11 +953,11 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
         {syncInfo && (
           <div className={styles.syncGrid}>
             {syncInfo.sync_statuses.map((sync) => {
-              // Find the matching sync target for this platform
-              const matchingTarget = syncTargets.find((t) => t.type === sync.platform)
+              // Find the matching sync target for this specific target id
+              const matchingTarget = syncTargets.find((t) => t.id === sync.target_id)
 
               return (
-                <div key={sync.platform} className={styles.syncCard}>
+                <div key={sync.target_id} className={styles.syncCard}>
                   <div className={styles.cardHeader}>
                     <h4>{sync.platform}</h4>
                     <div
@@ -1017,18 +1017,18 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
                       <button
                         type="button"
                         className={styles.pushButton}
-                        onClick={() => handlePush(sync.platform)}
-                        disabled={pushing === sync.platform}
+                        onClick={() => handlePush(sync.target_id)}
+                        disabled={pushing === sync.target_id}
                         aria-label={`Push or update event to ${sync.platform}`}
                       >
-                        {pushing === sync.platform ? 'Pushing...' : 'Push/Update'}
+                        {pushing === sync.target_id ? 'Pushing...' : 'Push/Update'}
                       </button>
 
                       <button
                         type="button"
                         className={styles.diffButton}
-                        onClick={() => handleViewDiff(sync.platform)}
-                        disabled={pushing === sync.platform}
+                        onClick={() => handleViewDiff(sync.target_id)}
+                        disabled={pushing === sync.target_id}
                         aria-label={`View differences for ${sync.platform}`}
                       >
                         View Diff

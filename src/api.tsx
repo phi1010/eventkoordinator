@@ -303,6 +303,7 @@ export async function loadSeriesFromAPI(): Promise<Series[]> {
 
 // Sync Status Types (fallback DTOs since schema has content?: never)
 export interface SyncStatus {
+  target_id: string
   platform: string
   status: 'no entry exists' | 'entry up-to-date' | 'entry differs'
   last_synced?: string
@@ -319,7 +320,7 @@ export interface SyncPushResult {
   success: boolean
   message: string
   timestamp: string
-  platform: string
+  target_id: string
   series_id: string
   event_id: string
 }
@@ -334,7 +335,7 @@ export interface PropertyDiff {
 export interface SyncDiffData {
   series_id: string
   event_id: string
-  platform: string
+  target_id: string
   properties: PropertyDiff[]
 }
 
@@ -411,16 +412,16 @@ export async function fetchSyncStatus(
 export async function pushToPlatform(
   seriesId: string,
   eventId: string,
-  platform: string
+  targetId: string
 ): Promise<SyncPushResult> {
   const { data, error, response } = await client.POST(
-    '/api/v1/sync/push/{series_id}/{event_id}/{platform}',
+    '/api/v1/sync/push/{series_id}/{event_id}/{target_id}',
     {
       params: {
         path: {
           series_id: seriesId,
           event_id: eventId,
-          platform: platform,
+          target_id: targetId,
         },
       },
     }
@@ -437,16 +438,16 @@ export async function pushToPlatform(
 export async function fetchSyncDiff(
   seriesId: string,
   eventId: string,
-  platform: string
+  targetId: string
 ): Promise<SyncDiffData> {
   const { data, error, response } = await client.GET(
-    '/api/v1/sync/diff/{series_id}/{event_id}/{platform}',
+    '/api/v1/sync/diff/{series_id}/{event_id}/{target_id}',
     {
       params: {
         path: {
           series_id: seriesId,
           event_id: eventId,
-          platform: platform,
+          target_id: targetId,
         },
       },
     }

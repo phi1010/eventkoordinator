@@ -765,7 +765,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/sync/diff/{series_id}/{event_id}/{platform}": {
+    "/api/v1/sync/diff/{series_id}/{event_id}/{target_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -785,7 +785,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/sync/push/{series_id}/{event_id}/{platform}": {
+    "/api/v1/sync/push/{series_id}/{event_id}/{target_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -796,7 +796,7 @@ export interface paths {
         put?: never;
         /**
          * Push To Platform
-         * @description Push/update event data to a specific platform
+         * @description Push/update event data to a specific sync target.
          */
         post: operations["apiv1_routers_sync_push_to_platform"];
         delete?: never;
@@ -1609,8 +1609,6 @@ export interface components {
              * Format: uuid
              */
             event_id: string;
-            /** Platform */
-            platform: string;
             /** Properties */
             properties: components["schemas"]["PropertyDiff"][];
             /**
@@ -1618,6 +1616,11 @@ export interface components {
              * Format: uuid
              */
             series_id: string;
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
         };
         /** SyncPushResult */
         SyncPushResult: {
@@ -1628,8 +1631,6 @@ export interface components {
             event_id: string;
             /** Message */
             message: string;
-            /** Platform */
-            platform: string;
             /**
              * Series Id
              * Format: uuid
@@ -1637,6 +1638,11 @@ export interface components {
             series_id: string;
             /** Success */
             success: boolean;
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
             /** Timestamp */
             timestamp: string;
         };
@@ -1653,6 +1659,11 @@ export interface components {
              * @enum {string}
              */
             status: "no entry exists" | "entry up-to-date" | "entry differs";
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
         };
         /** SyncTargetOut */
         SyncTargetOut: {
@@ -3932,7 +3943,7 @@ export interface operations {
             path: {
                 series_id: string;
                 event_id: string;
-                platform: string;
+                target_id: string;
             };
             cookie?: never;
         };
@@ -3983,7 +3994,7 @@ export interface operations {
             path: {
                 series_id: string;
                 event_id: string;
-                platform: string;
+                target_id: string;
             };
             cookie?: never;
         };
@@ -4009,6 +4020,15 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

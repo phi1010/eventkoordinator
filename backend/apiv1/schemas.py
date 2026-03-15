@@ -78,6 +78,7 @@ class CreateEventOut(Schema):
 
 
 class SyncStatus(Schema):
+    target_id: uuid.UUID
     platform: str
     status: Literal["no entry exists", "entry up-to-date", "entry differs"]
     last_synced: Optional[str] = None
@@ -94,7 +95,7 @@ class SyncPushResult(Schema):
     success: bool
     message: str
     timestamp: str
-    platform: str
+    target_id: uuid.UUID
     series_id: uuid.UUID
     event_id: uuid.UUID
 

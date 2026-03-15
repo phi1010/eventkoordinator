@@ -66,7 +66,7 @@ export function IndexView() {
             }
           />
           <Route
-            path="/sync/diff/:seriesId/:eventId/:platform"
+            path="/sync/diff/:seriesId/:eventId/:targetId"
             element={<SyncDiff />}
           />
           <Route

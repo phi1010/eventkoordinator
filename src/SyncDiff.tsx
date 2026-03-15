@@ -15,10 +15,10 @@ interface PropertyItem extends SelectionItem {
 }
 
 export function SyncDiff() {
-  const { seriesId, eventId, platform } = useParams<{
+  const { seriesId, eventId, targetId } = useParams<{
     seriesId: string
     eventId: string
-    platform: string
+    targetId: string
   }>()
   const navigate = useNavigate()
 
@@ -47,7 +47,7 @@ export function SyncDiff() {
 
   useEffect(() => {
     const loadDiffData = async () => {
-      if (!seriesId || !eventId || !platform) {
+      if (!seriesId || !eventId || !targetId) {
         setError('Missing required parameters')
         setLoading(false)
         return
@@ -55,7 +55,7 @@ export function SyncDiff() {
 
       try {
         setLoading(true)
-        const data = await fetchSyncDiff(seriesId, eventId, platform)
+        const data = await fetchSyncDiff(seriesId, eventId, targetId)
         setProperties(data.properties)
         if (data.properties.length > 0) {
           setSelectedPropertyId(`prop-0`)
@@ -69,7 +69,7 @@ export function SyncDiff() {
     }
 
     loadDiffData()
-  }, [seriesId, eventId, platform])
+  }, [seriesId, eventId, targetId])
 
   // Convert properties to SelectionItems
   const propertyItems: PropertyItem[] = properties.map((prop, index) => ({
@@ -245,7 +245,7 @@ export function SyncDiff() {
             <strong>Event:</strong> {eventId}
           </span>
           <span className={styles.metaItem}>
-            <strong>Platform:</strong> {platform}
+            <strong>Target:</strong> {targetId}
           </span>
         </div>
       </div>
