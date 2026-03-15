@@ -168,6 +168,18 @@
   background-color: white;
 }
 
+.unchangedContent {
+  margin: 0;
+  padding: 1rem;
+  font-family: monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background-color: white;
+  color: #24292f;
+}
+
 .widget {
   display: flex;
   border: 1px solid #dee2e6;

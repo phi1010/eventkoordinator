@@ -19,12 +19,21 @@ class IcalCalenderSyncItem(SyncBaseItem):
     sync_target = models.ForeignKey(IcalCalendarSyncTarget, on_delete=models.CASCADE, related_name="items")
     ical_definition = models.TextField(max_length=10000)
 
-    def sync_diff(self) -> SyncDiffData | None:
+    def sync_diff(self, only_differences: bool = True) -> SyncDiffData | None:
         """iCal items are imported, not pushed; their existence means they are in sync."""
+        from apiv1.models.sync.syncbasedata import PropertyDiff
+        properties = []
+        if not only_differences:
+            properties.append(PropertyDiff(
+                property_name="ical_definition",
+                local_value=self.ical_definition,
+                remote_value=self.ical_definition,
+                file_type="text",
+            ))
         return SyncDiffData(
             series_id=self.related_event.series_id,
             event_id=self.related_event.pk,
             target_id=self.sync_target.pk,
-            properties=[],
+            properties=properties,
         )
 

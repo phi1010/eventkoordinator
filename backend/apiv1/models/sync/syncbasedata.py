@@ -150,12 +150,12 @@ class SyncBaseItem(PolymorphicMetaBase):
         - empty ``SyncDiffData``  → remote entry is in sync with local configuration.
         - non-empty ``SyncDiffData`` → remote entry differs from local configuration.
         """
-        diff = self.sync_diff()
+        diff = self.sync_diff(only_differences=True)
         if diff is None:
             return SyncBaseTarget.SyncTargetStatus.NO_ENTRY_EXISTS
         if len(diff.properties) > 0:
             return SyncBaseTarget.SyncTargetStatus.ENTRY_DIFFERS
         return SyncBaseTarget.SyncTargetStatus.ENTRY_UP_TO_DATE
 
-    def sync_diff(self) -> SyncDiffData | None:
+    def sync_diff(self, only_differences: bool = True) -> SyncDiffData | None:
         return None

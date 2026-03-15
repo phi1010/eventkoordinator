@@ -93,7 +93,8 @@ export function SyncDiff() {
       `remote/${selectedProperty.property_name}`,
       selectedProperty.remote_value,
       selectedProperty.file_type,
-      selectedProperty.file_type
+      selectedProperty.file_type,
+      { context: Number.MAX_SAFE_INTEGER },
     )
     instance.initRaw()
     return instance
@@ -250,23 +251,27 @@ export function SyncDiff() {
         </div>
       </div>
       <div className={styles.diffViewer}>
-        {diffFile && (
-          <DiffView
-            diffFile={diffFile}
-            diffViewWrap={false}
-            diffViewAddWidget
-            renderWidgetLine={({ onClose }) => (
-              <div className={styles.widget}>
-                <span>Additional context can be added here</span>
-                <button type="button" className={styles.widgetButton} onClick={onClose}>
-                  Close
-                </button>
-              </div>
-            )}
-            diffViewTheme="light"
-            diffViewHighlight={true}
-            diffViewMode={diffMode}
-          />
+        {selectedProperty && selectedProperty.local_value === selectedProperty.remote_value ? (
+          <pre className={styles.unchangedContent}>{selectedProperty.local_value}</pre>
+        ) : (
+          diffFile && (
+            <DiffView
+              diffFile={diffFile}
+              diffViewWrap={false}
+              diffViewAddWidget
+              renderWidgetLine={({ onClose }) => (
+                <div className={styles.widget}>
+                  <span>Additional context can be added here</span>
+                  <button type="button" className={styles.widgetButton} onClick={onClose}>
+                    Close
+                  </button>
+                </div>
+              )}
+              diffViewTheme="light"
+              diffViewHighlight={true}
+              diffViewMode={diffMode}
+            />
+          )
         )}
       </div>
     </div>

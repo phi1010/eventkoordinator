@@ -314,6 +314,113 @@ class PretixSyncItemSyncDiffTest(_PretixSyncItemTestBase):
 
 
 # ---------------------------------------------------------------------------
+# PretixSyncItem.sync_diff(only_differences=False)
+# ---------------------------------------------------------------------------
+
+class PretixSyncItemSyncDiffAllPropertiesTest(_PretixSyncItemTestBase):
+    """Tests for PretixSyncItem.sync_diff(only_differences=False).
+
+    When only_differences=False all comparable properties are returned so the
+    diff viewer can show the full context even when the item is up-to-date.
+    """
+
+    def _in_sync_pretix_data(self):
+        return {
+            "subevent": {
+                "name": {"de": self.event.name},
+                "date_from": self.start_time.isoformat(),
+                "date_to": self.end_time.isoformat(),
+                "item_price_overrides": [],
+            },
+            "quotas": [{"id": 1, "size": int(self.proposal.max_participants), "items": []}],
+            "items": [],
+        }
+
+    def test_sync_diff_all_properties_includes_all_when_in_sync(self):
+        """With only_differences=False, date_from/date_to/name/quota_size are all returned
+        even when local and remote values match."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = self._in_sync_pretix_data()
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff(only_differences=False)
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        self.assertIn("date_from", prop_names)
+        self.assertIn("date_to", prop_names)
+        self.assertIn("name", prop_names)
+        self.assertIn("quota_size", prop_names)
+
+    def test_sync_diff_all_properties_values_match_when_in_sync(self):
+        """With only_differences=False, local_value and remote_value are equal for matching
+        properties."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = self._in_sync_pretix_data()
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff(only_differences=False)
+        self.assertIsNotNone(diff)
+        name_prop = next(p for p in diff.properties if p.property_name == "name")
+        self.assertEqual(name_prop.local_value, self.event.name)
+        self.assertEqual(name_prop.remote_value, self.event.name)
+
+    def test_sync_diff_all_properties_still_includes_differences(self):
+        """With only_differences=False, properties that DO differ are still returned."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = {
+            "subevent": {
+                "name": {"de": "WRONG NAME"},
+                "date_from": self.start_time.isoformat(),
+                "date_to": self.end_time.isoformat(),
+                "item_price_overrides": [],
+            },
+            "quotas": [{"id": 1, "size": int(self.proposal.max_participants), "items": []}],
+            "items": [],
+        }
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff(only_differences=False)
+        self.assertIsNotNone(diff)
+        prop_names = [p.property_name for p in diff.properties]
+        # All properties present
+        self.assertIn("date_from", prop_names)
+        self.assertIn("date_to", prop_names)
+        self.assertIn("name", prop_names)
+        # name differs
+        name_prop = next(p for p in diff.properties if p.property_name == "name")
+        self.assertNotEqual(name_prop.local_value, name_prop.remote_value)
+
+    def test_sync_diff_default_still_returns_empty_when_in_sync(self):
+        """The default only_differences=True still returns empty properties when in sync,
+        to avoid breaking get_status()."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = self._in_sync_pretix_data()
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        diff = self.item.sync_diff()  # default: only_differences=True
+        self.assertIsNotNone(diff)
+        self.assertEqual(diff.properties, [])
+
+    def test_sync_diff_all_returns_none_when_no_pretix_data(self):
+        """With only_differences=False, None is still returned when pretix_data is absent."""
+        self.item.subevent_slug = "7"
+        self.item.pretix_data = None
+        self.item.save(update_fields=["subevent_slug", "pretix_data"])
+
+        self.assertIsNone(self.item.sync_diff(only_differences=False))
+
+    def test_sync_diff_all_returns_creation_preview_when_no_subevent(self):
+        """With only_differences=False, creation preview is returned when subevent_slug
+        is absent (behaves same as only_differences=True)."""
+        self.assertIsNone(self.item.subevent_slug)
+        diff = self.item.sync_diff(only_differences=False)
+        self.assertIsNotNone(diff)
+        # Creation preview always has all properties with remote_value=""
+        for p in diff.properties:
+            self.assertEqual(p.remote_value, "")
+
+
+# ---------------------------------------------------------------------------
 # SyncBaseItem.get_status()
 # ---------------------------------------------------------------------------
 

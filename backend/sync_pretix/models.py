@@ -323,15 +323,23 @@ class PretixSyncItem(SyncBaseItem):
             self.pk, len(quotas), len(items),
         )
 
-    def sync_diff(self) -> SyncDiffData | None:
+    def sync_diff(self, only_differences: bool = True) -> SyncDiffData | None:
         """Compare the calculated configuration against the stored pretix_data.
+
+        Args:
+            only_differences: When True (default), only include properties that differ
+                between local and remote values. When False, include all comparable
+                properties regardless of whether they match, so callers can display
+                the full context (e.g. the diff viewer for an up-to-date item).
 
         Returns:
             SyncDiffData with ``remote_value=""`` on every property when the item has
             never been pushed (CREATION_PENDING preview of what would be created).
             None when the subevent was pushed but pretix_data has not been pulled yet
             (STATUS_UNKNOWN – caller should not interpret this as "up-to-date").
-            SyncDiffData with empty ``properties`` when remote matches local config.
+            SyncDiffData with empty ``properties`` (only_differences=True) or all
+            properties with equal values (only_differences=False) when remote matches
+            local config.
             SyncDiffData with non-empty ``properties`` when differences are detected.
         """
         if not self.subevent_slug:
@@ -370,7 +378,7 @@ class PretixSyncItem(SyncBaseItem):
         # Compare date_from.
         expected_date_from = event.start_time.isoformat()
         actual_date_from = stored_subevent.get("date_from", "")
-        if not _isoformat_equal(expected_date_from, actual_date_from):
+        if not only_differences or not _isoformat_equal(expected_date_from, actual_date_from):
             properties.append(PropertyDiff(
                 property_name="date_from",
                 local_value=expected_date_from,
@@ -381,7 +389,7 @@ class PretixSyncItem(SyncBaseItem):
         # Compare date_to.
         expected_date_to = event.end_time.isoformat()
         actual_date_to = stored_subevent.get("date_to", "")
-        if not _isoformat_equal(expected_date_to, actual_date_to):
+        if not only_differences or not _isoformat_equal(expected_date_to, actual_date_to):
             properties.append(PropertyDiff(
                 property_name="date_to",
                 local_value=expected_date_to,
@@ -392,7 +400,7 @@ class PretixSyncItem(SyncBaseItem):
         # Compare the event name for the primary locale.
         actual_name_dict = stored_subevent.get("name") or {}
         actual_name = actual_name_dict.get(event_locale, "")
-        if event.name != actual_name:
+        if not only_differences or event.name != actual_name:
             properties.append(PropertyDiff(
                 property_name="name",
                 local_value=event.name,
@@ -405,7 +413,7 @@ class PretixSyncItem(SyncBaseItem):
             expected_size = getattr(proposal, "max_participants", None)
             if expected_size is not None:
                 actual_size = stored_quotas[0].get("size")
-                if actual_size != int(expected_size):
+                if not only_differences or actual_size != int(expected_size):
                     properties.append(PropertyDiff(
                         property_name="quota_size",
                         local_value=str(expected_size),
@@ -416,7 +424,8 @@ class PretixSyncItem(SyncBaseItem):
         # Compare calculated prices against stored item_price_overrides.
         stored_items = self.pretix_data.get("items") or []
         properties.extend(
-            self._compare_prices(event, association, stored_subevent, stored_items)
+            self._compare_prices(event, association, stored_subevent, stored_items,
+                                 only_differences=only_differences)
         )
 
         return SyncDiffData(
@@ -694,12 +703,17 @@ class PretixSyncItem(SyncBaseItem):
         association: "PretixSyncTargetAreaAssociation",
         stored_subevent: dict,
         stored_items: list[dict],
+        only_differences: bool = True,
     ) -> list[PropertyDiff]:
         """Compare calculated prices against stored Pretix item_price_overrides.
 
+        Args:
+            only_differences: When True (default), only return properties whose
+                prices differ. When False, also include prices that match so the
+                full context is available for display.
+
         Returns an empty list when no ``CalculatedPrices`` exist for the event,
-        when ``stored_items`` is empty (item IDs cannot be resolved), or when
-        every price matches the stored override.
+        or when ``stored_items`` is empty (item IDs cannot be resolved).
         """
         try:
             prices = event.calculated_prices
@@ -744,7 +758,7 @@ class PretixSyncItem(SyncBaseItem):
                 )
             except Exception:
                 prices_equal = actual_price_str == expected_price_str
-            if not prices_equal:
+            if not only_differences or not prices_equal:
                 logger.debug(
                     "PretixSyncItem %s: price diff for %s (item %s): "
                     "local=%s remote=%s.",

@@ -233,7 +233,7 @@ def get_sync_diff(
     matching = _items_for_target_and_event(target, event)
     all_properties: list[PropertyDiff] = []
     for item in matching:
-        diff = item.sync_diff()
+        diff = item.sync_diff(only_differences=False)
         if diff is not None:
             all_properties.extend(diff.properties)
     return SyncDiffData(
