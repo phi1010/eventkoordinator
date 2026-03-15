@@ -167,6 +167,10 @@ def get_sync_status(request, series_id: UUID, event_id: UUID) -> EventSyncInfo:
                 last_error=None,
                 can_push=can_push,
                 can_delete=can_delete,
+                item_url=(
+                    latest_item.get_real_instance().item_admin_url
+                    if latest_item else None
+                ),
             )
         )
     return EventSyncInfo(

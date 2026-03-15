@@ -85,6 +85,7 @@ class SyncStatus(Schema):
     last_error: Optional[str] = None
     can_push: bool = False
     can_delete: bool = False
+    item_url: Optional[str] = None
 
 
 class EventSyncInfo(Schema):

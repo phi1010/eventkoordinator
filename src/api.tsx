@@ -310,6 +310,7 @@ export interface SyncStatus {
   last_error?: string
   can_push: boolean
   can_delete: boolean
+  item_url?: string
 }
 
 export interface EventSyncInfo {

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone as _tz
 from decimal import Decimal, ROUND_CEILING
 import logging
+import re
 
 from apiv1.models import SyncBaseTarget, ProposalArea
 from apiv1.models.basedata import time_string_to_minutes
@@ -184,6 +185,28 @@ class PretixSyncItem(SyncBaseItem):
 
     def __str__(self):
         return f"PretixSyncItem(target={self.sync_target_id}, event={self.related_event_id})"
+
+    @property
+    def item_admin_url(self) -> str | None:
+        """Return the Pretix admin URL for the linked subevent.
+
+        Strips ``/api/v1`` (with optional trailing slash) from the configured
+        ``api_url`` to derive the Pretix server base URL, then constructs the
+        admin subevent URL.
+
+        Returns ``None`` when no subevent has been created yet.
+        """
+        if not self.subevent_slug:
+            return None
+        association = self.area_association
+        target = self.sync_target
+        if association is None or target is None:
+            return None
+        server_url = re.sub(r"/api/v1/?$", "", target.api_url.rstrip("/"))
+        return (
+            f"{server_url}/control/event/{target.organizer_slug}"
+            f"/{association.event_slug}/subevents/{self.subevent_slug}/"
+        )
 
     def get_status(self) -> "SyncBaseTarget.SyncTargetStatus":
         """Return the sync status for this Pretix sync item.

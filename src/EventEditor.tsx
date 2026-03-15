@@ -1024,6 +1024,22 @@ export function EventEditor({ series, event, onEventUpdate, onDeleteEvent, onReq
                       </div>
                     )}
 
+                    {sync.item_url && (
+                      <div className={styles.info}>
+                        <span className={styles.infoLabel}>Remote entry:</span>
+                        <span className={styles.infoValue}>
+                          <a
+                            href={sync.item_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`Open remote entry for ${sync.platform} in a new tab`}
+                          >
+                            Open in {sync.platform}
+                          </a>
+                        </span>
+                      </div>
+                    )}
+
                     {sync.last_error && (
                       <div className={styles.error}>
                         <span className={styles.infoLabel}>Error:</span>

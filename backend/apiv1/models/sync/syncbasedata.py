@@ -128,6 +128,16 @@ class SyncBaseItem(PolymorphicMetaBase):
         """
         return None
 
+    @property
+    def item_admin_url(self) -> str | None:
+        """Return the admin/management URL for the remote resource linked to this sync item.
+
+        Subclasses override this to provide a platform-specific direct link to the
+        remote resource (e.g. the Pretix subevent admin page).
+        Returns ``None`` when no remote resource exists yet or the URL cannot be determined.
+        """
+        return None
+
     def push_update(self):
         pass
 

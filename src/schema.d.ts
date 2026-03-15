@@ -1748,6 +1748,8 @@ export interface components {
              * @default false
              */
             can_push: boolean;
+            /** Item Url */
+            item_url?: string | null;
             /** Last Error */
             last_error?: string | null;
             /** Last Synced */
@@ -1758,7 +1760,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "no entry exists" | "status unknown" | "entry up-to-date" | "entry differs";
+            status: "no entry exists" | "creation pending" | "status unknown" | "entry up-to-date" | "entry differs";
             /**
              * Target Id
              * Format: uuid
