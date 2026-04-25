@@ -25,7 +25,7 @@ server {
         proxy_set_header Host {{ host_header }}; # TODO adapt this if we use a custom domain
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
     }
 
     # OIDC auth requests -> Django backend
@@ -34,7 +34,7 @@ server {
         proxy_set_header Host {{ host_header }}; # TODO adapt this if we use a custom domain
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
     }
 
     # Django admin -> Django backend
@@ -43,7 +43,7 @@ server {
         proxy_set_header Host {{ host_header }}; # TODO adapt this if we use a custom domain
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
     }
 
     # Django metrics -> Django backend
@@ -52,7 +52,7 @@ server {
         proxy_set_header Host {{ host_header }}; # TODO adapt this if we use a custom domain
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
     }
 
     # Vite-built SPA - serve index.html for all unmatched routes

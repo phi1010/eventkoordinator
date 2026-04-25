@@ -180,6 +180,9 @@ SECURE_SSL_REDIRECT = False
 SECURE_HSTS_SECONDS = None
 SECURE_HSTS_INCLUDE_SUBDOMAINS = None
 SECURE_HSTS_PRELOAD = None
+# Trust the X-Forwarded-Proto header set by the upstream TLS-terminating reverse proxy.
+# This is required so Django builds https:// URLs (e.g. OIDC redirect URIs) correctly.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # ================
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
