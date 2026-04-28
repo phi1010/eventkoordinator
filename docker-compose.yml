@@ -1,3 +1,35 @@
+x-backend-environment: &backend-environment
+  DJANGO_SETTINGS_MODULE: project.settings
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
+  DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS}
+  DJANGO_CORS_ALLOWED_ORIGINS: ${DJANGO_CORS_ALLOWED_ORIGINS}
+  DJANGO_DEBUG: 0
+  # OIDC
+  DJANGO_OIDC_RP_CLIENT_ID: ${DJANGO_OIDC_RP_CLIENT_ID}
+  DJANGO_OIDC_RP_CLIENT_SECRET: ${DJANGO_OIDC_RP_CLIENT_SECRET}
+  DJANGO_EMAIL_HOST: ${DJANGO_EMAIL_HOST}
+  DJANGO_EMAIL_PORT: ${DJANGO_EMAIL_PORT}
+  DJANGO_EMAIL_HOST_USER: ${DJANGO_EMAIL_HOST_USER}
+  DJANGO_EMAIL_HOST_PASSWORD: ${DJANGO_EMAIL_HOST_PASSWORD}
+  DJANGO_EMAIL_USE_SSL: ${DJANGO_EMAIL_USE_SSL}
+  DJANGO_EMAIL_USE_TLS: ${DJANGO_EMAIL_USE_TLS}
+  DJANGO_DEFAULT_FROM_EMAIL: ${DJANGO_DEFAULT_FROM_EMAIL}
+  PROMETHEUS_MULTIPROC_DIR: /app/prometheus_multiproc
+  NGINX_PROXY_HOST: ${NGINX_PROXY_HOST:?Set NGINX_PROXY_HOST to the host and port of the public endpoint of the backend, e.g. localhost:8000 when debugging}
+  DJANGO_DATABASES__default__ENGINE: "django_prometheus.db.backends.postgresql"
+  DJANGO_DATABASES__default__NAME: "db"
+  DJANGO_DATABASES__default__USER: "user"
+  DJANGO_DATABASES__default__PASSWORD: "password"
+  DJANGO_DATABASES__default__HOST: "db"
+  DJANGO_DATABASES__default__PORT: 5432
+  DJANGO_CELERY_BROKER_URL: "redis://redis:6379/0"
+  DJANGO_CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+
+x-backend-volumes: &backend-volumes
+  - db-data:/app/backend/data
+  - media-data:/app/backend/media
+
 services:
   db:
     #image: postgres
@@ -16,26 +48,9 @@ services:
     build:
       context: .
       target: backend
-    volumes:
-      - db-data:/app/backend/data
-      - media-data:/app/backend/media
+    volumes: *backend-volumes
     environment:
-      DJANGO_SETTINGS_MODULE: project.settings
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
-      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
-      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS}
-      DJANGO_CORS_ALLOWED_ORIGINS: ${DJANGO_CORS_ALLOWED_ORIGINS}
-      DJANGO_DEBUG: 0
-      # OIDC
-      DJANGO_OIDC_RP_CLIENT_ID: ${DJANGO_OIDC_RP_CLIENT_ID}
-      DJANGO_OIDC_RP_CLIENT_SECRET: ${DJANGO_OIDC_RP_CLIENT_SECRET}
-      DJANGO_EMAIL_HOST: ${DJANGO_EMAIL_HOST}
-      DJANGO_EMAIL_PORT: ${DJANGO_EMAIL_PORT}
-      DJANGO_EMAIL_HOST_USER: ${DJANGO_EMAIL_HOST_USER}
-      DJANGO_EMAIL_HOST_PASSWORD: ${DJANGO_EMAIL_HOST_PASSWORD}
-      DJANGO_EMAIL_USE_SSL: ${DJANGO_EMAIL_USE_SSL}
-      DJANGO_EMAIL_USE_TLS: ${DJANGO_EMAIL_USE_TLS}
-      DJANGO_DEFAULT_FROM_EMAIL: ${DJANGO_DEFAULT_FROM_EMAIL}
+      <<: *backend-environment
       DJANGO_LOGGING__version: 1
       DJANGO_LOGGING__disable_existing_loggers: false
       DJANGO_LOGGING__root__level: "DEBUG"
@@ -63,14 +78,6 @@ services:
       DJANGO_LOGGING__handlers__console__formatter: "simple"
       DJANGO_LOGGING__handlers__console__stream: "ext://sys.stderr"
       DJANGO_LOGGING__handlers__console__level: "DEBUG"
-      PROMETHEUS_MULTIPROC_DIR: /app/prometheus_multiproc
-      NGINX_PROXY_HOST: ${NGINX_PROXY_HOST:?Set NGINX_PROXY_HOST to the host and port of the public endpoint of the backend, e.g. localhost:8000 when debugging}
-      DJANGO_DATABASES__default__ENGINE: "django_prometheus.db.backends.postgresql"
-      DJANGO_DATABASES__default__NAME: "db"
-      DJANGO_DATABASES__default__USER: "user"
-      DJANGO_DATABASES__default__PASSWORD: "password"
-      DJANGO_DATABASES__default__HOST: "db"
-      DJANGO_DATABASES__default__PORT: 5432
     expose:
       - "8000"
     restart: no
@@ -92,6 +99,36 @@ services:
     depends_on:
       - backend
     restart: no
+
+  redis:
+    image: docker.io/redis:7-alpine
+    restart: no
+    expose:
+      - "6379"
+
+  celery-worker:
+    build:
+      context: .
+      target: backend
+    volumes: *backend-volumes
+    environment: *backend-environment
+    command: ["uv", "run", "celery", "-A", "project.celeryapp", "worker", "--loglevel=info"]
+    restart: no
+    depends_on:
+      - db
+      - redis
+
+  celery-beat:
+    build:
+      context: .
+      target: backend
+    volumes: *backend-volumes
+    environment: *backend-environment
+    command: ["uv", "run", "celery", "-A", "project.celeryapp", "beat", "--loglevel=info", "--scheduler", "django_celery_beat.schedulers:DatabaseScheduler"]
+    restart: no
+    depends_on:
+      - db
+      - redis
 
 volumes:
   db-data:
