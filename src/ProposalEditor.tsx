@@ -1117,7 +1117,7 @@ export function ProposalEditor({
                   speakers={speakers}
                   onSpeakersChange={async (newSpeakers) => {
                     setSpeakers(newSpeakers)
-                    // Refresh checklist when speakers change
+                    // Refresh checklist and buttons when speakers change
                     if (_proposalId && _proposalId.trim()) {
                       try {
                         setChecklistLoading(true)
@@ -1129,6 +1129,7 @@ export function ProposalEditor({
                         setChecklistLoading(false)
                       }
                     }
+                    setTransitionButtonsVersion((previous) => previous + 1)
                   }}
                   disabled={isSaving || !_proposalId || !_proposalId.trim() || !canEdit}
                 />
