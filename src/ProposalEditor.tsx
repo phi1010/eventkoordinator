@@ -62,6 +62,7 @@ interface ProposalEditorProps {
   onProposalSave?: (formData: ProposalFormData) => void
   onDeleteProposal?: (proposalId: string) => Promise<void>
   onRequestNavigation?: (confirmFn: () => Promise<boolean>) => void
+  onTransitionSuccess?: () => void
 }
 
 const DEFAULT_FORM_DATA: ProposalFormData = {
@@ -186,6 +187,7 @@ export function ProposalEditor({
   onProposalSave,
   onDeleteProposal,
   onRequestNavigation,
+  onTransitionSuccess: onTransitionSuccessProp,
 }: ProposalEditorProps) {
   const navigate = useNavigate()
   const { canView, canAdd, loading: permissionsLoading } = usePermissions()
@@ -1327,6 +1329,7 @@ export function ProposalEditor({
                 setCurrentStatus(data.current_status)
               }).catch(console.error)
             }
+            onTransitionSuccessProp?.()
           }}
           onTransitionError={(error) => {
             console.error('Transition error:', error)

@@ -270,48 +270,48 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
     void loadProposals()
   }, [loadProposals])
 
-  useEffect(() => {
-    const checkSelectedProposalPermissions = async () => {
-      const selected = proposals.find((item) => item.id === selectedProposalId)
-      if (!selected || !selected.proposalId) {
-        setCanViewSelectedProposal(true)
-        setCanEditSelectedProposal(true)
-        setCanDeleteSelectedProposal(false)
-        return
-      }
-
-      setEditorPermissionLoading(true)
-      try {
-        const [canView, canChange, canDelete] = await Promise.all([
-          checkObjectPermission({
-            app: 'apiv1',
-            action: 'view',
-            object_type: 'proposal',
-            object_id: selected.proposalId,
-          }),
-          checkObjectPermission({
-            app: 'apiv1',
-            action: 'change',
-            object_type: 'proposal',
-            object_id: selected.proposalId,
-          }),
-          checkObjectPermission({
-            app: 'apiv1',
-            action: 'delete',
-            object_type: 'proposal',
-            object_id: selected.proposalId,
-          }),
-        ])
-        setCanViewSelectedProposal(canView)
-        setCanEditSelectedProposal(canChange)
-        setCanDeleteSelectedProposal(canDelete)
-      } finally {
-        setEditorPermissionLoading(false)
-      }
+  const checkSelectedProposalPermissions = useCallback(async () => {
+    const selected = proposals.find((item) => item.id === selectedProposalId)
+    if (!selected || !selected.proposalId) {
+      setCanViewSelectedProposal(true)
+      setCanEditSelectedProposal(true)
+      setCanDeleteSelectedProposal(false)
+      return
     }
 
-    void checkSelectedProposalPermissions()
+    setEditorPermissionLoading(true)
+    try {
+      const [canView, canChange, canDelete] = await Promise.all([
+        checkObjectPermission({
+          app: 'apiv1',
+          action: 'view',
+          object_type: 'proposal',
+          object_id: selected.proposalId,
+        }),
+        checkObjectPermission({
+          app: 'apiv1',
+          action: 'change',
+          object_type: 'proposal',
+          object_id: selected.proposalId,
+        }),
+        checkObjectPermission({
+          app: 'apiv1',
+          action: 'delete',
+          object_type: 'proposal',
+          object_id: selected.proposalId,
+        }),
+      ])
+      setCanViewSelectedProposal(canView)
+      setCanEditSelectedProposal(canChange)
+      setCanDeleteSelectedProposal(canDelete)
+    } finally {
+      setEditorPermissionLoading(false)
+    }
   }, [proposals, selectedProposalId])
+
+  useEffect(() => {
+    void checkSelectedProposalPermissions()
+  }, [checkSelectedProposalPermissions])
 
   const handleCreateProposal = async () => {
     try {
@@ -466,6 +466,16 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
             canEdit={canEditSelectedProposal ?? false}
             canDelete={canDeleteSelectedProposal}
             onDeleteProposal={handleProposalDelete}
+            onTransitionSuccess={() => {
+              void checkSelectedProposalPermissions()
+              void fetchProposalTransitions(proposal.proposalId).then((data) => {
+                setProposals((prev) => prev.map((p) =>
+                  p.proposalId === proposal.proposalId
+                    ? { ...p, workflow_status: data.current_status }
+                    : p
+                ))
+              }).catch(console.error)
+            }}
             onProposalSave={async (formData) => {
               // Refresh proposal list after a proposal is saved
               try {
