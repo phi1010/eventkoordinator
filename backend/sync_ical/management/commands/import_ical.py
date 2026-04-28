@@ -6,6 +6,7 @@ import icalendar
 import recurring_ical_events
 import requests
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils import timezone as django_timezone
 
 from apiv1.models import Event, Series
@@ -146,20 +147,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        # Clear existing data if requested
-        if options["clear"]:
-            self.stdout.write(
-                self.style.WARNING("Clearing existing series and events...")
-            )
-            IcalCalenderSyncItem.objects.all().delete()
-            IcalCalendarSyncTarget.objects.all().delete()
-            Event.objects.all().delete()
-            Series.objects.all().delete()
-            self.stdout.write(self.style.SUCCESS("Cleared."))
-
         source_url = options["url"]
 
-        # Fetch or load iCalendar data
+        # Fetch or load iCalendar data first (before transaction)
         if options["file"]:
             self.stdout.write(
                 f"Loading iCalendar from file: {options['file']} "
@@ -181,21 +171,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR(f"Failed to fetch calendar: {e}"))
                 return
 
-        # Create or update the sync target
-        calendar_name = options.get("calendar_name") or source_url
-        sync_target, target_created = IcalCalendarSyncTarget.objects.get_or_create(
-            url=source_url,
-            defaults={"name": calendar_name},
-        )
-        if not target_created and options.get("calendar_name"):
-            sync_target.name = calendar_name
-            sync_target.save()
-
-        self.stdout.write(
-            f"{'Created' if target_created else 'Using existing'} sync target: {sync_target.name}"
-        )
-
-        # Parse calendar data
+        # Parse calendar data before transaction
         self.stdout.write("Parsing calendar data...")
         try:
             raw_events = parse_calendar_data(ics_content)
@@ -234,48 +210,75 @@ class Command(BaseCommand):
                 }
             )
 
-        # Create series and events in database
-        created_count = 0
-        for series_name, series_data in series_map.items():
-            try:
-                series = Series.objects.create(
-                    name=series_data["name"],
-                    description=series_data["description"],
-                )
-                created_count += 1
-
-                for event_data in series_data["events"]:
-                    event = Event.objects.create(
-                        series=series,
-                        name=event_data["name"],
-                        start_time=event_data["start_time"],
-                        end_time=event_data["end_time"],
-                        tag=event_data["tag"],
-                        use_full_days=True,
-                    )
-                    IcalCalenderSyncItem.objects.get_or_create(
-                        uid=event_data["occurrence_uid"],
-                        defaults={
-                            "sync_target": sync_target,
-                            "related_event": event,
-                            "ical_definition": event_data["ical_definition"],
-                        },
-                    )
-
+        # Execute clear and import in a single transaction
+        with transaction.atomic():
+            # Clear existing data if requested
+            if options["clear"]:
                 self.stdout.write(
-                    self.style.SUCCESS(
-                        f"Created series: {series.name} "
-                        f"with {len(series_data['events'])} events"
-                    )
+                    self.style.WARNING("Clearing existing series and events...")
                 )
-            except Exception as e:
-                self.stdout.write(
-                    self.style.ERROR(f'Failed to create series "{series_name}": {e}')
-                )
+                IcalCalenderSyncItem.objects.all().delete()
+                IcalCalendarSyncTarget.objects.all().delete()
+                Event.objects.all().delete()
+                Series.objects.all().delete()
+                self.stdout.write(self.style.SUCCESS("Cleared."))
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"\nImport complete! Created {created_count} new series."
+            # Create or update the sync target
+            calendar_name = options.get("calendar_name") or source_url
+            sync_target, target_created = IcalCalendarSyncTarget.objects.get_or_create(
+                url=source_url,
+                defaults={"name": calendar_name},
             )
-        )
+            if not target_created and options.get("calendar_name"):
+                sync_target.name = calendar_name
+                sync_target.save()
+
+            self.stdout.write(
+                f"{'Created' if target_created else 'Using existing'} sync target: {sync_target.name}"
+            )
+
+            # Create series and events in database
+            created_count = 0
+            for series_name, series_data in series_map.items():
+                try:
+                    series = Series.objects.create(
+                        name=series_data["name"],
+                        description=series_data["description"],
+                    )
+                    created_count += 1
+
+                    for event_data in series_data["events"]:
+                        event = Event.objects.create(
+                            series=series,
+                            name=event_data["name"],
+                            start_time=event_data["start_time"],
+                            end_time=event_data["end_time"],
+                            tag=event_data["tag"],
+                            use_full_days=True,
+                        )
+                        IcalCalenderSyncItem.objects.get_or_create(
+                            uid=event_data["occurrence_uid"],
+                            defaults={
+                                "sync_target": sync_target,
+                                "related_event": event,
+                                "ical_definition": event_data["ical_definition"],
+                            },
+                        )
+
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Created series: {series.name} "
+                            f"with {len(series_data['events'])} events"
+                        )
+                    )
+                except Exception as e:
+                    self.stdout.write(
+                        self.style.ERROR(f'Failed to create series "{series_name}": {e}')
+                    )
+
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"\nImport complete! Created {created_count} new series."
+                )
+            )
 

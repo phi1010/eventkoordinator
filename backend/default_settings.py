@@ -220,5 +220,10 @@ CELERY_BEAT_SCHEDULE = {
     "import-ical-every-hour": {
         "task": "sync_ical.tasks.import_ical_task",
         "schedule": crontab(minute=0),  # Every hour at :00
+        "options": {"queue": "default"},
     },
+}
+
+CELERY_TASK_ROUTES = {
+    "sync_ical.tasks.import_ical_task": {"queue": "default"},
 }
