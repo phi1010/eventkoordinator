@@ -212,3 +212,13 @@ SECURE_CSP = {
 }
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB limit for file uploads
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+
+# Celery Beat scheduled tasks
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    "import-ical-every-hour": {
+        "task": "sync_ical.tasks.import_ical_task",
+        "schedule": crontab(minute=0),  # Every hour at :00
+    },
+}
