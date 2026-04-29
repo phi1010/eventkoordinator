@@ -1,8 +1,10 @@
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { usePermissions } from './usePermissions'
 import styles from './DefaultScreen.module.css'
 
 export function DefaultScreen() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { canBrowse, canAdd, loading } = usePermissions()
 
@@ -10,7 +12,7 @@ export function DefaultScreen() {
     return (
       <div className={styles.container}>
         <div className={styles.content}>
-          <p style={{ textAlign: 'center', color: '#666' }}>Loading...</p>
+          <p style={{ textAlign: 'center', color: '#666' }}>{t('common.loading')}</p>
         </div>
       </div>
     )
@@ -24,11 +26,11 @@ export function DefaultScreen() {
     return (
       <div className={styles.container}>
         <div className={styles.content}>
-          <h1 className={styles.title}>Welcome to Event Coordinator</h1>
+          <h1 className={styles.title}>{t('defaultScreen.welcomeTitle')}</h1>
           <p style={{ textAlign: 'center', color: '#666', marginTop: '2rem' }}>
-            You don't have permission to access any features.
+            {t('defaultScreen.noPermission')}
             <br />
-            Please log in or -- if that didn't work -- contact an administrator for access.
+            {t('defaultScreen.contactAdmin')}
           </p>
         </div>
       </div>
@@ -38,8 +40,8 @@ export function DefaultScreen() {
   return (
     <div className={styles.container}>
       <div className={styles.content}>
-        <h1 className={styles.title}>Welcome to Event Coordinator</h1>
-        <p className={styles.subtitle}>Choose your role to get started</p>
+        <h1 className={styles.title}>{t('defaultScreen.welcomeTitle')}</h1>
+        <p className={styles.subtitle}>{t('defaultScreen.chooseRole')}</p>
 
         <div className={styles.buttonsGrid}>
           {canViewProposals && (
@@ -49,12 +51,12 @@ export function DefaultScreen() {
             >
               <div className={styles.buttonIcon}>🎤</div>
               <div className={styles.buttonTitle}>
-                {canAdd('proposal') ? 'Create a Proposal' : 'View Proposals'}
+                {canAdd('proposal') ? t('defaultScreen.createProposal') : t('defaultScreen.viewProposals')}
               </div>
               <div className={styles.buttonDescription}>
                 {canAdd('proposal')
-                  ? 'Submit your workshop, talk, or activity proposal'
-                  : 'View and manage your proposals'}
+                  ? t('defaultScreen.createProposalDesc')
+                  : t('defaultScreen.manageProposals')}
               </div>
             </button>
           )}
@@ -66,12 +68,12 @@ export function DefaultScreen() {
             >
               <div className={styles.buttonIcon}>📅</div>
               <div className={styles.buttonTitle}>
-                {canAdd('series') || canAdd('event') ? 'Edit Schedule' : 'View Schedule'}
+                {canAdd('series') || canAdd('event') ? t('defaultScreen.editSchedule') : t('defaultScreen.viewSchedule')}
               </div>
               <div className={styles.buttonDescription}>
                 {canAdd('series') || canAdd('event')
-                  ? 'Manage events and coordinate the schedule'
-                  : 'View the event schedule'}
+                  ? t('defaultScreen.editScheduleDesc')
+                  : t('defaultScreen.viewScheduleDesc')}
               </div>
             </button>
           )}

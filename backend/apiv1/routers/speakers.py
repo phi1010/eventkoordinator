@@ -53,11 +53,11 @@ def add_speaker_to_proposal(
     try:
         proposal = ProposalModel.objects.get(pk=proposal_id)
         if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
-            return 401, ErrorOut(error="Permission denied")
+            return 401, ErrorOut(code="auth.permissionDenied")
     except ProposalModel.DoesNotExist:
         if not request.user.has_perm((apiv1, "change", ProposalModel), None):
-            return 401, ErrorOut(error="Permission denied")
-        return 404, ErrorOut(error="Proposal not found")
+            return 401, ErrorOut(code="auth.permissionDenied")
+        return 404, ErrorOut(code="proposals.notFound")
 
     try:
         sort_order = proposal.speakers.count()
@@ -73,7 +73,7 @@ def add_speaker_to_proposal(
         return 201, _speaker_to_proposal_speaker_out(speaker)
     except Exception as e:
         logger.error(f"Failed to add speaker: {str(e)}")
-        return 400, ErrorOut(error="Failed to add speaker")
+        return 400, ErrorOut(code="speakers.addFailed")
 
 
 @router.get(
@@ -88,11 +88,11 @@ def list_proposal_speakers(
     try:
         proposal = ProposalModel.objects.get(pk=proposal_id)
         if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
-            return 401, ErrorOut(error="Permission denied")
+            return 401, ErrorOut(code="auth.permissionDenied")
     except ProposalModel.DoesNotExist:
         if not request.user.has_perm((apiv1, "view", ProposalModel), None):
-            return 401, ErrorOut(error="Permission denied")
-        return 404, ErrorOut(error="Proposal not found")
+            return 401, ErrorOut(code="auth.permissionDenied")
+        return 404, ErrorOut(code="proposals.notFound")
 
     speakers = proposal.speakers.order_by("sort_order")
 
@@ -111,19 +111,19 @@ def remove_speaker_from_proposal(
     try:
         proposal = ProposalModel.objects.get(pk=proposal_id)
         if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
-            return 401, ErrorOut(error="Permission denied")
+            return 401, ErrorOut(code="auth.permissionDenied")
         speaker = Speaker.objects.get(id=speaker_id, proposal=proposal)
         speaker.delete()
         return 200, {"success": True, "message": "Speaker removed from proposal"}
     except ProposalModel.DoesNotExist:
         if not request.user.has_perm((apiv1, "change", ProposalModel), None):
-            return 401, ErrorOut(error="Permission denied")
-        return 404, ErrorOut(error="Proposal not found")
+            return 401, ErrorOut(code="auth.permissionDenied")
+        return 404, ErrorOut(code="proposals.notFound")
     except Speaker.DoesNotExist:
-        return 404, ErrorOut(error="Speaker not found in proposal")
+        return 404, ErrorOut(code="speakers.notFound")
     except Exception as e:
         logger.error(f"Failed to remove speaker: {str(e)}")
-        return 404, ErrorOut(error="Speaker not found")
+        return 404, ErrorOut(code="speakers.notFound")
 
 
 @router.put(
@@ -138,17 +138,17 @@ def update_speaker_in_proposal(
     try:
         proposal = ProposalModel.objects.get(pk=proposal_id)
         if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
-            return 401, ErrorOut(error="Permission denied")
+            return 401, ErrorOut(code="auth.permissionDenied")
         speaker = Speaker.objects.get(id=speaker_id, proposal=proposal)
     except ProposalModel.DoesNotExist:
         if not request.user.has_perm((apiv1, "change", ProposalModel), None):
-            return 401, ErrorOut(error="Permission denied")
-        return 404, ErrorOut(error="Proposal not found")
+            return 401, ErrorOut(code="auth.permissionDenied")
+        return 404, ErrorOut(code="proposals.notFound")
     except Speaker.DoesNotExist:
-        return 404, ErrorOut(error="Speaker not found in proposal")
+        return 404, ErrorOut(code="speakers.notFound")
     except Exception as e:
         logger.error(f"Failed to retrieve speaker: {str(e)}")
-        return 404, ErrorOut(error="Speaker not found in proposal")
+        return 404, ErrorOut(code="speakers.notFound")
 
     try:
         if payload.email is not None:
@@ -167,7 +167,7 @@ def update_speaker_in_proposal(
         return 200, _speaker_to_proposal_speaker_out(speaker)
     except Exception as e:
         logger.error(f"Failed to update speaker: {str(e)}")
-        return 400, ErrorOut(error="Failed to update speaker")
+        return 400, ErrorOut(code="speakers.updateFailed")
 
 
 @router.post(
@@ -182,14 +182,14 @@ def upload_speaker_profile_picture(
     try:
         proposal = ProposalModel.objects.get(pk=proposal_id)
         if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
-            return 401, ErrorOut(error="Permission denied")
+            return 401, ErrorOut(code="auth.permissionDenied")
         speaker = Speaker.objects.get(id=speaker_id, proposal=proposal)
     except ProposalModel.DoesNotExist:
         if not request.user.has_perm((apiv1, "change", ProposalModel), None):
-            return 401, ErrorOut(error="Permission denied")
-        return 404, ErrorOut(error="Proposal not found")
+            return 401, ErrorOut(code="auth.permissionDenied")
+        return 404, ErrorOut(code="proposals.notFound")
     except Speaker.DoesNotExist:
-        return 404, ErrorOut(error="Speaker not found in proposal")
+        return 404, ErrorOut(code="speakers.notFound")
 
     profile_picture_field = cast(
         models.FileField, speaker._meta.get_field("profile_picture")
@@ -198,7 +198,7 @@ def upload_speaker_profile_picture(
         profile_picture_field.clean(file, speaker)
     except ValidationError as exc:
         return 400, ErrorOut(
-            error="Invalid speaker image",
+            code="speakers.invalidImage",
             detail=" ".join(exc.messages),
         )
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   searchProposals,
   createProposal,
@@ -39,6 +40,7 @@ export function SelectionPanel<T extends SelectionItem>({
   belowTitleElement,
   isNested = false,
 }: SelectionPanelProps<T>) {
+  const { t } = useTranslation()
   const [comboboxOpen, setComboboxOpen] = useState(false)
   const selectedItem = items.find((item) => item.id === selectedItemId)
   const itemListRef = useRef<HTMLUListElement>(null)
@@ -121,7 +123,7 @@ export function SelectionPanel<T extends SelectionItem>({
             aria-expanded={comboboxOpen}
             aria-haspopup="listbox"
             aria-controls={listboxId}
-            aria-label={`Select ${sidebarTitle}`}
+            aria-label={t('selection.select', { title: sidebarTitle })}
           >
             <span className={styles.comboboxValue}>{renderItemLabel(selectedItem)}</span>
             <span className={styles.comboboxIcon} aria-hidden="true">▼</span>
@@ -180,6 +182,7 @@ interface ProposalSelectionPanelProps {
 }
 
 export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: ProposalSelectionPanelProps) {
+  const { t } = useTranslation()
   const [proposals, setProposals] = useState<ProposalItem[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedProposalId, setSelectedProposalId] = useState<string>('')
@@ -194,8 +197,8 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
   const { proposalId: urlProposalId } = useParams<{ proposalId?: string }>()
 
   const formatWorkflowStatus = (status?: string) => {
-    if (!status) return 'unknown'
-    return status.replace(/_/g, ' ')
+    if (!status) return t('proposal.statusValues.unknown')
+    return t(`proposal.statusValues.${status}`, { defaultValue: status.replace(/_/g, ' ') })
   }
 
   const refreshWorkflowStatuses = useCallback(async (proposalItems: ProposalItem[]) => {
@@ -245,8 +248,8 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
         const emptyItem: ProposalItem = {
           id: 'empty',
           proposalId: '',
-          title: 'No proposals yet',
-          submission_type: 'Click "Create New Proposal" to get started',
+          title: t('selection.noProposalsYet'),
+          submission_type: t('selection.clickCreateNewProposal'),
         }
         setProposals([emptyItem])
         setSelectedProposalId('empty')
@@ -337,7 +340,7 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
         onCreateProposal()
       }
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : 'Failed to create proposal')
+      setCreateError(t('selection.createFailed'))
       console.error('Failed to create proposal:', error)
     } finally {
       setIsCreating(false)
@@ -357,8 +360,8 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
       const emptyItem: ProposalItem = {
         id: 'empty',
         proposalId: '',
-        title: 'No proposals yet',
-        submission_type: 'Click "Create New Proposal" to get started',
+        title: t('selection.noProposalsYet'),
+        submission_type: t('selection.clickCreateNewProposal'),
       }
       setProposals([emptyItem])
       setSelectedProposalId('empty')
@@ -373,14 +376,14 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
   }
 
   if (loading) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading proposals...</div>
+    return <div style={{ padding: '2rem', textAlign: 'center' }}>{t('selection.loadingProposals')}</div>
   }
 
   if (!canBrowse('proposal')) {
     return (
       <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-        <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Access Denied</p>
-        <p>You don't have permission to browse proposals</p>
+        <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('indexView.accessDenied')}</p>
+        <p>{t('selection.noPermissionBrowse')}</p>
       </div>
     )
   }
@@ -414,7 +417,7 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
           opacity: isCreating ? 0.7 : 1,
         }}
       >
-        {isCreating ? 'Creating...' : 'Create New Proposal'}
+        {isCreating ? t('selection.creating') : t('selection.createNewProposal')}
       </button>
       {createError && (
         <div className={styles.inlineError}>
@@ -447,17 +450,17 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
       renderContent={(proposal) => (
         proposal.proposalId === '' ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-            <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>No proposals yet</p>
-            <p>Click the "Create New Proposal" button to get started</p>
+            <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('selection.noProposalsYet')}</p>
+            <p>{t('selection.clickCreateNewProposal')}</p>
           </div>
         ) : editorPermissionLoading ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-            Checking proposal permissions...
+            {t('selection.checkingPermissions')}
           </div>
         ) : !canViewSelectedProposal ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-            <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Access Denied</p>
-            <p>You don't have permission to view this proposal</p>
+            <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('indexView.accessDenied')}</p>
+            <p>{t('selection.noPermissionViewProposal')}</p>
           </div>
         ) : (
           <ProposalEditor

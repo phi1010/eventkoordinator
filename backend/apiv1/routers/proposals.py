@@ -132,7 +132,7 @@ def create_proposal(
                     code=payload.submission_type
                 )
             except SubmissionType.DoesNotExist:
-                return 400, ErrorOut(error="Invalid submission type")
+                return 400, ErrorOut(code="proposals.invalidSubmissionType")
 
         # Use defaults for all optional fields
         title = payload.title or ""
@@ -198,12 +198,12 @@ def create_proposal(
             proposal.clean()  # Validate duration
         except Exception as e:
             logger.error(f"Proposal validation failed: {str(e)}")
-            return 400, ErrorOut(error="Proposal validation failed")
+            return 400, ErrorOut(code="proposals.validationError")
 
         return 201, model_proposal_to_schema(proposal)
     except Exception as e:
         logger.error(f"Failed to create proposal: {str(e)}")
-        return 400, ErrorOut(error="Failed to create proposal")
+        return 400, ErrorOut(code="proposals.createFailed")
 
 
 @router.get(
@@ -224,10 +224,10 @@ def get_proposal(
             .get(pk=proposal_id)
         )
     except ProposalModel.DoesNotExist:
-        return 404, ErrorOut(error="Proposal not found")
+        return 404, ErrorOut(code="proposals.notFound")
 
     if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
-        return 401, ErrorOut(error="Unauthorized to view this proposal")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     return 200, _proposal_to_detail_schema(proposal)
 
@@ -250,17 +250,17 @@ def upload_proposal_photo(
             .get(pk=proposal_id)
         )
     except ProposalModel.DoesNotExist:
-        return 404, ErrorOut(error="Proposal not found")
+        return 404, ErrorOut(code="proposals.notFound")
 
     if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
-        return 401, ErrorOut(error="Unauthorized to change this proposal")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     photo_field = cast(models.FileField, proposal._meta.get_field("photo"))
     try:
         photo_field.clean(file, proposal)
     except ValidationError as exc:
         return 400, ErrorOut(
-            error="Invalid proposal image",
+            code="proposals.invalidImage",
             detail=" ".join(exc.messages),
         )
 
@@ -294,9 +294,9 @@ def update_proposal(
             "submission_type", "area", "language"
         ).get(pk=proposal_id)
     except ProposalModel.DoesNotExist:
-        return 404, ErrorOut(error="Proposal not found")
+        return 404, ErrorOut(code="proposals.notFound")
     if not request.user.has_perm((apiv1, "change", ProposalModel), proposal):
-        return 401, ErrorOut(error="Unauthorized to change this proposal")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     # Update fields that were provided
     if payload.title is not None:
@@ -307,7 +307,7 @@ def update_proposal(
             submission_type = SubmissionType.objects.get(code=payload.submission_type)
             proposal.submission_type = submission_type
         except SubmissionType.DoesNotExist:
-            return 400, ErrorOut(error="Invalid submission type")
+            return 400, ErrorOut(code="proposals.invalidSubmissionType")
 
     if payload.area is not None:
         if payload.area:
@@ -315,7 +315,7 @@ def update_proposal(
                 area = ProposalArea.objects.get(code=payload.area)
                 proposal.area = area
             except ProposalArea.DoesNotExist:
-                return 400, ErrorOut(error="Invalid area")
+                return 400, ErrorOut(code="proposals.invalidArea")
         else:
             proposal.area = None
 
@@ -325,7 +325,7 @@ def update_proposal(
                 language = ProposalLanguage.objects.get(code=payload.language)
                 proposal.language = language
             except ProposalLanguage.DoesNotExist:
-                return 400, ErrorOut(error="Invalid language")
+                return 400, ErrorOut(code="proposals.invalidLanguage")
         else:
             proposal.language = None
 
@@ -377,13 +377,13 @@ def update_proposal(
             proposal.editors.set(editors)
         except (ValueError, Exception) as e:
             logger.error(f"Failed to update editors: {str(e)}")
-            return 400, ErrorOut(error="Invalid editor ID format")
+            return 400, ErrorOut(code="proposals.invalidEditorId")
 
     try:
         proposal.clean()  # Validate duration
     except Exception as e:
         logger.error(f"Proposal validation failed: {str(e)}")
-        return 400, ErrorOut(error="Proposal validation failed")
+        return 400, ErrorOut(code="proposals.validationError")
 
     proposal.save()
 
@@ -402,10 +402,10 @@ def delete_proposal(
     try:
         proposal = ProposalModel.objects.get(pk=proposal_id)
     except ProposalModel.DoesNotExist:
-        return 404, ErrorOut(error="Proposal not found")
+        return 404, ErrorOut(code="proposals.notFound")
 
     if not request.user.has_perm((apiv1, "delete", ProposalModel), proposal):
-        return 401, ErrorOut(error="Unauthorized to delete this proposal")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     proposal.delete()
     return 204, None
@@ -425,11 +425,11 @@ def get_proposal_checklist(
             pk=proposal_id
         )
         if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
-            return 401, ErrorOut(error="Permission denied")
+            return 401, ErrorOut(code="auth.permissionDenied")
     except ProposalModel.DoesNotExist:
         if not request.user.has_perm((apiv1, "view", ProposalModel), None):
-            return 401, ErrorOut(error="Permission denied")
-        return 404, ErrorOut(error="Proposal not found")
+            return 401, ErrorOut(code="auth.permissionDenied")
+        return 404, ErrorOut(code="proposals.notFound")
 
     checklist = check_proposal_required_fields(proposal)
 
@@ -448,10 +448,10 @@ def get_proposal_history(
     try:
         proposal = ProposalModel.objects.get(pk=proposal_id)
     except ProposalModel.DoesNotExist:
-        return 404, ErrorOut(error="Proposal not found")
+        return 404, ErrorOut(code="proposals.notFound")
 
     if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
-        return 401, ErrorOut(error="Unauthorized to view this proposal")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     safe_days = max(1, min(30, days))  # Limit to 1-30 days for safety
     cutoff_date = timezone.now() - timedelta(days=safe_days)
@@ -534,10 +534,10 @@ def get_proposal_transitions(
     try:
         proposal = ProposalModel.objects.get(pk=proposal_id)
     except ProposalModel.DoesNotExist:
-        return 404, ErrorOut(error="Proposal not found")
+        return 404, ErrorOut(code="proposals.notFound")
 
     if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
-        return 401, ErrorOut(error="Unauthorized to view this proposal")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     # Get available transitions from ProposalFlow
     flow = ProposalFlow(proposal)
@@ -573,11 +573,11 @@ def _execute_proposal_transition(
             "submission_type", "area", "language"
         ).get(pk=proposal_id)
     except ProposalModel.DoesNotExist:
-        return 404, ErrorOut(error="Proposal not found")
+        return 404, ErrorOut(code="proposals.notFound")
 
     # Check if user can view the proposal
     if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
-        return 401, ErrorOut(error="Unauthorized to view this proposal")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     # Create flow and evaluate transition
     flow = ProposalFlow(proposal)
@@ -586,22 +586,22 @@ def _execute_proposal_transition(
     # Find the transition
     transition = next((t for t in transitions if t.action == action), None)
     if not transition:
-        return 400, ErrorOut(error=f"Unknown transition action: {action}")
+        return 400, ErrorOut(code="proposals.unknownTransition", detail=f"Unknown transition action: {action}")
 
     # Check if transition is enabled
     if not transition.enabled:
         return 400, ErrorOut(
-            error=f"Cannot perform this action: {transition.disable_reason}"
+            code="proposals.transitionNotAllowed", detail=transition.disable_reason
         )
 
     # Execute the transition
     try:
         success = flow.execute_transition(action)
         if not success:
-            return 400, ErrorOut(error=f"Failed to execute {action} transition")
+            return 400, ErrorOut(code="proposals.transitionFailed", detail=f"Failed to execute {action} transition")
     except Exception as e:
         logger.error(f"Error executing transition {action}: {str(e)}")
-        return 400, ErrorOut(error="Error executing transition")
+        return 400, ErrorOut(code="proposals.transitionFailed")
 
     return 200, _proposal_to_detail_schema(proposal)
 
@@ -690,10 +690,10 @@ def get_proposal_events(
     try:
         proposal = ProposalModel.objects.get(pk=proposal_id)
     except ProposalModel.DoesNotExist:
-        return 404, ErrorOut(error="Proposal not found")
+        return 404, ErrorOut(code="proposals.notFound")
 
     if not request.user.has_perm((apiv1, "view", ProposalModel), proposal):
-        return 401, ErrorOut(error="Unauthorized to view this proposal")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     events = (
         EventModel.objects.filter(proposal=proposal)

@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import styles from './ContentRenderer.module.css'
 import { EventEditor } from './EventEditor'
 import { SeriesGeneralEditor } from './SeriesGeneralEditor'
@@ -17,6 +18,7 @@ interface ContentRendererProps {
 }
 
 export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEventUpdate, onSeriesDelete, onEventDelete, onRequestNavigation, canEditSeries = true, canEditEvent = true }: ContentRendererProps) {
+  const { t } = useTranslation()
   const selectedEvent = series.events.find((e) => e.id === selectedEventId)
   const isGeneralInfo = selectedEventId === 'general'
   const confirmNavigationRef = useRef<(() => Promise<boolean>) | null>(null)
@@ -111,7 +113,7 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
       <h1>{series.name}</h1>
       {permissionLoading ? (
         <div className={styles.placeholder}>
-          <p>Checking permissions...</p>
+          <p>{t('common:loading')}</p>
         </div>
       ) : isGeneralInfo ? (
         canViewSelectedObject ? (
@@ -125,7 +127,7 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
           />
         ) : (
           <div className={styles.placeholder}>
-            <p>You do not have permission to view this series.</p>
+            <p>{t('series:noPermission')}</p>
           </div>
         )
       ) : selectedEvent ? (
@@ -141,12 +143,12 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
           />
         ) : (
           <div className={styles.placeholder}>
-            <p>You do not have permission to view this event.</p>
+            <p>{t('event:noPermission')}</p>
           </div>
         )
       ) : (
         <div className={styles.placeholder}>
-          <p>Loading...</p>
+          <p>{t('common:loading')}</p>
         </div>
       )}
     </>

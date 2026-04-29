@@ -29,7 +29,7 @@ def authenticate(request, user: UserIn):
         return UserOut(username=usermodel.get_username(), user_id=str(usermodel.pk))
     else:
         logger.warning("Authentication failed")
-        return 401, ErrorOut(error="Invalid credentials")
+        return 401, ErrorOut(code="auth.loginFailed")
 
 
 @router.get("/me", response={200: UserOut, 401: ErrorOut})
@@ -40,7 +40,7 @@ def get_current_user(request):
             username=request.user.get_username(), user_id=str(request.user.pk)
         )
     else:
-        return 401, ErrorOut(error="Not authenticated")
+        return 401, ErrorOut(code="auth.notAuthenticated")
 
 
 @router.post("/logout", response={200: dict, 401: ErrorOut})
@@ -50,7 +50,7 @@ def logout(request):
         django.contrib.auth.logout(request)
         return 200, {"status": "logged out"}
     else:
-        return 401, ErrorOut(error="Not authenticated")
+        return 401, ErrorOut(code="auth.notAuthenticated")
 
 
 @router.get("/csrf", auth=None)

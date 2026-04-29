@@ -42,7 +42,7 @@
         - paragraph: When checked, the event spans continuously over midnight (e.g. Mon 08:00 → Tue 16:00 shows as one block). When unchecked, multi-day events are split into daily blocks using the same daily start/end hours (e.g. Mon <time-range> and Tue <time-range>).
         - text: Displayed in local time. Stored in UTC. Drag on the calendar to update start and end.
         - button "Previous week": ‹
-        - text: <week-range>
+        - text: Apr 27 – May 3, 2026
         - button "Next week": ›
         - text: "New events for:"
         - combobox "New events for:":
@@ -50,7 +50,6 @@
         - text: Event Schedule
         - grid:
           - text: <week-days> <hour-grid>
-          - button "Ux Test Event (internal-calendar), <time-range>": Ux Test Event (internal-calendar)
           - button "My New Workshop (internal-calendar), <time-range>": My New Workshop (internal-calendar)
           - button "My New Workshop, <time-range>": My New Workshop
         - button "Save Changes" [disabled]

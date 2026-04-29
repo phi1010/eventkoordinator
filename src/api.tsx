@@ -54,7 +54,7 @@ export async function getCsrfToken(): Promise<string> {
 function parseUploadError(responseText: string, fallbackMessage: string): Error {
   try {
     const payload = responseText ? JSON.parse(responseText) : null
-    const errorMessage = payload?.detail ? `${payload.error}: ${payload.detail}` : payload?.error
+    const errorMessage = payload?.detail ? `${payload.code}: ${payload.detail}` : payload?.code
     return new Error(errorMessage || fallbackMessage)
   } catch {
     return new Error(fallbackMessage)
@@ -160,7 +160,7 @@ export interface UserBasic {
 }
 
 export interface AuthError {
-  error: string
+  code: string
 }
 
 export interface UserPermissions {
@@ -505,7 +505,7 @@ export async function login(username: string, password: string): Promise<User> {
 
   if (error || !response.ok) {
     const errorData = data as unknown as AuthError
-    throw new Error(errorData?.error || `Login failed: ${response.statusText}`)
+    throw new Error(errorData?.code || `Login failed: ${response.statusText}`)
   }
 
   // Ensure subsequent state-changing requests use the post-login CSRF token.
@@ -522,7 +522,7 @@ export async function getCurrentUser(): Promise<User> {
       return null as unknown as User
     }
 
-    throw new Error(error?.error || 'Failed to get current user')
+    throw new Error(error?.code || 'Failed to get current user')
   }
 
   return data as unknown as User
@@ -542,7 +542,7 @@ export async function getUserPermissions(): Promise<UserPermissions> {
       }
     }
 
-    throw new Error(error?.error || 'Failed to get user permissions')
+    throw new Error(error?.code || 'Failed to get user permissions')
   }
 
   return data as unknown as UserPermissions
@@ -667,7 +667,7 @@ export async function deleteSeries(seriesId: string): Promise<void> {
   })
 
   if (error || !response.ok) {
-    throw new Error(error?.error || `Failed to delete series: ${response.statusText}`)
+    throw new Error(error?.code || `Failed to delete series: ${response.statusText}`)
   }
 }
 
@@ -720,7 +720,7 @@ export async function deleteEvent(seriesId: string, eventId: string): Promise<vo
   })
 
   if (error || !response.ok) {
-    throw new Error(error?.error || `Failed to delete event: ${response.statusText}`)
+    throw new Error(error?.code || `Failed to delete event: ${response.statusText}`)
   }
 }
 
@@ -964,7 +964,7 @@ export async function deleteProposal(proposalId: string): Promise<void> {
   })
 
   if (error || !response.ok) {
-    throw new Error(error?.error || `Failed to delete proposal: ${response.statusText}`)
+    throw new Error(error?.code || `Failed to delete proposal: ${response.statusText}`)
   }
 }
 

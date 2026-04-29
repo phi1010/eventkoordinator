@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   fetchEventTransitions,
   executeEventTransition,
@@ -24,6 +25,7 @@ export function EventTransitionButtons({
   onTransitionSuccess,
   onTransitionError,
 }: EventTransitionButtonsProps) {
+  const { t } = useTranslation()
   const [transitions, setTransitions] = useState<EventTransition[]>([])
   const [status, setStatus] = useState(currentStatus)
   const [loading, setLoading] = useState(false)
@@ -44,8 +46,7 @@ export function EventTransitionButtons({
       setTransitions(data.transitions)
       setStatus(data.current_status)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load transitions'
-      setError(msg)
+      setError(t('event.failedToLoadTransitions'))
     } finally {
       setLoading(false)
     }
@@ -72,7 +73,7 @@ export function EventTransitionButtons({
       await loadTransitions()
       onTransitionSuccess?.(updatedEvent)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Transition failed'
+      const msg = err instanceof Error ? err.message : t('event.transitionFailedShort')
       setError(msg)
       onTransitionError?.(msg)
     } finally {
@@ -90,7 +91,7 @@ export function EventTransitionButtons({
         const svg = await fetchEventFlowChartSvg()
         setFlowChartSvg(svg)
       } catch (err) {
-        setFlowChartError(err instanceof Error ? err.message : 'Failed to load flow chart')
+        setFlowChartError(err instanceof Error ? err.message : t('event.failedToLoadFlowChart'))
       } finally {
         setFlowChartLoading(false)
       }
@@ -101,7 +102,7 @@ export function EventTransitionButtons({
     <div className={styles.section}>
       {/* Status row: badge + readonly text field */}
       <div className={styles.statusRow}>
-        <span className={styles.statusLabel}>Status:</span>
+        <span className={styles.statusLabel}>{t('event.status')}:</span>
         <EventStatusBadge status={status} />
       </div>
 
@@ -115,23 +116,23 @@ export function EventTransitionButtons({
       {/* Transition buttons */}
       {!loading && transitions.length > 0 && (
         <div className={styles.buttonRow}>
-          {transitions.map((t) => (
+          {transitions.map((t_item) => (
             <button
-              key={t.action}
-              className={`${styles.transitionButton} ${executing !== null && executing !== t.action ? styles.busy : ''}`}
-              onClick={() => void handleExecute(t.action)}
-              disabled={!t.enabled || executing !== null}
-              title={t.disable_reason ?? undefined}
-              aria-busy={executing === t.action}
+              key={t_item.action}
+              className={`${styles.transitionButton} ${executing !== null && executing !== t_item.action ? styles.busy : ''}`}
+              onClick={() => void handleExecute(t_item.action)}
+              disabled={!t_item.enabled || executing !== null}
+              title={t_item.disable_reason ?? undefined}
+              aria-busy={executing === t_item.action}
             >
-              {executing === t.action ? 'Processing…' : t.label}
+              {executing === t_item.action ? t('event.processing') : t_item.label}
             </button>
           ))}
         </div>
       )}
 
       {loading && (
-        <div className={styles.flowChartLoading}>Loading transitions…</div>
+        <div className={styles.flowChartLoading}>{t('event.loadingTransitions')}</div>
       )}
 
       {/* Flow chart toggle */}
@@ -142,12 +143,12 @@ export function EventTransitionButtons({
         aria-expanded={flowChartOpen}
       >
         <span className={`${styles.flowChartArrow} ${flowChartOpen ? styles.open : ''}`}>▶</span>
-        Event lifecycle diagram
+        {t('event.lifecycleDiagram')}
       </button>
 
       {flowChartOpen && (
-        <div className={styles.flowChartContainer} aria-label="Event lifecycle state machine diagram">
-          {flowChartLoading && <p className={styles.flowChartLoading}>Loading diagram…</p>}
+        <div className={styles.flowChartContainer} aria-label={t('event.lifecycleDiagramAria')}>
+          {flowChartLoading && <p className={styles.flowChartLoading}>{t('event.loadingDiagram')}</p>}
           {flowChartError && <p className={styles.errorBox}>{flowChartError}</p>}
           {flowChartSvg && (
             // SVG is served by our own backend – safe to inject

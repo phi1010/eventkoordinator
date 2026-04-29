@@ -26,6 +26,7 @@ import {
 } from './api'
 import { useUnsavedChanges } from './useUnsavedChanges'
 import { usePermissions } from './usePermissions'
+import { useTranslation } from 'react-i18next'
 import { ImageUploadField } from './ImageUploadField'
 import { SpeakerListEditor } from './SpeakerListEditor'
 import { ProposalTransitionButtons } from './ProposalTransitionButtons'
@@ -143,41 +144,41 @@ function formatLocalIso(dateValue: string): string {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} ${sign}${offsetHours}:${offsetMins}`
 }
 
-function formatRelativeTime(dateValue: string): string {
+function formatRelativeTime(dateValue: string, t:ReturnType<typeof useTranslation>['t']): string {
   const date = new Date(dateValue)
   if (Number.isNaN(date.getTime())) {
-    return 'just now'
+    return t('proposal.justNow')
   }
 
   const deltaMs = Date.now() - date.getTime()
   const deltaSeconds = Math.max(0, Math.floor(deltaMs / 1000))
 
   if (deltaSeconds < 60) {
-    return 'just now'
+    return t('proposal.justNow')
   }
 
   const minutes = Math.floor(deltaSeconds / 60)
   if (minutes < 60) {
-    return `${minutes} minute${minutes === 1 ? '' : 's'} ago`
+    return t('proposal.minutesAgo', { count: minutes })
   }
 
   const hours = Math.floor(minutes / 60)
   if (hours < 24) {
-    return `${hours} hour${hours === 1 ? '' : 's'} ago`
+    return t('proposal.hoursAgo', { count: hours })
   }
 
   const days = Math.floor(hours / 24)
   if (days < 30) {
-    return `${days} day${days === 1 ? '' : 's'} ago`
+    return t('proposal.daysAgo', { count: days })
   }
 
   const months = Math.floor(days / 30)
   if (months < 12) {
-    return `${months} month${months === 1 ? '' : 's'} ago`
+    return t('proposal.monthsAgo', { count: months })
   }
 
   const years = Math.floor(months / 12)
-  return `${years} year${years === 1 ? '' : 's'} ago`
+  return t('proposal.yearsAgo', { count: years })
 }
 
 export function ProposalEditor({
@@ -189,6 +190,7 @@ export function ProposalEditor({
   onRequestNavigation,
   onTransitionSuccess: onTransitionSuccessProp,
 }: ProposalEditorProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { canView, canAdd, loading: permissionsLoading } = usePermissions()
   const [formData, setFormData] = useState<ProposalFormData>(DEFAULT_FORM_DATA)
@@ -231,8 +233,8 @@ export function ProposalEditor({
     return new Date(entry.timestamp).getTime() > new Date(latest.timestamp).getTime() ? entry : latest
   }, null)
   const historyBadge = latestHistoryEntry
-    ? `last changed ${formatRelativeTime(latestHistoryEntry.timestamp)}`
-    : 'no recent changes'
+    ? `${t('proposal.lastChanged')} ${formatRelativeTime(latestHistoryEntry.timestamp, t)}`
+    : t('proposal.noRecentChanges')
 
   useEffect(() => {
     changedFieldsRef.current = changedFields
@@ -297,7 +299,7 @@ export function ProposalEditor({
     }
 
     const confirmed = window.confirm(
-      `Delete the proposal "${formData.title || 'Untitled proposal'}"? This cannot be undone.`
+      t('proposal.confirmDelete', { title: formData.title || t('proposal.untitledProposal') })
     )
     if (!confirmed) {
       return
@@ -308,7 +310,7 @@ export function ProposalEditor({
       setError(null)
       await onDeleteProposal(_proposalId)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete proposal')
+      setError(t('proposal.failedToDelete'))
     } finally {
       setIsDeleting(false)
     }
@@ -324,8 +326,8 @@ export function ProposalEditor({
           const data = await fetchProposal(_proposalId)
           applyProposalData(data, false)
         } catch (err) {
-          setError(err instanceof Error ? err.message : 'Failed to load proposal')
-          console.error('Failed to load proposal:', err)
+        setError(t('proposal.failedToLoad'))
+        console.error('Failed to load proposal:', err)
         } finally {
           setIsLoading(false)
         }
@@ -443,7 +445,7 @@ export function ProposalEditor({
       })
       navigate(`/proposal/${_proposalId}/event/${newEvent.id}`)
     } catch (err) {
-      setCreateEventError(err instanceof Error ? err.message : 'Failed to create event')
+        setCreateEventError(t('proposal.failedToCreateEvent'))
     } finally {
       setIsCreatingEvent(false)
     }
@@ -544,8 +546,8 @@ export function ProposalEditor({
 
   const handleSave = async () => {
     if (!_proposalId || !_proposalId.trim()) {
-      setError('No proposal ID provided')
-      return
+    setError(t('proposal.noProposalId'))
+    return
     }
 
     try {
@@ -613,7 +615,7 @@ export function ProposalEditor({
         onProposalSave(formData)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save proposal')
+      setError(t('proposal.failedToSave'))
     } finally {
       setIsSaving(false)
     }
@@ -630,9 +632,9 @@ export function ProposalEditor({
 
   return (
     <div className={styles.container}>
-      <h1>Proposal Editor</h1>
+      <h1>{t('proposal.editorTitle')}</h1>
 
-      {isLoading && <p aria-live="polite">Loading proposal...</p>}
+      {isLoading && <p aria-live="polite">{t('proposal.loadingProposal')}</p>}
 
       <form className={styles.form} aria-label="Proposal editor">
         {/* General Section */}
@@ -647,7 +649,7 @@ export function ProposalEditor({
           <div className={styles.detailsContent}>
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-title" className={styles.label}>
-                  Title (max 30 characters)
+                  {t('proposal.title')}
                   {changedFields.has('title') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <input
@@ -665,7 +667,7 @@ export function ProposalEditor({
 
               <div className={styles.formGroup}>
                 <ImageUploadField
-                  label="Proposal image"
+                  label={t('proposal.proposalImage')}
                   inputId="proposal-image-upload"
                   previewAlt="Proposal image preview"
                   currentImageUrl={proposalPhotoUrl}
@@ -673,20 +675,20 @@ export function ProposalEditor({
                   isUploading={isProposalImageUploading}
                   uploadProgress={proposalImageUploadProgress}
                   error={proposalImageError}
-                  helpText="Upload a JPG or PNG image up to 10 MB for this proposal."
+                  helpText={t('proposal.proposalImageHelp')}
                   onFileSelected={handleProposalImageUpload}
                 />
               </div>
 
               {lookupLoading && (
                 <p className={styles.fieldHint} role="status" aria-live="polite">
-                  Loading...
+                  {t('proposal.loading')}
                 </p>
               )}
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-submission-type" className={styles.label}>
-                  Submission Type
+                  {t('proposal.submissionType')}
                   {changedFields.has('submission_type') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <select
@@ -697,12 +699,12 @@ export function ProposalEditor({
                   disabled={isSaving || lookupLoading || !canEdit}
                 >
                   {lookupLoading ? (
-                    <option value="">Loading...</option>
+                    <option value="">{t('proposal.loading')}</option>
                   ) : submissionTypes.length === 0 ? (
-                    <option value="">No submission types available</option>
+                    <option value="">{t('proposal.noSubmissionTypes')}</option>
                   ) : (
-                    <>
-                      <option value="">-- Select submission type --</option>
+                     <>
+                      <option value="">{t('proposal.selectSubmissionType')}</option>
                       {submissionTypes.map((type) => (
                         <option key={type.code} value={type.code}>
                           {type.label}
@@ -711,14 +713,14 @@ export function ProposalEditor({
                     </>
                   )}
                 </select>
-                <small className={styles.fieldHint}>
-                  Workshop: Fixed booking, fee required, providers receive a remuneration; Open offer: No booking or fee required; takes place in the main building.
+                 <small className={styles.fieldHint}>
+                  {t('proposal.submissionTypeHint')}
                 </small>
               </div>
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-area" className={styles.label}>
-                  Area (optional)
+                  {t('proposal.area')}
                   {changedFields.has('area') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <select
@@ -729,12 +731,12 @@ export function ProposalEditor({
                   disabled={isSaving || !canEdit || lookupLoading}
                 >
                   {lookupLoading ? (
-                    <option value="">Loading...</option>
+                    <option value="">{t('proposal.loading')}</option>
                   ) : proposalAreas.length === 0 ? (
-                    <option value="">No areas available</option>
+                    <option value="">{t('proposal.noAreas')}</option>
                   ) : (
-                    <>
-                      <option value="">-- Select an area --</option>
+                     <>
+                      <option value="">{t('proposal.selectArea')}</option>
                       {proposalAreas.map((area) => (
                         <option key={area.code} value={area.code}>
                           {area.label}
@@ -747,7 +749,7 @@ export function ProposalEditor({
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-language" className={styles.label}>
-                  Language
+                  {t('proposal.language')}
                   {changedFields.has('language') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <select
@@ -758,12 +760,12 @@ export function ProposalEditor({
                   disabled={isSaving || lookupLoading || !canEdit}
                 >
                   {lookupLoading ? (
-                    <option value="">Loading...</option>
+                    <option value="">{t('proposal.loading')}</option>
                   ) : proposalLanguages.length === 0 ? (
-                    <option value="">No languages available</option>
+                    <option value="">{t('proposal.noLanguages')}</option>
                   ) : (
-                    <>
-                      <option value="">-- Select language --</option>
+                     <>
+                      <option value="">{t('proposal.selectLanguage')}</option>
                       {proposalLanguages.map((lang) => (
                         <option key={lang.code} value={lang.code}>
                           {lang.label}
@@ -776,7 +778,7 @@ export function ProposalEditor({
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-abstract" className={styles.label}>
-                  Abstract (50-250 characters)
+                  {t('proposal.abstract')}
                   {changedFields.has('abstract') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <textarea
@@ -789,14 +791,14 @@ export function ProposalEditor({
                   required
                 />
                 <small className={styles.fieldHint}>
-                  This will be published on our website in the program overview. (50–250 characters)
+                  {t('proposal.abstractHint')}
                 </small>
                 <small aria-live="polite">{formData.abstract.length}/250</small>
               </div>
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-description" className={styles.label}>
-                  Description (50-1000 characters)
+                  {t('proposal.description')}
                   {changedFields.has('description') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <textarea
@@ -809,14 +811,14 @@ export function ProposalEditor({
                   required
                 />
                 <small className={styles.fieldHint}>
-                  This will be published on our website in the detailed description. Please include goal, prerequisites and whether participants take something home. (50–1000 characters)
+                  {t('proposal.descriptionHint')}
                 </small>
                 <small aria-live="polite">{formData.description.length}/1000</small>
               </div>
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-internal-notes" className={styles.label}>
-                  Internal Notes (optional)
+                  {t('proposal.internalNotes')}
                   {changedFields.has('internal_notes') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <textarea
@@ -828,13 +830,13 @@ export function ProposalEditor({
                   disabled={isSaving || !canEdit}
                 />
                 <small className={styles.fieldHint}>
-                  Internal notes are not public. Mention equipment needs (e.g., laptops, projector, laser cutter).
+                  {t('proposal.internalNotesHint')}
                 </small>
               </div>
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-duration-days" className={styles.label}>
-                  Number of Days
+                  {t('proposal.numberOfDays')}
                   {changedFields.has('duration_days') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <input
@@ -848,13 +850,13 @@ export function ProposalEditor({
                   required
                 />
                 <small className={styles.fieldHint}>
-                  Number of days for the event (minimum 1).
+                  {t('proposal.numberOfDaysHint')}
                 </small>
               </div>
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-duration-time" className={styles.label}>
-                  Time per Day (HH:MM or minutes)
+                  {t('proposal.timePerDay')}
                   {changedFields.has('duration_time_per_day') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <input
@@ -877,13 +879,13 @@ export function ProposalEditor({
                   maxLength={5}
                 />
                 <small className={styles.fieldHint}>
-                  Time per day in HH:MM format. Product of days and time should be greater than zero. (Example: 08:30 for 8 hours 30 minutes)
+                  {t('proposal.timePerDayHint')}
                 </small>
               </div>
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-occurrence-count" className={styles.label}>
-                  How often would you offer this event?
+                  {t('proposal.occurrenceCount')}
                   {changedFields.has('occurrence_count') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <input
@@ -905,7 +907,7 @@ export function ProposalEditor({
           name="proposal-editor-sections"
         >
           <summary className={styles.legend}>
-            <span className={styles.summaryContent}>Additional Information</span>
+            <span className={styles.summaryContent}>{t('proposal.additionalInformation')}</span>
           </summary>
 
           <div className={styles.detailsContent}>
@@ -919,17 +921,17 @@ export function ProposalEditor({
                     disabled={isSaving || !canEdit}
                     aria-describedby="proposal-is-basic-course-desc"
                   />
-                  This workshop is a basic course
+                  {t('proposal.isBasicCourse')}
                 </label>
 
                 <small id="proposal-is-basic-course-desc" className={styles.fieldHint} style={{ marginBottom: '0.75rem' }}>
-                  A basic course is a course which is mandatory for using certain resources, such as machines or rooms.
+                  {t('proposal.isBasicCourseDesc')}
                 </small>
               </div>
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-max-participants" className={styles.label}>
-                  Max. Number of Participants
+                  {t('proposal.maxParticipants')}
                   {changedFields.has('max_participants') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <input
@@ -945,7 +947,7 @@ export function ProposalEditor({
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-material-cost" className={styles.label}>
-                  Material Cost per Participant (EUR)
+                  {t('proposal.materialCost')}
                   {changedFields.has('material_cost_eur') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <input
@@ -962,7 +964,7 @@ export function ProposalEditor({
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-preferred-dates" className={styles.label}>
-                  Preferred Date and Alternatives
+                  {t('proposal.preferredDates')}
                   {changedFields.has('preferred_dates') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <textarea
@@ -975,7 +977,7 @@ export function ProposalEditor({
                   required
                 />
                 <small className={styles.fieldHint}>
-                  Please enter specific dates and times that work for you.
+                  {t('proposal.preferredDatesHint')}
                 </small>
               </div>
           </div>
@@ -987,7 +989,7 @@ export function ProposalEditor({
           name="proposal-editor-sections"
         >
           <summary className={styles.legend}>
-            <span className={styles.summaryContent}>About Yourself</span>
+            <span className={styles.summaryContent}>{t('proposal.aboutYourself')}</span>
           </summary>
 
           <div className={styles.detailsContent}>
@@ -1000,7 +1002,7 @@ export function ProposalEditor({
                     onChange={(e) => handleFieldChange('is_regular_member', e.target.checked)}
                     disabled={isSaving || !canEdit}
                   />
-                  Are you a regular member?
+                  {t('proposal.isRegularMember')}
                 </label>
               </div>
 
@@ -1013,38 +1015,38 @@ export function ProposalEditor({
                     onChange={(e) => handleFieldChange('has_building_access', e.target.checked)}
                     disabled={isSaving || !canEdit}
                   />
-                  Do you have ZAM-building access?
+                  {t('proposal.hasBuildingAccess')}
                 </label>
               </div>
 
               <div className={styles.formGroup}>
-                <label className={styles.label} id="proposal-owner-label">Owner</label>
+                <label className={styles.label} id="proposal-owner-label">{t('proposal.owner')}</label>
                 <div className={styles.ownerDisplay} aria-labelledby="proposal-owner-label">
                   {owner ? (
                     <span>{owner.username}</span>
                   ) : (
-                    <span style={{ fontStyle: 'italic' }}>Owner will be set automatically when proposal is created</span>
+                    <span style={{ fontStyle: 'italic' }}>{t('proposal.ownerWillBeSet')}</span>
                   )}
                 </div>
                 <small className={styles.fieldHint}>
-                  The owner is automatically set to the user who creates the proposal and cannot be changed.
+                  {t('proposal.ownerHint')}
                 </small>
               </div>
 
               <div className={styles.formGroup}>
                 <label htmlFor="proposal-editors-search" className={styles.label}>
-                  Editors
+                  {t('proposal.editors')}
                   {changedFields.has('editors') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                 </label>
                 <small className={styles.fieldHint} style={{ marginBottom: '0.75rem' }}>
-                  Editors can view and modify this proposal. Add users who should be able to edit the proposal content.
+                  {t('proposal.editorsHint')}
                 </small>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   <input
                     id="proposal-editors-search"
                     type="text"
                     list="proposal-editor-list"
-                    placeholder="Search and add editors..."
+                    placeholder={t('proposal.searchEditors')}
                     value={participantSearchQuery}
                     onChange={(e) => {
                       const newValue = e.target.value
@@ -1098,7 +1100,7 @@ export function ProposalEditor({
                               fontSize: '0.9rem',
                               lineHeight: 1,
                             }}
-                            aria-label={`Remove ${p.username}`}
+                            aria-label={t('proposal.removeEditor', { username: p.username })}
                           >
                             ×
                           </button>
@@ -1108,7 +1110,7 @@ export function ProposalEditor({
                   )}
                 </div>
                 <small className={styles.fieldHint} style={{ marginBottom: '0.75rem' }}>
-                  Editors can view and modify this proposal. Add users who should be able to edit the proposal content.
+                  {t('proposal.editorsHint')}
                 </small>
               </div>
 
@@ -1143,16 +1145,16 @@ export function ProposalEditor({
 
         <div className={styles.buttonGroup}>
           <button type="button" onClick={handleSave} disabled={!hasChanges || isSaving || isDeleting} className={styles.saveButton} aria-busy={isSaving}>
-            {isSaving ? 'Saving...' : 'Save Proposal'}
+            {isSaving ? t('proposal.saving') : t('proposal.saveProposal')}
           </button>
           {hasChanges && (
             <button type="button" onClick={handleCancel} disabled={isSaving || isDeleting || !canEdit} className={styles.cancelButton}>
-              Cancel
+              {t('common.cancel')}
             </button>
           )}
           {canDelete && _proposalId && onDeleteProposal && (
             <button type="button" onClick={() => void handleDelete()} disabled={isSaving || isDeleting} className={styles.deleteButton}>
-              {isDeleting ? 'Deleting...' : 'Delete Proposal'}
+              {isDeleting ? t('proposal.deleting') : t('proposal.deleteProposal')}
             </button>
           )}
         </div>
@@ -1161,11 +1163,11 @@ export function ProposalEditor({
       {/* Checklist Display - Moved to bottom */}
       {_proposalId && _proposalId.trim() && (
         <div className={styles.checklistBox}>
-          <h3>Submission Checklist</h3>
+          <h3>{t('proposal.submissionChecklist')}</h3>
           {checklistLoading ? (
-            <p className={styles.checklistMuted}>Loading checklist...</p>
+            <p className={styles.checklistMuted}>{t('proposal.loadingChecklist')}</p>
           ) : Object.keys(checklist).length === 0 ? (
-            <p className={styles.checklistMuted}>Save the proposal to see the checklist</p>
+            <p className={styles.checklistMuted}>{t('proposal.saveToSeeChecklist')}</p>
           ) : (
             <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
               {Object.entries(checklist).map(([item, { status }]) => (
@@ -1189,10 +1191,10 @@ export function ProposalEditor({
                       fontWeight: 'bold',
                       flexShrink: 0,
                     }}
-                    title={status === 'ok' ? 'Complete' : 'Incomplete'}
-                  >
-                    {status === 'ok' ? '✓' : '⚠'}
-                  </span>
+                   title={status === 'ok' ? t('proposal.complete') : t('proposal.incomplete')}
+                 >
+                  {status === 'ok' ? '✓' : '⚠'}
+                </span>
                   <span className={status === 'ok' ? styles['checklistItemText--ok'] : styles['checklistItemText--warn']}>{item}</span>
                 </li>
               ))}
@@ -1256,14 +1258,14 @@ export function ProposalEditor({
 
                       <div className={styles.historyEntryMeta} style={{ paddingLeft: '1rem' }}>
                         <div>
-                          By: <strong>{entry.changed_by}</strong>
+                          {t('proposal.by')} <strong>{entry.changed_by}</strong>
                         </div>
                         <div>
-                          {formatLocalIso(entry.timestamp)} ({formatRelativeTime(entry.timestamp)})
+                          {formatLocalIso(entry.timestamp)} ({formatRelativeTime(entry.timestamp, t)})
                         </div>
                         {entry.field_name && (
                           <div style={{ marginTop: '0.2rem' }}>
-                            <span style={{ fontStyle: 'italic' }}>Field:</span> {entry.field_name}
+                            <span style={{ fontStyle: 'italic' }}>{t('proposal.field')}:</span> {entry.field_name}
                           </div>
                         )}
 
@@ -1279,7 +1281,7 @@ export function ProposalEditor({
                           >
                             {entry.old_value !== undefined && entry.old_value !== null && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                <span className={styles['historyValueLabel--old']}>Old</span>
+                                <span className={styles['historyValueLabel--old']}>{t('proposal.old')}</span>
                                 <div className={styles['historyValueBox--old']}>
                                   {entry.old_value}
                                 </div>
@@ -1287,7 +1289,7 @@ export function ProposalEditor({
                             )}
                             {entry.new_value !== undefined && entry.new_value !== null && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                <span className={styles['historyValueLabel--new']}>New</span>
+                                <span className={styles['historyValueLabel--new']}>{t('proposal.new')}</span>
                                 <div className={styles['historyValueBox--new']}>
                                   {entry.new_value}
                                 </div>
@@ -1346,14 +1348,14 @@ export function ProposalEditor({
         >
           <summary className={styles.legend}>
             <span className={styles.summaryContent}>
-              Linked Events ({linkedEvents.length})
+              {t('proposal.linkedEvents', { count: linkedEvents.length })}
             </span>
           </summary>
           <div className={styles.detailsContent}>
             {linkedEventsLoading ? (
-              <p style={{ color: '#888', fontSize: '0.9rem' }}>Loading linked events...</p>
+              <p style={{ color: '#888', fontSize: '0.9rem' }}>{t('proposal.loadingLinkedEvents')}</p>
             ) : linkedEvents.length === 0 ? (
-              <p style={{ color: '#888', fontSize: '0.9rem' }}>No events linked to this proposal yet.</p>
+              <p style={{ color: '#888', fontSize: '0.9rem' }}>{t('proposal.noLinkedEvents')}</p>
             ) : (
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                 {linkedEvents.map((ev) => (
@@ -1365,7 +1367,7 @@ export function ProposalEditor({
                       {ev.name}
                     </Link>
                     <div style={{ fontSize: '0.8rem', color: '#666' }}>
-                      Series: {ev.series_name}
+                      {t('proposal.series')}: {ev.series_name}
                     </div>
                     <div style={{ fontSize: '0.8rem', color: '#666' }}>
                       {new Date(ev.startTime).toLocaleDateString('de-DE', {
@@ -1392,12 +1394,12 @@ export function ProposalEditor({
               <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <div>
                   <label htmlFor="create-event-series-filter" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.3rem' }}>
-                    Series
+                    {t('proposal.series')}
                   </label>
                   <input
                     id="create-event-series-filter"
                     type="text"
-                    placeholder="Filter series..."
+                    placeholder={t('proposal.filterSeries')}
                     value={seriesSearchQuery}
                     onChange={(e) => {
                       setSeriesSearchQuery(e.target.value)
@@ -1408,12 +1410,12 @@ export function ProposalEditor({
                 </div>
                 <select
                   id="create-event-series-select"
-                  aria-label="Series"
+                  aria-label={t('proposal.series')}
                   value={selectedSeriesId}
                   onChange={(e) => setSelectedSeriesId(e.target.value)}
                   style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '0.9rem' }}
                 >
-                  <option value="">-- Select a series --</option>
+                  <option value="">{t('proposal.selectSeries')}</option>
                   {seriesSearchResults.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
@@ -1435,7 +1437,7 @@ export function ProposalEditor({
                     alignSelf: 'flex-start',
                   }}
                 >
-                  {isCreatingEvent ? 'Creating...' : 'Create New Event'}
+                  {isCreatingEvent ? t('proposal.creating') : t('proposal.createNewEvent')}
                 </button>
                 {createEventError && (
                   <div style={{ color: '#d32f2f', fontSize: '0.85rem', marginTop: '0.3rem' }}>{createEventError}</div>

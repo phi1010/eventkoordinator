@@ -17,39 +17,38 @@
     - form "Proposal editor":
       - group:
         - text: General Information Title (max 30 characters)
-        - textbox "Title (max 30 characters)": Test Event Link
+        - textbox "Title (max 30 characters)" [disabled]: Test Event Link
         - text: 15/30 No image uploaded yet. Proposal image
-        - button "Proposal image"
+        - button "Proposal image" [disabled]
         - text: Upload a JPG or PNG image up to 10 MB for this proposal. Submission Type
-        - combobox "Submission Type":
+        - combobox "Submission Type" [disabled]:
           - option "-- Select submission type --"
           - option "Workshop" [selected]
         - text: "Workshop: Fixed booking, fee required, providers receive a remuneration; Open offer: No booking or fee required; takes place in the main building. Area (optional)"
-        - combobox "Area (optional)":
+        - combobox "Area (optional)" [disabled]:
           - option "-- Select an area --"
           - option "Woodworking" [selected]
         - text: Language
-        - combobox "Language":
+        - combobox "Language" [disabled]:
           - option "-- Select language --"
           - option "German" [selected]
         - text: Abstract (50-250 characters)
-        - textbox "Abstract (50-250 characters)": A hands-on workshop introducing simple woodworking joints for beginners.
+        - textbox "Abstract (50-250 characters)" [disabled]: A hands-on workshop introducing simple woodworking joints for beginners.
         - text: This will be published on our website in the program overview. (50–250 characters) 72/250 Description (50-1000 characters)
-        - textbox "Description (50-1000 characters)": Participants learn safe tool handling and build sample joints with guided practice and feedback.
+        - textbox "Description (50-1000 characters)" [disabled]: Participants learn safe tool handling and build sample joints with guided practice and feedback.
         - text: This will be published on our website in the detailed description. Please include goal, prerequisites and whether participants take something home. (50–1000 characters) 96/1000 Internal Notes (optional)
-        - textbox "Internal Notes (optional)"
+        - textbox "Internal Notes (optional)" [disabled]
         - text: Internal notes are not public. Mention equipment needs (e.g., laptops, projector, laser cutter). Number of Days
-        - spinbutton "Number of Days": "1"
+        - spinbutton "Number of Days" [disabled]: "1"
         - text: Number of days for the event (minimum 1). Time per Day (HH:MM or minutes)
-        - textbox "Time per Day (HH:MM or minutes)":
+        - textbox "Time per Day (HH:MM or minutes)" [disabled]:
           - /placeholder: HH:MM
           - text: 02:00
         - text: "Time per day in HH:MM format. Product of days and time should be greater than zero. (Example: 08:30 for 8 hours 30 minutes) How often would you offer this event?"
-        - spinbutton "How often would you offer this event?": "1"
+        - spinbutton "How often would you offer this event?" [disabled]: "1"
       - group: Additional Information
       - group: About Yourself
       - button "Save Proposal" [disabled]
-      - button "Delete Proposal"
     - heading "Submission Checklist" [level=3]
     - list:
       - listitem: ✓ Title (max 30 characters)
@@ -73,5 +72,4 @@
         - /placeholder: Filter series...
       - combobox "Series":
         - option "-- Select a series --" [selected]
-        - option "Test Workshop Series"
       - button "Create New Event" [disabled]

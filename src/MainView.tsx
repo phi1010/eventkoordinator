@@ -6,6 +6,7 @@ import { Tooltip } from './Tooltip'
 import { loadSeriesFromAPI, fetchSeriesById, createSeries, createEvent, deleteSeries, deleteEvent, type Event, type Series, type Event as ApiEvent, type Series as ApiSeries } from './api'
 import { EventStatusBadge } from './EventStatusBadge'
 import { usePermissions } from './usePermissions'
+import { useTranslation } from 'react-i18next'
 import styles from './MainView.module.css'
 
 export interface EventItem extends SelectionItem {
@@ -53,6 +54,7 @@ function toSeriesItem(series: ApiSeries): SeriesItem {
 }
 
 export function MainView() {
+  const { t } = useTranslation()
   const [series, setSeries] = useState<SeriesItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -77,7 +79,7 @@ export function MainView() {
         setError(null)
       } catch (err) {
         console.error('Failed to load series from API:', err)
-        setError(err instanceof Error ? err.message : 'Failed to load series')
+        setError(t('mainView.errorLoadingSeries'))
         setSeries([])
       } finally {
         setLoading(false)
@@ -123,8 +125,8 @@ export function MainView() {
     return (
       <div className={styles.loadingContainer}>
         <div className={styles.loadingContent}>
-          <div className={styles.loadingText}>Loading series...</div>
-          <div className={styles.loadingSubtext}>Fetching calendar data from server</div>
+          <div className={styles.loadingText}>{t('mainView.loadingSeries')}</div>
+          <div className={styles.loadingSubtext}>{t('mainView.fetchingCalendarData')}</div>
         </div>
       </div>
     )
@@ -135,8 +137,8 @@ export function MainView() {
     return (
       <div className={styles.errorContainer}>
         <div className={styles.errorContent}>
-          <div className={styles.errorTitle}>Access Denied</div>
-          <div className={styles.errorMessage}>You don't have permission to browse series</div>
+          <div className={styles.errorTitle}>{t('mainView.accessDenied')}</div>
+          <div className={styles.errorMessage}>{t('mainView.noPermissionBrowse')}</div>
         </div>
       </div>
     )
@@ -146,7 +148,7 @@ export function MainView() {
     return (
       <div className={styles.errorContainer}>
         <div className={styles.errorContent}>
-          <div className={styles.errorTitle}>Error loading series</div>
+          <div className={styles.errorTitle}>{t('mainView.errorLoadingSeries')}</div>
           <div className={styles.errorMessage}>{error}</div>
         </div>
       </div>
@@ -312,6 +314,7 @@ function CoordinatorInnerView({
 }: CoordinatorInnerViewProps) {
   const selectedSeries = series.find((s) => s.id === selectedSeriesId)
   const confirmNavigationRef = useRef<(() => Promise<boolean>) | null>(null)
+  const { t } = useTranslation()
 
   const handleBeforeSeriesChange = async (newSeriesId: string): Promise<boolean> => {
     void newSeriesId
@@ -339,7 +342,7 @@ function CoordinatorInnerView({
       onClick={() => void onCreateEvent()}
       className={styles.sidebarActionButton}
     >
-      Create new event
+      {t('mainView.createNewEvent')}
     </button>
   ) : undefined
 
@@ -349,19 +352,19 @@ function CoordinatorInnerView({
       onClick={() => void onCreateSeries()}
       className={styles.sidebarActionButton}
     >
-      Create new series
+      {t('mainView.createNewSeries')}
     </button>
   ) : undefined
 
   // Use a placeholder series item when there are no series
   const displaySeries = series.length === 0
-    ? [{ id: 'empty', name: 'No series yet', description: 'Click "Create new series" to get started', events: [] as EventItem[], eventsLoaded: true }]
+    ? [{ id: 'empty', name: t('mainView.noSeriesYet'), description: t('mainView.noSeriesDescription'), events: [] as EventItem[], eventsLoaded: true }]
     : series
 
   const effectiveSelectedSeriesId = series.length === 0 ? 'empty' : selectedSeriesId
 
   const eventItems: Array<EventItem | { id: string; name: string }> = selectedSeries && selectedSeries.id !== 'empty'
-    ? [{ id: 'general', name: 'General Information' }, ...selectedSeries.events]
+    ? [{ id: 'general', name: t('mainView.generalInformation') }, ...selectedSeries.events]
     : []
 
   const renderSeriesLabel = (s: SeriesItem) => {
@@ -438,8 +441,8 @@ function CoordinatorInnerView({
     if (s.id === 'empty') {
       return (
         <div className={styles.placeholderText}>
-          <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>No series yet</p>
-          <p>Click the "Create new series" button to get started</p>
+          <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('mainView.noSeriesYet')}</p>
+          <p>{t('mainView.noSeriesButton')}</p>
         </div>
       )
     }
@@ -447,7 +450,7 @@ function CoordinatorInnerView({
     if (!s.eventsLoaded) {
       return (
         <div className={styles.placeholderText}>
-          <p>Loading events...</p>
+          <p>{t('mainView.loadingEvents')}</p>
         </div>
       )
     }
@@ -484,7 +487,7 @@ function CoordinatorInnerView({
             />
           )
         }}
-        sidebarTitle="Events"
+        sidebarTitle={t('mainView.events')}
         belowTitleElement={eventsSidebarAction}
         isNested={true}
       />
@@ -503,7 +506,7 @@ function CoordinatorInnerView({
       onBeforeSelectionChange={handleBeforeSeriesChange}
       renderItemLabel={renderSeriesLabel}
       renderContent={renderMainContent}
-      sidebarTitle="Series"
+      sidebarTitle={t('mainView.series')}
       belowTitleElement={seriesSidebarAction}
     />
   )

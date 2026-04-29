@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   fetchProposal,
   fetchProposalEvents,
@@ -15,6 +16,7 @@ import { EventStatusBadge } from './EventStatusBadge'
 import styles from './ProposalEventView.module.css'
 
 export function ProposalEventView() {
+  const { t } = useTranslation()
   const { proposalId, eventId } = useParams<{ proposalId: string; eventId: string }>()
   const navigate = useNavigate()
 
@@ -46,7 +48,7 @@ export function ProposalEventView() {
         setProposal(proposalData)
         setProposalEvents(eventsData)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load proposal data')
+        setError(err instanceof Error ? err.message : t('api.proposals.notFound'))
       } finally {
         setLoading(false)
       }
@@ -75,7 +77,7 @@ export function ProposalEventView() {
           setEvent(eventData)
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load event')
+        setError(err instanceof Error ? err.message : t('api.events.notFound'))
       } finally {
         setEventLoading(false)
       }
@@ -126,7 +128,7 @@ export function ProposalEventView() {
   }, [proposalId])
 
   if (loading) {
-    return <div className={styles.loading}>Loading proposal...</div>
+    return <div className={styles.loading}>{t('proposal.loading')}</div>
   }
 
   if (error) {
@@ -134,7 +136,7 @@ export function ProposalEventView() {
   }
 
   if (!proposal || !proposalId) {
-    return <div className={styles.error}>Proposal not found</div>
+    return <div className={styles.error}>{t('api.proposals.notFound')}</div>
   }
 
   const formatDateTime = (isoStr: string) => {
@@ -153,36 +155,36 @@ export function ProposalEventView() {
       {/* Left panel: Proposal info */}
       <div className={styles.proposalInfoPanel}>
         <Link to={`/proposal-editor/${proposalId}`} className={styles.backLink}>
-          ← Back to Proposal
+          ← {t('common.back')}
         </Link>
 
         <h2>{proposal.title}</h2>
 
         <div className={styles.infoRow}>
-          <span className={styles.infoLabel}>Duration Days</span>
+          <span className={styles.infoLabel}>{t('proposal.numberOfDays')}</span>
           <span className={styles.infoValue}>{proposal.duration_days}</span>
         </div>
         <div className={styles.infoRow}>
-          <span className={styles.infoLabel}>Time per Day</span>
+          <span className={styles.infoLabel}>{t('proposal.timePerDay')}</span>
           <span className={styles.infoValue}>{proposal.duration_time_per_day}</span>
         </div>
         <div className={styles.infoRow}>
-          <span className={styles.infoLabel}>Occurrences</span>
+          <span className={styles.infoLabel}>{t('proposal.occurrenceCount')}</span>
           <span className={styles.infoValue}>{proposal.occurrence_count}</span>
         </div>
         <div className={styles.infoRow}>
-          <span className={styles.infoLabel}>Submission Type</span>
+          <span className={styles.infoLabel}>{t('proposal.submissionType')}</span>
           <span className={styles.infoValue}>{proposal.submission_type}</span>
         </div>
 
-        <h3>Preferred Dates</h3>
+        <h3>{t('proposal.preferredDates')}</h3>
         <p style={{ fontSize: '0.85rem', color: '#555', whiteSpace: 'pre-wrap' }}>
-          {proposal.preferred_dates || 'Not specified'}
+          {proposal.preferred_dates || t('api.notSpecified')}
         </p>
 
-        <h3>Linked Events ({proposalEvents.length})</h3>
+        <h3>{t('proposal.linkedEvents', {count:proposalEvents.length})}</h3>
         {proposalEvents.length === 0 ? (
-          <p style={{ fontSize: '0.85rem', color: '#888' }}>No events linked yet</p>
+          <p style={{ fontSize: '0.85rem', color: '#888' }}>{t('proposal.noEventsYet')}</p>
         ) : (
           <ul className={styles.timeslotsList}>
             {proposalEvents.map((ev) => (
@@ -212,12 +214,12 @@ export function ProposalEventView() {
       {/* Right panel: Event editor */}
       <div className={styles.eventEditorPanel}>
         {eventLoading || eventPermissionLoading ? (
-          <div className={styles.loading}>Loading event...</div>
+          <div className={styles.loading}>{t('event.loading')}</div>
         ) : event && series ? (
           <div>
             {/* Series display */}
             <div className={styles.seriesSelector}>
-              <span className={styles.seriesLabel}>Series</span>
+              <span className={styles.seriesLabel}>{t('series')}</span>
               <div className={styles.seriesValue}>{series.name}</div>
             </div>
 
@@ -231,7 +233,7 @@ export function ProposalEventView() {
             />
           </div>
         ) : (
-          <div className={styles.error}>Event not found. It may not be linked to this proposal.</div>
+          <div className={styles.error}>{t('api.events.notFound')}. {t('proposal.mayNotLinked')}</div>
         )}
       </div>
     </div>

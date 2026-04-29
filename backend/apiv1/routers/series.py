@@ -61,7 +61,7 @@ def get_series(request) -> list[SeriesListItem] | tuple[int, ErrorOut]:
     import logging
     logger = logging.getLogger(__name__)
     if not request.user.is_authenticated:
-        return 401, ErrorOut(error="Not authenticated")
+        return 401, ErrorOut(code="auth.notAuthenticated")
     try:
         series_list = SeriesModel.objects.all().order_by('name')
         return [
@@ -101,10 +101,10 @@ def create_event(request, series_id: str, payload: CreateEventIn) -> tuple[int, 
     try:
         series_model = SeriesModel.objects.get(id=series_id)
     except SeriesModel.DoesNotExist:
-        return 404, ErrorOut(error="Series not found")
+        return 404, ErrorOut(code="series.notFound")
 
     if not request.user.has_perm((apiv1, "change", SeriesModel), series_model):
-        return 403, ErrorOut(error="Unauthorized to modify this series")
+        return 403, ErrorOut(code="auth.permissionDenied")
 
     event_id = uuid4()
     now = django.utils.timezone.now().replace(second=0, microsecond=0)
@@ -150,7 +150,7 @@ def update_series(request, series_id: str, payload: UpdateSeriesIn) -> tuple[int
     try:
         series_model = SeriesModel.objects.get(id=series_id)
     except SeriesModel.DoesNotExist:
-        return 404, ErrorOut(error="Series not found")
+        return 404, ErrorOut(code="series.notFound")
 
     # Only update fields that were provided
     if payload.name is not None:
@@ -171,10 +171,10 @@ def delete_series(request, series_id: str) -> tuple[int, None] | tuple[int, Erro
     try:
         series_model = SeriesModel.objects.get(id=series_id)
     except SeriesModel.DoesNotExist:
-        return 404, ErrorOut(error="Series not found")
+        return 404, ErrorOut(code="series.notFound")
 
     if not request.user.has_perm((apiv1, "delete", SeriesModel), series_model):
-        return 401, ErrorOut(error="Unauthorized to delete this series")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     series_model.delete()
     return 204, None
@@ -191,10 +191,10 @@ def update_event(request, series_id: str, event_id: str, payload: UpdateEventIn)
         series_model = SeriesModel.objects.get(id=series_id)
         event_model = EventModel.objects.get(id=event_id, series=series_model)
     except (SeriesModel.DoesNotExist, EventModel.DoesNotExist):
-        return 404, ErrorOut(error="Series or event not found")
+        return 404, ErrorOut(code="series.notFound")
 
     if not request.user.has_perm((apiv1, "change", EventModel), event_model):
-        return 403, ErrorOut(error="Unauthorized to modify this event")
+        return 403, ErrorOut(code="auth.permissionDenied")
 
     # Only update fields that were provided
     if payload.name is not None:
@@ -218,15 +218,15 @@ def update_event(request, series_id: str, event_id: str, payload: UpdateEventIn)
             proposal = ProposalModel.objects.get(id=payload.proposal_id)
             event_model.proposal = proposal
         except ProposalModel.DoesNotExist:
-            return 404, ErrorOut(error="Proposal not found")
+            return 404, ErrorOut(code="proposals.notFound")
     if payload.series_id is not None:
         try:
             new_series = SeriesModel.objects.get(id=payload.series_id)
             if not request.user.has_perm((apiv1, "change", SeriesModel), new_series):
-                return 403, ErrorOut(error="Unauthorized to modify the target series")
+                return 403, ErrorOut(code="auth.permissionDenied")
             event_model.series = new_series
         except SeriesModel.DoesNotExist:
-            return 404, ErrorOut(error="Target series not found")
+            return 404, ErrorOut(code="series.notFound")
 
     event_model.save()
     return 200, model_event_to_schema(event_model)
@@ -243,10 +243,10 @@ def delete_event(request, series_id: str, event_id: str) -> tuple[int, None] | t
         series_model = SeriesModel.objects.get(id=series_id)
         event_model = EventModel.objects.get(id=event_id, series=series_model)
     except (SeriesModel.DoesNotExist, EventModel.DoesNotExist):
-        return 404, ErrorOut(error="Series or event not found")
+        return 404, ErrorOut(code="series.notFound")
 
     if not request.user.has_perm((apiv1, "delete", EventModel), event_model):
-        return 401, ErrorOut(error="Unauthorized to delete this event")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     event_model.delete()
     return 204, None
@@ -262,10 +262,10 @@ def get_one_series(request, series_id: str) -> tuple[int, Series] | tuple[int, E
     try:
         series_model = SeriesModel.objects.get(id=series_id)
     except SeriesModel.DoesNotExist:
-        return 404, ErrorOut(error="Series not found")
+        return 404, ErrorOut(code="series.notFound")
 
     if not request.user.has_perm((apiv1, "view", SeriesModel), series_model):
-        return 401, ErrorOut(error="Unauthorized to view this series")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     return 200, model_series_to_schema(series_model)
 
@@ -283,10 +283,10 @@ def get_event_transitions(
         series_model = SeriesModel.objects.get(id=series_id)
         event_model = EventModel.objects.get(id=event_id, series=series_model)
     except (SeriesModel.DoesNotExist, EventModel.DoesNotExist):
-        return 404, ErrorOut(error="Series or event not found")
+        return 404, ErrorOut(code="series.notFound")
 
     if not request.user.has_perm((apiv1, "view", SeriesModel), series_model):
-        return 401, ErrorOut(error="Unauthorized to view this series")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     flow = EventFlow(event_model)
     transitions = flow.get_available_transitions(request.user)
@@ -320,23 +320,23 @@ def execute_event_transition(
         series_model = SeriesModel.objects.get(id=series_id)
         event_model = EventModel.objects.get(id=event_id, series=series_model)
     except (SeriesModel.DoesNotExist, EventModel.DoesNotExist):
-        return 404, ErrorOut(error="Series or event not found")
+        return 404, ErrorOut(code="series.notFound")
 
     if not request.user.has_perm((apiv1, "view", SeriesModel), series_model):
-        return 401, ErrorOut(error="Unauthorized to view this series")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     flow = EventFlow(event_model)
     transitions = flow.get_available_transitions(request.user)
 
     matching = next((t for t in transitions if t.action == action), None)
     if matching is None:
-        return 400, ErrorOut(error=f"Transition '{action}' is not available from state '{event_model.status}'")
+        return 400, ErrorOut(code="events.unknownTransition", detail=f"Transition '{action}' is not available from state '{event_model.status}'")
     if not matching.enabled:
-        return 400, ErrorOut(error=matching.disable_reason or "Transition not allowed")
+        return 400, ErrorOut(code="events.transitionNotAllowed", detail=matching.disable_reason)
 
     success = flow.execute_transition(action)
     if not success:
-        return 400, ErrorOut(error="Failed to execute transition")
+        return 400, ErrorOut(code="events.transitionFailed")
 
     event_model.refresh_from_db()
     return 200, model_event_to_schema(event_model)

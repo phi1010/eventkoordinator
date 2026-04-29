@@ -801,7 +801,7 @@ class CreateSyncItemEndpointTest(TestCase):
             f"/api/v1/sync/create/{self.series.pk}/{event_no_proposal.pk}/{self.pretix_target.pk}"
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("error", response.json())
+        self.assertIn("code", response.json())
 
     def test_returns_400_when_proposal_has_no_area(self) -> None:
         self._grant_permissions("add_syncbaseitem")
@@ -825,7 +825,7 @@ class CreateSyncItemEndpointTest(TestCase):
             f"/api/v1/sync/create/{self.series.pk}/{event.pk}/{self.pretix_target.pk}"
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("error", response.json())
+        self.assertIn("code", response.json())
 
     def test_returns_400_when_no_association_for_area(self) -> None:
         self._grant_permissions("add_syncbaseitem")
@@ -851,7 +851,7 @@ class CreateSyncItemEndpointTest(TestCase):
             f"/api/v1/sync/create/{self.series.pk}/{event.pk}/{self.pretix_target.pk}"
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("error", response.json())
+        self.assertIn("code", response.json())
 
     # ------------------------------------------------------------------
     # iCal target – not implemented
@@ -868,7 +868,7 @@ class CreateSyncItemEndpointTest(TestCase):
             f"/api/v1/sync/create/{self.series.pk}/{self.event.pk}/{ical_target.pk}"
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("error", response.json())
+        self.assertIn("code", response.json())
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { DiffView, DiffModeEnum } from '@git-diff-view/react'
 import { generateDiffFile } from '@git-diff-view/file'
 import '@git-diff-view/react/styles/diff-view.css'
@@ -15,13 +16,13 @@ interface PropertyItem extends SelectionItem {
 }
 
 export function SyncDiff() {
+  const { t } = useTranslation()
   const { seriesId, eventId, targetId } = useParams<{
     seriesId: string
     eventId: string
     targetId: string
   }>()
   const navigate = useNavigate()
-
   const [properties, setProperties] = useState<PropertyDiff[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -48,7 +49,7 @@ export function SyncDiff() {
   useEffect(() => {
     const loadDiffData = async () => {
       if (!seriesId || !eventId || !targetId) {
-        setError('Missing required parameters')
+        setError(t('syncDiff:missingParams'))
         setLoading(false)
         return
       }
@@ -62,7 +63,7 @@ export function SyncDiff() {
         }
         setError(null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch diff data')
+        setError(err instanceof Error ? err.message : t('syncDiff:failedLoad'))
       } finally {
         setLoading(false)
       }
@@ -159,7 +160,7 @@ export function SyncDiff() {
   if (loading) {
     return (
       <div className={styles.container}>
-        <div className={styles.loading}>Loading diff data...</div>
+        <div className={styles.loading}>{t('syncDiff:loading')}</div>
       </div>
     )
   }
@@ -168,15 +169,15 @@ export function SyncDiff() {
     return (
       <div className={styles.container}>
         <div className={styles.error}>
-          <h2>Error</h2>
+          <h2>{t('common:error')}</h2>
           <p>{error}</p>
           <button
             type="button"
             onClick={() => navigate(-1)}
             className={styles.backButton}
-            aria-label="Go back to previous page"
+            aria-label={t('common:goBack')}
           >
-            Go Back
+            {t('common:back')}
           </button>
         </div>
       </div>
@@ -187,15 +188,15 @@ export function SyncDiff() {
     return (
       <div className={styles.container}>
         <div className={styles.empty}>
-          <h2>No Differences Found</h2>
-          <p>Local and remote data are in sync.</p>
+          <h2>{t('syncDiff:noDifferences')}</h2>
+          <p>{t('syncDiff:inSync')}</p>
           <button
             type="button"
             onClick={() => navigate(-1)}
             className={styles.backButton}
-            aria-label="Go back to previous page"
+            aria-label={t('common:goBack')}
           >
-            Go Back
+            {t('common:back')}
           </button>
         </div>
       </div>
@@ -210,30 +211,30 @@ export function SyncDiff() {
             type="button"
             onClick={() => navigate(-1)}
             className={styles.backButton}
-            aria-label="Go back to previous page"
+              aria-label={t('common:goBack')}
           >
-            ← Back
+            ← {t('common:back')}
           </button>
-          <h1>Sync Diff Viewer</h1>
+          <h1>{t('syncDiff:title')}</h1>
           {!isNarrowScreen && (
-            <div className={styles.modeToggle} role="group" aria-label="Diff view mode">
+            <div className={styles.modeToggle} role="group" aria-label={t('syncDiff:modeToggle')}>
               <button
                 type="button"
                 className={diffMode === DiffModeEnum.Split ? styles.active : ''}
                 onClick={() => setDiffMode(DiffModeEnum.Split)}
                 aria-pressed={diffMode === DiffModeEnum.Split}
-                aria-label="Switch to split view mode"
+                aria-label={t('syncDiff:splitView')}
               >
-                Split View
+                {t('syncDiff:split')}
               </button>
               <button
                 type="button"
                 className={diffMode === DiffModeEnum.Unified ? styles.active : ''}
                 onClick={() => setDiffMode(DiffModeEnum.Unified)}
                 aria-pressed={diffMode === DiffModeEnum.Unified}
-                aria-label="Switch to unified view mode"
+                aria-label={t('syncDiff:unifiedView')}
               >
-                Unified View
+                {t('syncDiff:unified')}
               </button>
             </div>
           )}
@@ -284,7 +285,7 @@ export function SyncDiff() {
       onSelectionChange={setSelectedPropertyId}
       renderItemLabel={renderPropertyLabel}
       renderContent={renderDiffContent}
-      sidebarTitle={`Properties (${properties.length})`}
+      sidebarTitle={`${t('syncDiff:properties')} (${properties.length})`}
       isNested={false}
     />
   )

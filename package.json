@@ -13,9 +13,13 @@
     "@git-diff-view/file": "^0.1.1",
     "@git-diff-view/react": "^0.1.1",
     "@playwright/test": "^1.58.2",
+    "i18next": "^26.0.8",
+    "i18next-browser-languagedetector": "^8.2.1",
+    "i18next-http-backend": "^3.0.6",
     "openapi-fetch": "^0.14.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-i18next": "^17.0.6",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.13.1"
   },

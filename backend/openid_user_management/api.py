@@ -45,10 +45,10 @@ def get_user(request: HttpRequest, user_id: UUID) -> tuple:
         user = OpenIDUser.objects.get(id=user_id)
         return 200, _user_to_out(user)
     except OpenIDUser.DoesNotExist:
-        return 404, ErrorOut(error="User not found")
+        return 404, ErrorOut(code="users.notFound")
     except Exception as e:
         logger.error(f"Failed to retrieve user: {str(e)}")
-        return 404, ErrorOut(error="Failed to retrieve user")
+        return 404, ErrorOut(code="users.notFound")
 
 
 @router.get(
@@ -66,10 +66,10 @@ def get_user_by_email(request: HttpRequest, email: str) -> tuple:
         user = OpenIDUser.objects.get(email=email)
         return 200, _user_to_out(user)
     except OpenIDUser.DoesNotExist:
-        return 404, ErrorOut(error="User not found")
+        return 404, ErrorOut(code="users.notFound")
     except Exception as e:
         logger.error(f"Failed to retrieve user: {str(e)}")
-        return 404, ErrorOut(error="Failed to retrieve user")
+        return 404, ErrorOut(code="users.notFound")
 
 
 @router.get(
@@ -84,7 +84,7 @@ def get_current_user_profile(request: HttpRequest) -> tuple:
     Note: This endpoint requires authentication middleware setup.
     """
     if not request.user or not request.user.is_authenticated:
-        return 401, ErrorOut(error="Not authenticated")
+        return 401, ErrorOut(code="auth.notAuthenticated")
 
     try:
         user = OpenIDUser.objects.get(id=request.user.id)
@@ -100,7 +100,7 @@ def get_current_user_profile(request: HttpRequest) -> tuple:
         )
     except Exception as e:
         logger.error(f"Failed to retrieve current user: {str(e)}")
-        return 401, ErrorOut(error="Failed to retrieve user profile")
+        return 401, ErrorOut(code="users.notFound")
 
 
 @router.get(
@@ -121,11 +121,11 @@ def get_current_user_permissions(request: HttpRequest) -> tuple:
     Returns 401 if user is not authenticated.
     """
     if not request.user or not request.user.is_authenticated:
-        return 401, ErrorOut(error="Not authenticated")
+        return 401, ErrorOut(code="auth.notAuthenticated")
 
     try:
         if not isinstance(request.user, OpenIDUser):
-            return 401, ErrorOut(error="Invalid user type")
+            return 401, ErrorOut(code="auth.notAuthenticated")
         user : OpenIDUser = request.user
 
         # Get all permission codenames for the user
@@ -157,36 +157,36 @@ def get_current_user_object_permissions(request: HttpRequest, permission:Permiss
     Returns 401 if user is not authenticated.
     """
     if not request.user or not request.user.is_authenticated:
-        return 401, ErrorOut(error="Not authenticated")
+        return 401, ErrorOut(code="auth.notAuthenticated")
 
     try:
         if not isinstance(request.user, OpenIDUser):
-            return 401, ErrorOut(error="Invalid user type")
+            return 401, ErrorOut(code="auth.notAuthenticated")
         user : OpenIDUser = request.user
         objtypename = permission.object_type.lower()
         appname = permission.app.lower()
         action = permission.action.lower()
         if not action.replace("_","").isalpha():
-            return 400, ErrorOut(error="Invalid action")
+            return 400, ErrorOut(code="common.invalidRequest")
         if not objtypename.isalpha():
-            return 400, ErrorOut(error="Invalid object type")
+            return 400, ErrorOut(code="common.invalidRequest")
         # Dynamically get the model class based on the object type
         if appname not in apps.app_configs:
-            return 400, ErrorOut(error="Invalid app name")
+            return 400, ErrorOut(code="common.invalidRequest")
         objtype = apps.all_models[appname].get(objtypename, None)
         if not objtype:
-            return 400, ErrorOut(error="Invalid object type")
+            return 400, ErrorOut(code="common.invalidRequest")
         if not issubclass(objtype, Model):
-            return 400, ErrorOut(error="Invalid object type")
+            return 400, ErrorOut(code="common.invalidRequest")
         permname = f"{appname}.{action}_{objtypename}"
         objs : objtype = objtype.objects.filter(pk=permission.object_id).only()
         if len (objs) == 0:
-            return 403, ErrorOut(error="Permission denied", detail=permname)
+            return 403, ErrorOut(code="auth.permissionDenied", detail=permname)
         obj = objs[0]
         if user.has_perm(permname, obj):
             return 200, None
         else:
-            return 403, ErrorOut(error="Permission denied", detail=permname)
+            return 403, ErrorOut(code="auth.permissionDenied", detail=permname)
 
     except Exception as e:
         logger.error(f"Failed to retrieve user permissions: {str(e)}")

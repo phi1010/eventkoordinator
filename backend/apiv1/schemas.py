@@ -28,7 +28,7 @@ class UserOut(Schema):
 
 
 class ErrorOut(Schema):
-    error: str
+    code: str
     detail: Optional[str] = None
 
 

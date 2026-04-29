@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { updateSeries, type Series } from './api'
 import { useUnsavedChanges } from './useUnsavedChanges'
 import styles from './EventGeneralEditor.module.css'
@@ -13,6 +14,7 @@ interface SeriesGeneralEditorProps {
 }
 
 export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, onRequestNavigation, disabled = false, canDelete = false }: SeriesGeneralEditorProps) {
+  const { t } = useTranslation()
   const [name, setName] = useState(series.name)
   const [description, setDescription] = useState(series.description || '')
   const [changedFields, setChangedFields] = useState<Set<string>>(new Set())
@@ -76,9 +78,9 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, on
 
       onSeriesUpdate(updated)
       setChangedFields(new Set())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save series')
-    } finally {
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('series.failedSave'))
+      } finally {
       setIsSaving(false)
     }
   }
@@ -92,7 +94,7 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, on
 
   const handleDelete = async () => {
     const confirmed = window.confirm(
-      `Delete the series "${series.name}"? This will also delete all events in the series.`
+      t('series.deleteConfirm', {name: series.name})
     )
     if (!confirmed) {
       return
@@ -103,7 +105,7 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, on
       setError(null)
       await onDeleteSeries()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete series')
+      setError(err instanceof Error ? err.message : t('series.failedDelete'))
     } finally {
       setIsDeleting(false)
     }
@@ -114,8 +116,8 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, on
       <form className={styles.form} aria-label="Edit series">
         <div className={styles.formGroup}>
           <label htmlFor="series-name" className={styles.label}>
-            Series Name
-            {changedFields.has('name') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+            {t('series.name')}
+            {changedFields.has('name') && <span className={styles.changedIndicator} aria-label={t('common.unsavedChange')}>●</span>}
           </label>
           <input
             id="series-name"
@@ -129,8 +131,8 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, on
 
         <div className={styles.formGroup}>
           <label htmlFor="series-description" className={styles.label}>
-            Description
-            {changedFields.has('description') && <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+            {t('series.description')}
+            {changedFields.has('description') && <span className={styles.changedIndicator} aria-label={t('common.unsavedChange')}>●</span>}
           </label>
           <textarea
             id="series-description"
@@ -152,7 +154,7 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, on
             className={styles.saveButton}
             aria-busy={isSaving}
           >
-            {isSaving ? 'Saving...' : 'Save Changes'}
+            {isSaving ? t('common.saving') : t('series.saveChanges')}
           </button>
           {hasChanges && (
             <button
@@ -161,7 +163,7 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, on
               disabled={isSaving || disabled}
               className={styles.cancelButton}
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           )}
           {canDelete && (
@@ -171,7 +173,7 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, on
               disabled={isSaving || isDeleting}
               className={styles.deleteButton}
             >
-              {isDeleting ? 'Deleting...' : 'Delete Series'}
+              {isDeleting ? t('common.deleting') : t('series.delete')}
             </button>
           )}
         </div>
