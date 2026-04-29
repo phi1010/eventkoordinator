@@ -68,7 +68,7 @@ services:
       DJANGO_DATABASES__default__ENGINE: "django_prometheus.db.backends.postgresql"
       DJANGO_DATABASES__default__NAME: "db"
       DJANGO_DATABASES__default__USER: "user"
-      DJANGO_DATABASES__default__PASSWORD: "password"
+      DJANGO_DATABASES__default__PASSWORD: ${POSTGRES_PASSWORD}
       DJANGO_DATABASES__default__HOST: "db"
       DJANGO_DATABASES__default__PORT: 5432
     expose:
