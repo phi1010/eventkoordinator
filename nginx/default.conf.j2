@@ -1,6 +1,7 @@
 server {
     listen 80;
     server_name localhost; # TODO adapt this if we use a custom domain
+    client_max_body_size 10M;
 
     # Django static files (collected via collectstatic)
     location /static/ {
