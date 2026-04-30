@@ -4,6 +4,7 @@ import { initializeCsrfToken, login as apiLogin } from './api'
 import { usePermissions } from './usePermissions'
 import { translateApiError } from './apiError'
 import { useTranslation } from 'react-i18next'
+import i18n from './i18n'
 import type { User } from './api'
 import styles from './Navbar.module.css'
 
@@ -138,6 +139,27 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
               {t('nav.adminPanel')}
             </a>
           )}
+        </div>
+
+        <div className={styles.langSwitcher} aria-label="Language switcher">
+          <button
+            type="button"
+            className={`${styles.langButton} ${i18n.language.startsWith('en') ? styles.langButtonActive : ''}`}
+            onClick={() => void i18n.changeLanguage('en')}
+            aria-label="Switch to English"
+            aria-pressed={i18n.language.startsWith('en')}
+          >
+            🇬🇧
+          </button>
+          <button
+            type="button"
+            className={`${styles.langButton} ${i18n.language.startsWith('de') ? styles.langButtonActive : ''}`}
+            onClick={() => void i18n.changeLanguage('de')}
+            aria-label="Auf Deutsch wechseln"
+            aria-pressed={i18n.language.startsWith('de')}
+          >
+            🇩🇪
+          </button>
         </div>
 
         <div className={styles.menu} ref={dropdownRef}>

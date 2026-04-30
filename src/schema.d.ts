@@ -1128,10 +1128,10 @@ export interface components {
         };
         /** ErrorOut */
         ErrorOut: {
+            /** Code */
+            code: string;
             /** Detail */
             detail?: string | null;
-            /** Error */
-            error: string;
         };
         /** Event */
         Event: {
