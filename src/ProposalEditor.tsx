@@ -1399,85 +1399,86 @@ export function ProposalEditor({
                                     </details>
                                 )}
                             </div>
+                        </div>
+                    )}
+                    {/* Tab Navigation Buttons */}
+                    <div className={styles.tabNavigationButtons}>
+                        {activeTab > 0 && (
+                            <button type="button" onClick={handlePreviousTab} className={styles.tabNavButton}
+                                    disabled={isSaving}>
+                                ← Zurück
+                            </button>
+                        )}
+                        {activeTab < tabs.length - 1 && (
+                            <button type="button" onClick={handleNextTab} className={styles.tabNavButton}
+                                    disabled={isSaving}>
+                                Weiter →
+                            </button>
+                        )}
+                    </div>
 
-                            {/* Tab Navigation Buttons */}
-                            <div className={styles.tabNavigationButtons}>
-                                {activeTab > 0 && (
-                                    <button type="button" onClick={handlePreviousTab} className={styles.tabNavButton}
-                                            disabled={isSaving}>
-                                        ← Zurück
-                                    </button>
-                                )}
-                                {activeTab < tabs.length - 1 && (
-                                    <button type="button" onClick={handleNextTab} className={styles.tabNavButton}
-                                            disabled={isSaving}>
-                                        Weiter →
-                                    </button>
-                                )}
-                            </div>
+                    {/* Save/Cancel/Delete Buttons - Always visible */}
+                    <div className={styles.buttonGroup}>
+                        <button type="button" onClick={handleSave}
+                                disabled={!hasChanges || isSaving || isDeleting} className={styles.saveButton}
+                                aria-busy={isSaving}>
+                            {isSaving ? t('proposal.saving') : t('proposal.saveProposal')}
+                        </button>
+                        {hasChanges && (
+                            <button type="button" onClick={handleCancel}
+                                    disabled={isSaving || isDeleting || !canEdit}
+                                    className={styles.cancelButton}>
+                                {t('common.cancel')}
+                            </button>
+                        )}
+                        {canDelete && _proposalId && onDeleteProposal && (
+                            <button type="button" onClick={() => void handleDelete()}
+                                    disabled={isSaving || isDeleting} className={styles.deleteButton}>
+                                {isDeleting ? t('proposal.deleting') : t('proposal.deleteProposal')}
+                            </button>
+                        )}
+                    </div>
 
-                            {/* Save/Cancel/Delete Buttons - Always visible */}
-                            <div className={styles.buttonGroup}>
-                                <button type="button" onClick={handleSave}
-                                        disabled={!hasChanges || isSaving || isDeleting} className={styles.saveButton}
-                                        aria-busy={isSaving}>
-                                    {isSaving ? t('proposal.saving') : t('proposal.saveProposal')}
-                                </button>
-                                {hasChanges && (
-                                    <button type="button" onClick={handleCancel}
-                                            disabled={isSaving || isDeleting || !canEdit}
-                                            className={styles.cancelButton}>
-                                        {t('common.cancel')}
-                                    </button>
-                                )}
-                                {canDelete && _proposalId && onDeleteProposal && (
-                                    <button type="button" onClick={() => void handleDelete()}
-                                            disabled={isSaving || isDeleting} className={styles.deleteButton}>
-                                        {isDeleting ? t('proposal.deleting') : t('proposal.deleteProposal')}
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* History Display - Always visible */}
-                            {_proposalId && _proposalId.trim() && (
-                                <details
-                                    className={styles.fieldset}
-                                    style={{marginTop: '2rem'}}
-                                >
-                                    <summary className={`${styles.legend} ${styles.historySummary}`}>
+                    {/* History Display - Always visible */}
+                    {_proposalId && _proposalId.trim() && (
+                        <details
+                            className={styles.fieldset}
+                            style={{marginTop: '2rem'}}
+                        >
+                            <summary className={`${styles.legend} ${styles.historySummary}`}>
             <span className={`${styles.summaryContent} ${styles.historySummary}`}>
               <span>Edit history</span>
               <span className={styles.historyBadge}>
                 {historyBadge}
               </span>
             </span>
-                                    </summary>
+                            </summary>
 
-                                    <div className={styles.detailsContent} style={{marginTop: '0.25rem'}}>
-                                        {historyLoading ? (
-                                            <p className={styles.historyMuted}>Loading history...</p>
-                                        ) : history.length === 0 ? (
-                                            <p className={styles.historyMuted}>No changes recorded in the last 7
-                                                days</p>
-                                        ) : (
-                                            <ul style={{margin: 0, padding: 0, listStyle: 'none'}}>
-                                                {history.map((entry, index) => (
-                                                    <li
-                                                        key={index}
-                                                        className={index < history.length - 1 ? styles.historyEntry : undefined}
-                                                        style={{
-                                                            display: 'flex',
-                                                            flexDirection: 'column',
-                                                            gap: '0.45rem',
-                                                            padding: '0.7rem 0',
-                                                            fontSize: '0.9rem',
-                                                        }}
-                                                    >
-                                                        <div style={{
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: '0.5rem'
-                                                        }}>
+                            <div className={styles.detailsContent} style={{marginTop: '0.25rem'}}>
+                                {historyLoading ? (
+                                    <p className={styles.historyMuted}>Loading history...</p>
+                                ) : history.length === 0 ? (
+                                    <p className={styles.historyMuted}>No changes recorded in the last 7
+                                        days</p>
+                                ) : (
+                                    <ul style={{margin: 0, padding: 0, listStyle: 'none'}}>
+                                        {history.map((entry, index) => (
+                                            <li
+                                                key={index}
+                                                className={index < history.length - 1 ? styles.historyEntry : undefined}
+                                                style={{
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: '0.45rem',
+                                                    padding: '0.7rem 0',
+                                                    fontSize: '0.9rem',
+                                                }}
+                                            >
+                                                <div style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem'
+                                                }}>
                         <span
                             style={{
                                 display: 'inline-block',
@@ -1493,251 +1494,256 @@ export function ProposalEditor({
                                 flexShrink: 0,
                             }}
                         />
-                                                            <span
-                                                                className={styles.historyEntrySummary}>{entry.summary}</span>
-                                                        </div>
+                                                    <span
+                                                        className={styles.historyEntrySummary}>{entry.summary}</span>
+                                                </div>
 
-                                                        <div className={styles.historyEntryMeta}
-                                                             style={{paddingLeft: '1rem'}}>
-                                                            <div>
-                                                                {t('proposal.by')} <strong>{entry.changed_by}</strong>
-                                                            </div>
-                                                            <div>
-                                                                {formatLocalIso(entry.timestamp)} ({formatRelativeTime(entry.timestamp, t)})
-                                                            </div>
-                                                            {entry.field_name && (
-                                                                <div style={{marginTop: '0.2rem'}}>
+                                                <div className={styles.historyEntryMeta}
+                                                     style={{paddingLeft: '1rem'}}>
+                                                    <div>
+                                                        {t('proposal.by')} <strong>{entry.changed_by}</strong>
+                                                    </div>
+                                                    <div>
+                                                        {formatLocalIso(entry.timestamp)} ({formatRelativeTime(entry.timestamp, t)})
+                                                    </div>
+                                                    {entry.field_name && (
+                                                        <div style={{marginTop: '0.2rem'}}>
                                                                     <span
                                                                         style={{fontStyle: 'italic'}}>{t('proposal.field')}:</span> {entry.field_name}
-                                                                </div>
-                                                            )}
+                                                        </div>
+                                                    )}
 
-                                                            {(entry.old_value !== undefined && entry.old_value !== null) ||
-                                                            (entry.new_value !== undefined && entry.new_value !== null) ? (
-                                                                <div
-                                                                    style={{
-                                                                        marginTop: '0.35rem',
-                                                                        display: 'grid',
-                                                                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                                                                        gap: '0.4rem',
-                                                                    }}
-                                                                >
-                                                                    {entry.old_value !== undefined && entry.old_value !== null && (
-                                                                        <div style={{
-                                                                            display: 'flex',
-                                                                            flexDirection: 'column',
-                                                                            gap: '0.2rem'
-                                                                        }}>
+                                                    {(entry.old_value !== undefined && entry.old_value !== null) ||
+                                                    (entry.new_value !== undefined && entry.new_value !== null) ? (
+                                                        <div
+                                                            style={{
+                                                                marginTop: '0.35rem',
+                                                                display: 'grid',
+                                                                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                                                                gap: '0.4rem',
+                                                            }}
+                                                        >
+                                                            {entry.old_value !== undefined && entry.old_value !== null && (
+                                                                <div style={{
+                                                                    display: 'flex',
+                                                                    flexDirection: 'column',
+                                                                    gap: '0.2rem'
+                                                                }}>
                                                                             <span
                                                                                 className={styles['historyValueLabel--old']}>{t('proposal.old')}</span>
-                                                                            <div
-                                                                                className={styles['historyValueBox--old']}>
-                                                                                {entry.old_value}
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-                                                                    {entry.new_value !== undefined && entry.new_value !== null && (
-                                                                        <div style={{
-                                                                            display: 'flex',
-                                                                            flexDirection: 'column',
-                                                                            gap: '0.2rem'
-                                                                        }}>
+                                                                    <div
+                                                                        className={styles['historyValueBox--old']}>
+                                                                        {entry.old_value}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {entry.new_value !== undefined && entry.new_value !== null && (
+                                                                <div style={{
+                                                                    display: 'flex',
+                                                                    flexDirection: 'column',
+                                                                    gap: '0.2rem'
+                                                                }}>
                                                                             <span
                                                                                 className={styles['historyValueLabel--new']}>{t('proposal.new')}</span>
-                                                                            <div
-                                                                                className={styles['historyValueBox--new']}>
-                                                                                {entry.new_value}
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
+                                                                    <div
+                                                                        className={styles['historyValueBox--new']}>
+                                                                        {entry.new_value}
+                                                                    </div>
                                                                 </div>
-                                                            ) : null}
+                                                            )}
                                                         </div>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                    </div>
-                                </details>
-                            )}
+                                                    ) : null}
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        </details>
+                    )}
 
-                            {/* Transition Buttons - Below history */}
-                            {_proposalId && _proposalId.trim() && (
-                                <ProposalTransitionButtons
-                                    key={`${_proposalId}-${transitionButtonsVersion}`}
-                                    proposalId={_proposalId}
-                                    onTransitionSuccess={(updatedProposal) => {
-                                        // Reload form data with updated proposal
-                                        applyProposalData(updatedProposal, true)
-                                        // Reload history to show the status change
-                                        if (_proposalId && _proposalId.trim()) {
-                                            const loadHistory = async () => {
-                                                try {
-                                                    setHistoryLoading(true)
-                                                    const data = await fetchProposalHistory(_proposalId, 7)
-                                                    setHistory(data.entries)
-                                                } catch (err) {
-                                                    console.error('Failed to reload history:', err)
-                                                }
-                                            }
-                                            loadHistory()
-                                            // Reload status
-                                            fetchProposalTransitions(_proposalId).then((data) => {
-                                                setCurrentStatus(data.current_status)
-                                            }).catch(console.error)
+                    {/* Transition Buttons - Below history */}
+                    {_proposalId && _proposalId.trim() && (
+                        <ProposalTransitionButtons
+                            key={`${_proposalId}-${transitionButtonsVersion}`}
+                            proposalId={_proposalId}
+                            onTransitionSuccess={(updatedProposal) => {
+                                // Reload form data with updated proposal
+                                applyProposalData(updatedProposal, true)
+                                // Reload history to show the status change
+                                if (_proposalId && _proposalId.trim()) {
+                                    const loadHistory = async () => {
+                                        try {
+                                            setHistoryLoading(true)
+                                            const data = await fetchProposalHistory(_proposalId, 7)
+                                            setHistory(data.entries)
+                                        } catch (err) {
+                                            console.error('Failed to reload history:', err)
                                         }
-                                        onTransitionSuccessProp?.()
-                                    }}
-                                    onTransitionError={(error) => {
-                                        console.error('Transition error:', error)
-                                    }}
-                                />
-                            )}
+                                    }
+                                    loadHistory()
+                                    // Reload status
+                                    fetchProposalTransitions(_proposalId).then((data) => {
+                                        setCurrentStatus(data.current_status)
+                                    }).catch(console.error)
+                                }
+                                onTransitionSuccessProp?.()
+                            }}
+                            onTransitionError={(error) => {
+                                console.error('Transition error:', error)
+                            }}
+                        />
+                    )}
 
-                            {/* Linked Events Section - Always visible */}
-                            {canLinkEvents && (
-                                <details
-                                    className={styles.fieldset}
-                                    style={{marginTop: '1.5rem'}}
-                                    open={true}
-                                >
-                                    <summary className={styles.legend}>
+                    {/* Linked Events Section - Always visible */}
+                    {canLinkEvents && (
+                        <details
+                            className={styles.fieldset}
+                            style={{marginTop: '1.5rem'}}
+                            open={true}
+                        >
+                            <summary className={styles.legend}>
             <span className={styles.summaryContent}>
               {t('proposal.linkedEvents', {count: linkedEvents.length})}
             </span>
-                                    </summary>
-                                    <div className={styles.detailsContent}>
-                                        {linkedEventsLoading ? (
-                                            <p style={{
-                                                color: '#888',
-                                                fontSize: '0.9rem'
-                                            }}>{t('proposal.loadingLinkedEvents')}</p>
-                                        ) : linkedEvents.length === 0 ? (
-                                            <p style={{
-                                                color: '#888',
-                                                fontSize: '0.9rem'
-                                            }}>{t('proposal.noLinkedEvents')}</p>
-                                        ) : (
-                                            <ul style={{margin: 0, padding: 0, listStyle: 'none'}}>
-                                                {linkedEvents.map((ev) => (
-                                                    <li key={ev.id}
-                                                        style={{padding: '0.5rem 0', borderBottom: '1px solid #eee'}}>
-                                                        <Link
-                                                            to={`/proposal/${_proposalId}/event/${ev.id}`}
-                                                            style={{
-                                                                color: '#1976d2',
-                                                                textDecoration: 'none',
-                                                                fontWeight: 500
-                                                            }}
-                                                        >
-                                                            {ev.name}
-                                                        </Link>
-                                                        <div style={{fontSize: '0.8rem', color: '#666'}}>
-                                                            {t('proposal.series')}: {ev.series_name}
-                                                        </div>
-                                                        <div style={{fontSize: '0.8rem', color: '#666'}}>
-                                                            {new Date(ev.startTime).toLocaleDateString('de-DE', {
-                                                                year: 'numeric',
-                                                                month: 'short',
-                                                                day: 'numeric',
-                                                                hour: '2-digit',
-                                                                minute: '2-digit',
-                                                            })}
-                                                            {' – '}
-                                                            {new Date(ev.endTime).toLocaleDateString('de-DE', {
-                                                                year: 'numeric',
-                                                                month: 'short',
-                                                                day: 'numeric',
-                                                                hour: '2-digit',
-                                                                minute: '2-digit',
-                                                            })}
-                                                        </div>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                        {canShowLinkedEventCreateControls && (
-                                            <div style={{
-                                                marginTop: '1rem',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                gap: '0.5rem'
-                                            }}>
-                                                <div>
-                                                    <label htmlFor="create-event-series-filter" style={{
-                                                        display: 'block',
-                                                        fontSize: '0.85rem',
-                                                        fontWeight: 500,
-                                                        marginBottom: '0.3rem'
-                                                    }}>
-                                                        {t('proposal.series')}
-                                                    </label>
-                                                    <input
-                                                        id="create-event-series-filter"
-                                                        type="text"
-                                                        placeholder={t('proposal.filterSeries')}
-                                                        value={seriesSearchQuery}
-                                                        onChange={(e) => {
-                                                            setSeriesSearchQuery(e.target.value)
-                                                            setSelectedSeriesId('')
-                                                        }}
-                                                        style={{
-                                                            width: '100%',
-                                                            padding: '0.5rem',
-                                                            border: '1px solid #ccc',
-                                                            borderRadius: '4px',
-                                                            fontSize: '0.9rem',
-                                                            boxSizing: 'border-box'
-                                                        }}
-                                                    />
+                            </summary>
+                            <div className={styles.detailsContent}>
+                                {linkedEventsLoading ? (
+                                    <p style={{
+                                        color: '#888',
+                                        fontSize: '0.9rem'
+                                    }}>{t('proposal.loadingLinkedEvents')}</p>
+                                ) : linkedEvents.length === 0 ? (
+                                    <p style={{
+                                        color: '#888',
+                                        fontSize: '0.9rem'
+                                    }}>{t('proposal.noLinkedEvents')}</p>
+                                ) : (
+                                    <ul style={{margin: 0, padding: 0, listStyle: 'none'}}>
+                                        {linkedEvents.map((ev) => (
+                                            <li key={ev.id}
+                                                style={{padding: '0.5rem 0', borderBottom: '1px solid #eee'}}>
+                                                <Link
+                                                    to={`/proposal/${_proposalId}/event/${ev.id}`}
+                                                    style={{
+                                                        color: '#1976d2',
+                                                        textDecoration: 'none',
+                                                        fontWeight: 500
+                                                    }}
+                                                >
+                                                    {ev.name}
+                                                </Link>
+                                                <div style={{fontSize: '0.8rem', color: '#666'}}>
+                                                    {t('proposal.series')}: {ev.series_name}
                                                 </div>
-                                                <select
-                                                    id="create-event-series-select"
-                                                    aria-label={t('proposal.series')}
-                                                    value={selectedSeriesId}
-                                                    onChange={(e) => setSelectedSeriesId(e.target.value)}
-                                                    style={{
-                                                        width: '100%',
-                                                        padding: '0.5rem',
-                                                        border: '1px solid #ccc',
-                                                        borderRadius: '4px',
-                                                        fontSize: '0.9rem'
-                                                    }}
-                                                >
-                                                    <option value="">{t('proposal.selectSeries')}</option>
-                                                    {seriesSearchResults.map((s) => (
-                                                        <option key={s.id} value={s.id}>{s.name}</option>
-                                                    ))}
-                                                </select>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleCreateEvent}
-                                                    disabled={!selectedSeriesId || isCreatingEvent}
-                                                    style={{
-                                                        padding: '0.5rem 1.2rem',
-                                                        backgroundColor: '#4caf50',
-                                                        color: 'white',
-                                                        border: 'none',
-                                                        borderRadius: '4px',
-                                                        cursor: !selectedSeriesId || isCreatingEvent ? 'not-allowed' : 'pointer',
-                                                        fontWeight: 600,
-                                                        fontSize: '0.9rem',
-                                                        opacity: !selectedSeriesId || isCreatingEvent ? 0.6 : 1,
-                                                        alignSelf: 'flex-start',
-                                                    }}
-                                                >
-                                                    {isCreatingEvent ? t('proposal.creating') : t('proposal.createNewEvent')}
-                                                </button>
-                                                {createEventError && (
-                                                    <div style={{
-                                                        color: '#d32f2f',
-                                                        fontSize: '0.85rem',
-                                                        marginTop: '0.3rem'
-                                                    }}>{createEventError}</div>
-                                                )}
-                                            </div>
+                                                <div style={{fontSize: '0.8rem', color: '#666'}}>
+                                                    {new Date(ev.startTime).toLocaleDateString('de-DE', {
+                                                        year: 'numeric',
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    })}
+                                                    {' – '}
+                                                    {new Date(ev.endTime).toLocaleDateString('de-DE', {
+                                                        year: 'numeric',
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    })}
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                                {canShowLinkedEventCreateControls && (
+                                    <div style={{
+                                        marginTop: '1rem',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '0.5rem'
+                                    }}>
+                                        <div>
+                                            <label htmlFor="create-event-series-filter" style={{
+                                                display: 'block',
+                                                fontSize: '0.85rem',
+                                                fontWeight: 500,
+                                                marginBottom: '0.3rem'
+                                            }}>
+                                                {t('proposal.series')}
+                                            </label>
+                                            <input
+                                                id="create-event-series-filter"
+                                                type="text"
+                                                placeholder={t('proposal.filterSeries')}
+                                                value={seriesSearchQuery}
+                                                onChange={(e) => {
+                                                    setSeriesSearchQuery(e.target.value)
+                                                    setSelectedSeriesId('')
+                                                }}
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '0.5rem',
+                                                    border: '1px solid #ccc',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.9rem',
+                                                    boxSizing: 'border-box'
+                                                }}
+                                            />
+                                        </div>
+                                        <select
+                                            id="create-event-series-select"
+                                            aria-label={t('proposal.series')}
+                                            value={selectedSeriesId}
+                                            onChange={(e) => setSelectedSeriesId(e.target.value)}
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.5rem',
+                                                border: '1px solid #ccc',
+                                                borderRadius: '4px',
+                                                fontSize: '0.9rem'
+                                            }}
+                                        >
+                                            <option value="">{t('proposal.selectSeries')}</option>
+                                            {seriesSearchResults.map((s) => (
+                                                <option key={s.id} value={s.id}>{s.name}</option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            type="button"
+                                            onClick={handleCreateEvent}
+                                            disabled={!selectedSeriesId || isCreatingEvent}
+                                            style={{
+                                                padding: '0.5rem 1.2rem',
+                                                backgroundColor: '#4caf50',
+                                                color: 'white',
+                                                border: 'none',
+                                                borderRadius: '4px',
+                                                cursor: !selectedSeriesId || isCreatingEvent ? 'not-allowed' : 'pointer',
+                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                opacity: !selectedSeriesId || isCreatingEvent ? 0.6 : 1,
+                                                alignSelf: 'flex-start',
+                                            }}
+                                        >
+                                            {isCreatingEvent ? t('proposal.creating') : t('proposal.createNewEvent')}
+                                        </button>
+                                        {createEventError && (
+                                            <div style={{
+                                                color: '#d32f2f',
+                                                fontSize: '0.85rem',
+                                                marginTop: '0.3rem'
+                                            }}>{createEventError}</div>
                                         )}
                                     </div>
-                                </details>
-                            )}
-                        </div>
+                                )}
+                            </div>
+                        </details>
+                    )}
+                </div>
+            </form>
+        </div>
+    )
+}
+
