@@ -1229,7 +1229,11 @@ export function ProposalEditor({
                             )}
                             {error && <div className={styles.error} role="alert">{error}</div>}
 
-                            {_proposalId && _proposalId.trim() && (
+                            {hasChanges ? (
+                                <div className={styles.checklistBox}>
+                                    <p className={styles.checklistMuted}>{t('proposal.saveBeforeChecking')}</p>
+                                </div>
+                            ) : _proposalId && _proposalId.trim() ? (
                                 <div className={styles.checklistBox}>
                                     <h3>{t('proposal.submissionChecklist')}</h3>
                                     {checklistLoading ? (
@@ -1270,7 +1274,7 @@ export function ProposalEditor({
                                         </ul>
                                     )}
                                 </div>
-                            )}
+                            ) : null}
 
 
                         </div>

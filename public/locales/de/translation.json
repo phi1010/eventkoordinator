@@ -156,8 +156,9 @@
     "yearAgo": "vor 1 Jahr",
     "yearsAgo": "vor {{count}} Jahren",
     "noRecentChanges": "keine aktuellen Änderungen",
+    "saveBeforeChecking": "Bitte speichern Sie Ihre Änderungen, bevor Sie die Einreichungs-Checkliste prüfen.",
     "durationDaysLabel": "Dauer (Tage)",
-    "occurrencesLabel": "Anzahl der Durchl\u00e4ufe"
+    "occurrencesLabel": "Anzahl der Durchläufe"
   },
   "defaultScreen": {
     "welcomeTitle": "Willkommen bei Event Coordinator",

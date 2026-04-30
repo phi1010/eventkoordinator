@@ -159,7 +159,8 @@
     "monthsAgo": "{{count}} months ago",
     "yearAgo": "1 year ago",
     "yearsAgo": "{{count}} years ago",
-    "noRecentChanges": "no recent changes"
+    "noRecentChanges": "no recent changes",
+    "saveBeforeChecking": "Please save your changes before checking the submission checklist."
   },
   "defaultScreen": {
     "welcomeTitle": "Welcome to Event Coordinator",
