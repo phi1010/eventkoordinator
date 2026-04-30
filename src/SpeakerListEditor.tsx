@@ -42,11 +42,6 @@ export function SpeakerListEditor({
   disabled = false,
 }: SpeakerListEditorProps) {
   const { t } = useTranslation()
-  const [newSpeaker, setNewSpeaker] = useState<SpeakerIn>({
-    email: '',
-    display_name: '',
-    biography: '',
-  })
   const [editingSpeaker, setEditingSpeaker] = useState<EditingSpeaker | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -75,24 +70,17 @@ export function SpeakerListEditor({
   }
 
   const handleAddSpeaker = async () => {
-    if (!newSpeaker.display_name?.trim() && !newSpeaker.email?.trim()) {
-      setError(t('speakers.atLeastNameOrEmail'))
-      return
-    }
-
     try {
       setIsSaving(true)
       setError(null)
 
-      const addedSpeaker = await addSpeakerToProposal(proposalId, newSpeaker)
-      onSpeakersChange([...speakers, addedSpeaker])
-
-      // Reset form
-      setNewSpeaker({
+      const addedSpeaker = await addSpeakerToProposal(proposalId, {
         email: '',
         display_name: '',
         biography: '',
       })
+      onSpeakersChange([...speakers, addedSpeaker])
+      handleEditSpeaker(addedSpeaker)
     } catch (err) {
       setError(t('speakers.failedToAdd'))
     } finally {
@@ -318,11 +306,16 @@ export function SpeakerListEditor({
               ) : (
                 // Display Mode
                 <div key={speaker.id} className={styles.speakerCard}>
-                  {speaker.speaker.profile_picture && (
+                  {speaker.speaker.profile_picture ? (
                     <img
                       src={speaker.speaker.profile_picture}
                       alt={`Speaker image preview for ${speaker.speaker.display_name || speaker.speaker.email}`}
                       className={styles.speakerImage}
+                    />
+                  ) : (
+                    <div
+                      className={styles.speakerImagePlaceholder}
+                      title={t('speakers.noImage')}
                     />
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -381,88 +374,27 @@ export function SpeakerListEditor({
         </div>
       )}
 
-        {/* Add New Speaker Form */}
+        {/* Add New Speaker Button */}
         {!editingSpeaker && (
-          <div className={styles.addForm}>
-            <h4 className={styles.addFormHeader}>
-              {t('speakers.addNewSpeaker')}
-            </h4>
-            <small className={styles.helpText}>
-              {t('speakers.addSpeakerNote')}
-            </small>
-
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label htmlFor="new-speaker-email" style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-                {t('speakers.emailRequired')}:
-              </label>
-            <input
-              id="new-speaker-email"
-              type="email"
-              value={newSpeaker.email || ''}
-              onChange={(e) => setNewSpeaker({ ...newSpeaker, email: e.target.value })}
-              disabled={disabled || isSaving}
-              className={styles.formInput}
-            />
-              <small className={styles.helpText}>
-                {t('speakers.placeholderEmail')}
-              </small>
-            </div>
-
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label htmlFor="new-speaker-display-name" style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-                {t('speakers.displayName')}:
-              </label>
-            <input
-              id="new-speaker-display-name"
-              type="text"
-              value={newSpeaker.display_name || ''}
-              onChange={(e) => setNewSpeaker({ ...newSpeaker, display_name: e.target.value })}
-              disabled={disabled || isSaving}
-              className={styles.formInput}
-            />
-              <small className={styles.helpText}>
-                {t('speakers.placeholderName')}
-              </small>
-            </div>
-
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label htmlFor="new-speaker-biography" style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-                {t('speakers.biography')}:
-              </label>
-            <textarea
-              id="new-speaker-biography"
-              value={newSpeaker.biography || ''}
-              onChange={(e) => setNewSpeaker({ ...newSpeaker, biography: e.target.value })}
-              disabled={disabled || isSaving}
-              rows={3}
-              className={styles.formInput}
-              style={{ overflow: 'auto', wordBreak: 'break-word', overflowWrap: 'break-word' }}
-            />
-              <small className={styles.helpText}>
-                {t('speakers.biographyHint')}
-              </small>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleAddSpeaker}
-              disabled={disabled || isSaving}
-              style={{
-                padding: '0.75rem 1.5rem',
-                backgroundColor: disabled || isSaving ? '#9e9e9e' : '#4caf50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: disabled || isSaving ? 'not-allowed' : 'pointer',
-                fontSize: '0.9rem',
-                fontWeight: 'bold',
-                opacity: disabled || isSaving ? 0.7 : 1,
-              }}
-            >
-              {isSaving ? t('speakers.adding') : t('speakers.addSpeaker')}
-            </button>
-        </div>
-      )}
+          <button
+            type="button"
+            onClick={handleAddSpeaker}
+            disabled={disabled || isSaving}
+            style={{
+              padding: '0.75rem 1.5rem',
+              backgroundColor: disabled || isSaving ? '#9e9e9e' : '#4caf50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: disabled || isSaving ? 'not-allowed' : 'pointer',
+              fontSize: '0.9rem',
+              fontWeight: 'bold',
+              opacity: disabled || isSaving ? 0.7 : 1,
+            }}
+          >
+            {isSaving ? t('speakers.adding') : t('speakers.addSpeaker')}
+          </button>
+        )}
     </div>
   )
 }

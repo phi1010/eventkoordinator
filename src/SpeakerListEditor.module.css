@@ -43,6 +43,14 @@
   flex-shrink: 0;
 }
 
+.speakerImagePlaceholder {
+  width: 84px;
+  height: 84px;
+  border-radius: 8px;
+  background-color: #e0e0e0;
+  flex-shrink: 0;
+}
+
 .speakerName {
   font-weight: bold;
   margin-bottom: 0.25rem;
@@ -142,6 +150,10 @@
 
   .speakerImage {
     background-color: #1e1e2e;
+  }
+
+  .speakerImagePlaceholder {
+    background-color: #3a3a4e;
   }
 
   .speakerEmail {
