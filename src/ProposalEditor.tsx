@@ -87,6 +87,23 @@ const DEFAULT_FORM_DATA: ProposalFormData = {
     has_building_access: false,
 }
 
+const TAB_FIELD_MAP: Record<number, Array<ChangedFieldName>> = {
+    0: ['title', 'submission_type', 'area', 'language', 'abstract', 'description'],
+    1: ['is_basic_course', 'max_participants', 'material_cost_eur'],
+    2: ['duration_days', 'duration_time_per_day', 'occurrence_count', 'preferred_dates'],
+    3: ['is_regular_member', 'has_building_access', 'internal_notes', 'editors'],
+    4: [],
+    5: [],
+}
+
+function hasTabUnsavedChanges(tabId: number, changedFields: Set<ChangedFieldName>): boolean {
+    const fields = TAB_FIELD_MAP[tabId]
+    if (!fields || fields.length === 0) {
+        return false
+    }
+    return fields.some((field) => changedFields.has(field))
+}
+
 type ChangedFieldName = keyof ProposalFormData | 'editors'
 
 function proposalToFormData(data: ProposalDetail): ProposalFormData {
@@ -667,19 +684,32 @@ export function ProposalEditor({
             <form className={styles.form} aria-label="Proposal editor">
                 {/* Tab Navigation */}
                 <div className={styles.tabNavigation} role="tablist">
-                    {tabs.map((tab) => (
-                        <button
-                            key={tab.id}
-                            type="button"
-                            role="tab"
-                            selected={activeTab === tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`${styles.tabButton} ${activeTab === tab.id ? styles.tabButtonActive : ''}`}
-                            disabled={isSaving}
-                        >
-                            {tab.label}
-                        </button>
-                    ))}
+                    {tabs.map((tab) => {
+                        const tabHasChanges = hasTabUnsavedChanges(tab.id, changedFields)
+                        const tabNumber = tab.id + 1
+                        return (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                role="tab"
+                                aria-selected={activeTab === tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`${styles.tabButton} ${activeTab === tab.id ? styles.tabButtonActive : ''}`}
+                                disabled={isSaving}
+                            >
+                                <span className={styles.tabNumberContainer}>
+                                    {tabHasChanges ? (
+                                        <span className={styles.tabUnsavedIcon} title="Unsaved changes">
+                                            ✎
+                                        </span>
+                                    ) : (
+                                        <span className={styles.tabNumber}>{tabNumber}</span>
+                                    )}
+                                </span>
+                                <span className={styles.tabLabel}>{tab.label}</span>
+                            </button>
+                        )
+                    })}
                 </div>
 
                 {/* Tab Content */}

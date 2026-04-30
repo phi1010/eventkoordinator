@@ -473,6 +473,38 @@
   transition: all 150ms ease;
   position: relative;
   margin-bottom: -2px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tabButton .tabNumberContainer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: #e0e0e0;
+}
+
+.tabButton .tabNumber {
+  color: #444;
+}
+
+.tabButton .tabUnsavedIcon {
+  background-color: #ffc107;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  font-size: 0.85rem;
+  line-height: 1;
 }
 
 .tabButton:hover:not(:disabled) {
@@ -484,6 +516,19 @@
   color: #2196f3;
   border-bottom-color: #2196f3;
   font-weight: 600;
+}
+
+.tabButtonActive .tabNumberContainer {
+  background-color: #e8f4fd;
+}
+
+.tabButtonActive .tabNumber {
+  color: #2196f3;
+}
+
+.tabButtonActive .tabUnsavedIcon {
+  background-color: #ffc107;
+  color: #000;
 }
 
 .tabButton:disabled {
@@ -554,6 +599,19 @@
     color: #aaa;
   }
 
+  .tabButton .tabNumberContainer {
+    background-color: #444;
+  }
+
+  .tabButton .tabNumber {
+    color: #ccc;
+  }
+
+  .tabButton .tabUnsavedIcon {
+    background-color: #ffc107;
+    color: #000;
+  }
+
   .tabButton:hover:not(:disabled) {
     color: #e0e0e0;
     background-color: rgba(255, 255, 255, 0.05);
@@ -564,26 +622,39 @@
     border-bottom-color: #90b0f0;
   }
 
-.tabNavButton {
-  background-color: #2a2a3e;
-  border-color: #555;
-  color: #e0e0e0;
-}
+  .tabButtonActive .tabNumberContainer {
+    background-color: #1e3a5a;
+  }
 
-.tabNavButton:hover:not(:disabled) {
-  background-color: #3a3a4e;
-  border-color: #666;
-}
+  .tabButtonActive .tabNumber {
+    color: #90b0f0;
+  }
 
-.tabNavButtonGreen {
-  background-color: #4caf50;
-  border-color: #4caf50;
-  color: white;
-}
+  .tabButtonActive .tabUnsavedIcon {
+    background-color: #ffc107;
+    color: #000;
+  }
 
-.tabNavButtonGreen:hover:not(:disabled) {
-  background-color: #45a049;
-  border-color: #45a049;
-}
+  .tabNavButton {
+    background-color: #2a2a3e;
+    border-color: #555;
+    color: #e0e0e0;
+  }
+
+  .tabNavButton:hover:not(:disabled) {
+    background-color: #3a3a4e;
+    border-color: #666;
+  }
+
+  .tabNavButtonGreen {
+    background-color: #4caf50;
+    border-color: #4caf50;
+    color: white;
+  }
+
+  .tabNavButtonGreen:hover:not(:disabled) {
+    background-color: #45a049;
+    border-color: #45a049;
+  }
 }
 
