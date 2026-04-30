@@ -49,6 +49,20 @@
       "rejected": "Rejected",
       "unknown": "Unknown"
     },
+    "checklist": {
+      "title": "Title (max 30 characters)",
+      "abstract": "Abstract (50–250 characters)",
+      "description": "Description (50–1000 characters)",
+      "duration": "Duration set",
+      "maxParticipants": "Max participants set",
+      "occurrenceCount": "Occurrence count set",
+      "preferredDates": "Preferred dates specified",
+      "language": "Language selected",
+      "submissionType": "Submission type selected",
+      "workshopArea": "Workshop area selected",
+      "atLeastOneSpeaker": "At least one speaker added",
+      "speakersHaveBio": "All speakers have a biography"
+    },
     "editorTitle": "Proposal Editor",
     "loadingProposal": "Loading proposal...",
     "generalInformation": "General Information",

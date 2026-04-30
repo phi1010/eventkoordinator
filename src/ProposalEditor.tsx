@@ -1195,7 +1195,7 @@ export function ProposalEditor({
                  >
                   {status === 'ok' ? '✓' : '⚠'}
                 </span>
-                  <span className={status === 'ok' ? styles['checklistItemText--ok'] : styles['checklistItemText--warn']}>{item}</span>
+                  <span className={status === 'ok' ? styles['checklistItemText--ok'] : styles['checklistItemText--warn']}>{t(`proposal.checklist.${item}`, { defaultValue: item })}</span>
                 </li>
               ))}
             </ul>

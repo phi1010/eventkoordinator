@@ -49,6 +49,20 @@
       "rejected": "Abgelehnt",
       "unknown": "Unbekannt"
     },
+    "checklist": {
+      "title": "Titel (max. 30 Zeichen)",
+      "abstract": "Zusammenfassung (50–250 Zeichen)",
+      "description": "Beschreibung (50–1000 Zeichen)",
+      "duration": "Dauer angegeben",
+      "maxParticipants": "Max. Teilnehmerzahl angegeben",
+      "occurrenceCount": "Anzahl der Durchläufe angegeben",
+      "preferredDates": "Bevorzugte Termine angegeben",
+      "language": "Sprache ausgewählt",
+      "submissionType": "Einreichungstyp ausgewählt",
+      "workshopArea": "Workshop-Bereich ausgewählt",
+      "atLeastOneSpeaker": "Mindestens ein Referent hinzugefügt",
+      "speakersHaveBio": "Alle Referenten haben eine Biografie"
+    },
     "editorTitle": "Vorschlagseditor",
     "loadingProposal": "Lade Vorschlag...",
     "generalInformation": "Allgemeine Informationen",

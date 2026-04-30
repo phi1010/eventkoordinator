@@ -497,95 +497,68 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
 def check_proposal_required_fields(proposal: Proposal) -> dict[Any, Any]:
     checklist = {}
 
-    # Title validation
-    title = "Title (max 30 characters)"
     if proposal.title and proposal.title.strip() and 0 < len(proposal.title) <= 30:
-        checklist[title] = {"status": "ok"}
+        checklist["title"] = {"status": "ok"}
     else:
-        checklist[title] = {"status": "error"}
+        checklist["title"] = {"status": "error"}
 
-    # Abstract validation (50-250 chars)
     abstract_len = len(proposal.abstract) if proposal.abstract else 0
-    abstract = "Abstract (50-250 characters)"
     if proposal.abstract and 50 <= abstract_len <= 250:
-        checklist[abstract] = {"status": "ok"}
+        checklist["abstract"] = {"status": "ok"}
     else:
-        checklist[abstract] = {"status": "error"}
+        checklist["abstract"] = {"status": "error"}
 
-    # Description validation (50-1000 chars)
     desc_len = len(proposal.description) if proposal.description else 0
-    description = "Description (50-1000 characters)"
     if proposal.description and 50 <= desc_len <= 1000:
-        checklist[description] = {"status": "ok"}
+        checklist["description"] = {"status": "ok"}
     else:
-        checklist[description] = {"status": "error"}
+        checklist["description"] = {"status": "error"}
 
-    # Duration validation
-    durationset = "Duration set"
-    total_minutes = proposal.total_duration_minutes
-    if total_minutes >= 1:
-        checklist[durationset] = {"status": "ok"}
+    if proposal.total_duration_minutes >= 1:
+        checklist["duration"] = {"status": "ok"}
     else:
-        checklist[durationset] = {"status": "error"}
+        checklist["duration"] = {"status": "error"}
 
-    # Max participants validation
-    maxparticipants = "Max participants set"
     if proposal.max_participants and proposal.max_participants >= 1:
-        checklist[maxparticipants] = {"status": "ok"}
+        checklist["maxParticipants"] = {"status": "ok"}
     else:
-        checklist[maxparticipants] = {"status": "error"}
+        checklist["maxParticipants"] = {"status": "error"}
 
-    # Occurrence count validation
-    occurencecount = "Occurrence count set"
     if proposal.occurrence_count and proposal.occurrence_count >= 1:
-        checklist[occurencecount] = {"status": "ok"}
+        checklist["occurrenceCount"] = {"status": "ok"}
     else:
-        checklist[occurencecount] = {"status": "error"}
+        checklist["occurrenceCount"] = {"status": "error"}
 
-    # Preferred dates validation
-    preferreddates = "Preferred dates specified"
     if proposal.preferred_dates and proposal.preferred_dates.strip():
-        checklist[preferreddates] = {"status": "ok"}
+        checklist["preferredDates"] = {"status": "ok"}
     else:
-        checklist[preferreddates] = {"status": "error"}
+        checklist["preferredDates"] = {"status": "error"}
 
-    language = "Language selected"
     if proposal.language:
-        checklist[language] = {"status": "ok"}
+        checklist["language"] = {"status": "ok"}
     else:
-        checklist[language] = {"status": "error"}
+        checklist["language"] = {"status": "error"}
 
-    submissiontype = "Submission type selected"
     if proposal.submission_type:
-        checklist[submissiontype] = {"status": "ok"}
+        checklist["submissionType"] = {"status": "ok"}
     else:
-        checklist[submissiontype] = {"status": "error"}
+        checklist["submissionType"] = {"status": "error"}
 
-    # Area validation
-    workshoparea = "Workshop area selected"
     if proposal.area:
-        checklist[workshoparea] = {"status": "ok"}
+        checklist["workshopArea"] = {"status": "ok"}
     else:
-        checklist[workshoparea] = {"status": "error"}
+        checklist["workshopArea"] = {"status": "error"}
 
-    # Speaker presence validation: require at least one speaker
-    speaker_count = proposal.speakers.count()
-
-    atleastonespeaker = "At least one speaker added"
-    if speaker_count >= 1:
-        checklist[atleastonespeaker] = {"status": "ok"}
+    if proposal.speakers.count() >= 1:
+        checklist["atLeastOneSpeaker"] = {"status": "ok"}
     else:
-        checklist[atleastonespeaker] = {"status": "error"}
+        checklist["atLeastOneSpeaker"] = {"status": "error"}
 
     empty_bio_present = proposal.speakers.filter(
         Q(biography__isnull=True) | Q(biography__exact="")
     ).exists()
+    checklist["speakersHaveBio"] = {"status": "error" if empty_bio_present else "ok"}
 
-    speakershavebio = "All speakers have biography"
-    if empty_bio_present:
-        checklist[speakershavebio] = {"status": "error"}
-    else:
-        checklist[speakershavebio] = {"status": "ok"}
     return checklist
 
 
