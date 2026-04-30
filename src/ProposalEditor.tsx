@@ -1407,7 +1407,7 @@ export function ProposalEditor({
                         {activeTab > 0 ? (
                             <button type="button" onClick={handlePreviousTab} className={styles.tabNavButton}
                                     disabled={isSaving}>
-                                ← Zurück
+                                ← {t("common.back")}
                             </button>
                         ) : <div/>}
                         <div>
@@ -1416,7 +1416,7 @@ export function ProposalEditor({
                                 <button type="button" onClick={handleNextTab}
                                         className={`${styles.tabNavButton} ${styles.tabNavButtonGreen}`}
                                         disabled={isSaving}>
-                                    Weiter →
+                                {t("common.next")} →
                                 </button>
 
                             ) : <></>}
