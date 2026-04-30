@@ -23,7 +23,6 @@ interface EditingSpeaker {
   email: string
   display_name: string
   biography: string
-  use_gravatar: boolean
 }
 
 interface UploadState {
@@ -47,7 +46,6 @@ export function SpeakerListEditor({
     email: '',
     display_name: '',
     biography: '',
-    use_gravatar: false,
   })
   const [editingSpeaker, setEditingSpeaker] = useState<EditingSpeaker | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -94,7 +92,6 @@ export function SpeakerListEditor({
         email: '',
         display_name: '',
         biography: '',
-        use_gravatar: false,
       })
     } catch (err) {
       setError(t('speakers.failedToAdd'))
@@ -109,7 +106,6 @@ export function SpeakerListEditor({
       email: speaker.speaker.email,
       display_name: speaker.speaker.display_name,
       biography: speaker.speaker.biography,
-      use_gravatar: speaker.speaker.use_gravatar,
     })
     setError(null)
   }
@@ -125,7 +121,6 @@ export function SpeakerListEditor({
         email: editingSpeaker.email,
         display_name: editingSpeaker.display_name,
         biography: editingSpeaker.biography,
-        use_gravatar: editingSpeaker.use_gravatar,
       })
 
       onSpeakersChange(
@@ -284,22 +279,6 @@ export function SpeakerListEditor({
                       {t('speakers.biographyHint')}
                     </small>
                   </div>
-
-                  <label
-                    htmlFor={getSpeakerFieldId('edit-speaker', speaker.id, 'use-gravatar')}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}
-                  >
-                    <input
-                      id={getSpeakerFieldId('edit-speaker', speaker.id, 'use-gravatar')}
-                      type="checkbox"
-                      checked={editingSpeaker.use_gravatar}
-                      onChange={(e) =>
-                        setEditingSpeaker({ ...editingSpeaker, use_gravatar: e.target.checked })
-                      }
-                      disabled={disabled || isSaving}
-                    />
-                    {t('speakers.useGravatar')}
-                  </label>
 
                   <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
                     <button
@@ -463,20 +442,6 @@ export function SpeakerListEditor({
                 {t('speakers.biographyHint')}
               </small>
             </div>
-
-            <label
-              htmlFor="new-speaker-use-gravatar"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', fontSize: '0.9rem' }}
-            >
-              <input
-                id="new-speaker-use-gravatar"
-                type="checkbox"
-                checked={newSpeaker.use_gravatar || false}
-                onChange={(e) => setNewSpeaker({ ...newSpeaker, use_gravatar: e.target.checked })}
-                disabled={disabled || isSaving}
-              />
-              {t('speakers.useGravatar')}
-            </label>
 
             <button
               type="button"

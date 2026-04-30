@@ -991,7 +991,6 @@ export interface SpeakerIn {
   email?: string
   display_name?: string
   biography?: string
-  use_gravatar?: boolean
 }
 
 export interface ProposalDetail {
@@ -1077,7 +1076,6 @@ export interface SpeakerOut {
   display_name: string
   biography: string
   profile_picture?: string | null
-  use_gravatar: boolean
 }
 
 export interface ProposalSpeakerOut {

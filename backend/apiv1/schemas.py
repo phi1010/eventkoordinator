@@ -218,21 +218,18 @@ class SpeakerOut(Schema):
     display_name: str
     biography: str
     profile_picture: Optional[str] = None
-    use_gravatar: bool
 
 
 class SpeakerCreateIn(Schema):
     email: str
     display_name: str
     biography: str
-    use_gravatar: bool = False
 
 
 class SpeakerUpdateIn(Schema):
     email: Optional[str] = None
     display_name: Optional[str] = None
     biography: Optional[str] = None
-    use_gravatar: Optional[bool] = None
 
 
 class ProposalSpeakerOut(Schema):
@@ -266,7 +263,6 @@ class SpeakerIn(Schema):
     email: Optional[str] = None
     display_name: Optional[str] = None
     biography: Optional[str] = None
-    use_gravatar: Optional[bool] = None
 
 
 # Lookup table schema

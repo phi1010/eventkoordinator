@@ -29,7 +29,7 @@ class SpeakerInline(admin.TabularInline):
     model = models.Speaker
     extra = 1
     ordering = ("sort_order",)
-    fields = ("display_name", "email", "role", "sort_order", "use_gravatar")
+    fields = ("display_name", "email", "role", "sort_order")
 
 
 class PretixSyncTargetAreaAssociationInline(admin.TabularInline):
@@ -131,12 +131,12 @@ class SpeakerAdmin(SimpleHistoryAdmin):
         "email",
         "proposal",
         "role",
-        "use_gravatar",
+
         "created_at",
     )
     search_fields = ("display_name", "email", "proposal__title")
     readonly_fields = ("created_at", "updated_at")
-    list_filter = ("use_gravatar", "role")
+    list_filter = ("role",)
     raw_id_fields = ("proposal",)
 
 

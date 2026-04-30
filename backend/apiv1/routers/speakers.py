@@ -28,7 +28,6 @@ def _speaker_to_schema(speaker: Speaker) -> SpeakerOut:
         display_name=speaker.display_name,
         biography=speaker.biography,
         profile_picture=speaker.profile_picture.url if speaker.profile_picture else None,
-        use_gravatar=speaker.use_gravatar,
     )
 
 
@@ -66,7 +65,6 @@ def add_speaker_to_proposal(
             email=payload.email or "",
             display_name=payload.display_name or "",
             biography=payload.biography or "",
-            use_gravatar=payload.use_gravatar or False,
             sort_order=sort_order,
         )
         speaker.save()
@@ -159,9 +157,6 @@ def update_speaker_in_proposal(
 
         if payload.biography is not None:
             speaker.biography = payload.biography
-
-        if payload.use_gravatar is not None:
-            speaker.use_gravatar = payload.use_gravatar
 
         speaker.save()
         return 200, _speaker_to_proposal_speaker_out(speaker)

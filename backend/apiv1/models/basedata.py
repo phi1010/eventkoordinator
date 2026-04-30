@@ -366,7 +366,6 @@ class Speaker(HistoricalMetaBase):
         blank=True,
         null=True,
     )
-    use_gravatar = models.BooleanField(default=False)
     role = models.CharField(max_length=20, choices=Role, default=Role.CO_SPEAKER)
     sort_order = models.PositiveSmallIntegerField(default=0)
 
