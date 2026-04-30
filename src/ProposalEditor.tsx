@@ -862,25 +862,71 @@ export function ProposalEditor({
                                 <small aria-live="polite">{formData.description.length}/1000</small>
                             </div>
 
+                        </div>
+                    </div>
+
+                    {/* Tab 2: Teilnehmer und Kosten */}
+                    <div className={activeTab === 1 ? styles.tabPanelActive : styles.tabPanelHidden} role="tabpanel">
+                        <div className={styles.detailsContent}>
                             <div className={styles.formGroup}>
-                                <label htmlFor="proposal-internal-notes" className={styles.label}>
-                                    {t('proposal.internalNotes')}
-                                    {changedFields.has('internal_notes') &&
-                                        <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+                                <label className={styles.label}>
+                                    <input
+                                        id="proposal-is-basic-course"
+                                        type="checkbox"
+                                        checked={formData.is_basic_course}
+                                        onChange={(e) => handleFieldChange('is_basic_course', e.target.checked)}
+                                        disabled={isSaving || !canEdit}
+                                        aria-describedby="proposal-is-basic-course-desc"
+                                    />
+                                    {t('proposal.isBasicCourse')}
                                 </label>
-                                <textarea
-                                    id="proposal-internal-notes"
-                                    value={formData.internal_notes}
-                                    onChange={(e) => handleFieldChange('internal_notes', e.target.value)}
-                                    className={`${styles.textarea} ${changedFields.has('internal_notes') ? styles.changed : ''}`}
-                                    rows={3}
-                                    disabled={isSaving || !canEdit}
-                                />
-                                <small className={styles.fieldHint}>
-                                    {t('proposal.internalNotesHint')}
+
+                                <small id="proposal-is-basic-course-desc" className={styles.fieldHint}
+                                       style={{marginBottom: '0.75rem'}}>
+                                    {t('proposal.isBasicCourseDesc')}
                                 </small>
                             </div>
 
+                            <div className={styles.formGroup}>
+                                <label htmlFor="proposal-max-participants" className={styles.label}>
+                                    {t('proposal.maxParticipants')}
+                                    {changedFields.has('max_participants') &&
+                                        <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+                                </label>
+                                <input
+                                    id="proposal-max-participants"
+                                    type="number"
+                                    value={formData.max_participants}
+                                    onChange={(e) => handleFieldChange('max_participants', parseInt(e.target.value) || 0)}
+                                    className={`${styles.input} ${changedFields.has('max_participants') ? styles.changed : ''}`}
+                                    disabled={isSaving || !canEdit}
+                                    required
+                                />
+                            </div>
+
+                            <div className={styles.formGroup}>
+                                <label htmlFor="proposal-material-cost" className={styles.label}>
+                                    {t('proposal.materialCost')}
+                                    {changedFields.has('material_cost_eur') &&
+                                        <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+                                </label>
+                                <input
+                                    id="proposal-material-cost"
+                                    type="number"
+                                    step="0.01"
+                                    value={formData.material_cost_eur}
+                                    onChange={(e) => handleFieldChange('material_cost_eur', e.target.value)}
+                                    className={`${styles.input} ${changedFields.has('material_cost_eur') ? styles.changed : ''}`}
+                                    disabled={isSaving || !canEdit}
+                                    required
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Tab 3: Zeitplanung */}
+                    <div className={activeTab === 2 ? styles.tabPanelActive : styles.tabPanelHidden} role="tabpanel">
+                        <div className={styles.detailsContent}>
                             <div className={styles.formGroup}>
                                 <label htmlFor="proposal-duration-days" className={styles.label}>
                                     {t('proposal.numberOfDays')}
@@ -948,65 +994,6 @@ export function ProposalEditor({
                                     required
                                 />
                             </div>
-                        </div>
-                    </div>
-
-                    {/* Tab 2: Teilnehmer und Kosten */}
-                    <div className={activeTab === 1 ? styles.tabPanelActive : styles.tabPanelHidden} role="tabpanel">
-                        <div className={styles.detailsContent}>
-                            <div className={styles.formGroup}>
-                                <label className={styles.label}>
-                                    <input
-                                        id="proposal-is-basic-course"
-                                        type="checkbox"
-                                        checked={formData.is_basic_course}
-                                        onChange={(e) => handleFieldChange('is_basic_course', e.target.checked)}
-                                        disabled={isSaving || !canEdit}
-                                        aria-describedby="proposal-is-basic-course-desc"
-                                    />
-                                    {t('proposal.isBasicCourse')}
-                                </label>
-
-                                <small id="proposal-is-basic-course-desc" className={styles.fieldHint}
-                                       style={{marginBottom: '0.75rem'}}>
-                                    {t('proposal.isBasicCourseDesc')}
-                                </small>
-                            </div>
-
-                            <div className={styles.formGroup}>
-                                <label htmlFor="proposal-max-participants" className={styles.label}>
-                                    {t('proposal.maxParticipants')}
-                                    {changedFields.has('max_participants') &&
-                                        <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
-                                </label>
-                                <input
-                                    id="proposal-max-participants"
-                                    type="number"
-                                    value={formData.max_participants}
-                                    onChange={(e) => handleFieldChange('max_participants', parseInt(e.target.value) || 0)}
-                                    className={`${styles.input} ${changedFields.has('max_participants') ? styles.changed : ''}`}
-                                    disabled={isSaving || !canEdit}
-                                    required
-                                />
-                            </div>
-
-                            <div className={styles.formGroup}>
-                                <label htmlFor="proposal-material-cost" className={styles.label}>
-                                    {t('proposal.materialCost')}
-                                    {changedFields.has('material_cost_eur') &&
-                                        <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
-                                </label>
-                                <input
-                                    id="proposal-material-cost"
-                                    type="number"
-                                    step="0.01"
-                                    value={formData.material_cost_eur}
-                                    onChange={(e) => handleFieldChange('material_cost_eur', e.target.value)}
-                                    className={`${styles.input} ${changedFields.has('material_cost_eur') ? styles.changed : ''}`}
-                                    disabled={isSaving || !canEdit}
-                                    required
-                                />
-                            </div>
 
                             <div className={styles.formGroup}>
                                 <label htmlFor="proposal-preferred-dates" className={styles.label}>
@@ -1027,13 +1014,6 @@ export function ProposalEditor({
                                     {t('proposal.preferredDatesHint')}
                                 </small>
                             </div>
-                        </div>
-                    </div>
-
-                    {/* Tab 3: Zeitplanung (placeholder) */}
-                    <div className={activeTab === 2 ? styles.tabPanelActive : styles.tabPanelHidden} role="tabpanel">
-                        <div className={styles.detailsContent}>
-                            <p style={{color: '#666', fontStyle: 'italic'}}>{t('proposal.sectionComingSoon')}</p>
                         </div>
                     </div>
 
@@ -1186,6 +1166,25 @@ export function ProposalEditor({
                                     disabled={isSaving || !_proposalId || !_proposalId.trim() || !canEdit}
                                 />
                             </div>
+
+                            <div className={styles.formGroup}>
+                                <label htmlFor="proposal-internal-notes" className={styles.label}>
+                                    {t('proposal.internalNotes')}
+                                    {changedFields.has('internal_notes') &&
+                                        <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+                                </label>
+                                <textarea
+                                    id="proposal-internal-notes"
+                                    value={formData.internal_notes}
+                                    onChange={(e) => handleFieldChange('internal_notes', e.target.value)}
+                                    className={`${styles.textarea} ${changedFields.has('internal_notes') ? styles.changed : ''}`}
+                                    rows={3}
+                                    disabled={isSaving || !canEdit}
+                                />
+                                <small className={styles.fieldHint}>
+                                    {t('proposal.internalNotesHint')}
+                                </small>
+                            </div>
                         </div>
                     </div>
 
@@ -1240,6 +1239,38 @@ export function ProposalEditor({
                                             ))}
                                         </ul>
                                     )}
+                                </div>
+                            )}
+
+                            {/* Transition Buttons */}
+                            {_proposalId && _proposalId.trim() && (
+                                <div style={{marginTop: '1.5rem'}}>
+                                    <ProposalTransitionButtons
+                                        key={`${_proposalId}-${transitionButtonsVersion}`}
+                                        proposalId={_proposalId}
+                                        onTransitionSuccess={(updatedProposal) => {
+                                            applyProposalData(updatedProposal, true)
+                                            if (_proposalId && _proposalId.trim()) {
+                                                const loadHistory = async () => {
+                                                    try {
+                                                        setHistoryLoading(true)
+                                                        const data = await fetchProposalHistory(_proposalId, 7)
+                                                        setHistory(data.entries)
+                                                    } catch (err) {
+                                                        console.error('Failed to reload history:', err)
+                                                    }
+                                                }
+                                                loadHistory()
+                                                fetchProposalTransitions(_proposalId).then((data) => {
+                                                    setCurrentStatus(data.current_status)
+                                                }).catch(console.error)
+                                            }
+                                            onTransitionSuccessProp?.()
+                                        }}
+                                        onTransitionError={(error) => {
+                                            console.error('Transition error:', error)
+                                        }}
+                                    />
                                 </div>
                             )}
                         </div>
@@ -1560,39 +1591,6 @@ export function ProposalEditor({
                                 )}
                             </div>
                         </details>
-                    )}
-
-                    {/* Transition Buttons - Below history */}
-                    {_proposalId && _proposalId.trim() && (
-                        <ProposalTransitionButtons
-                            key={`${_proposalId}-${transitionButtonsVersion}`}
-                            proposalId={_proposalId}
-                            onTransitionSuccess={(updatedProposal) => {
-                                // Reload form data with updated proposal
-                                applyProposalData(updatedProposal, true)
-                                // Reload history to show the status change
-                                if (_proposalId && _proposalId.trim()) {
-                                    const loadHistory = async () => {
-                                        try {
-                                            setHistoryLoading(true)
-                                            const data = await fetchProposalHistory(_proposalId, 7)
-                                            setHistory(data.entries)
-                                        } catch (err) {
-                                            console.error('Failed to reload history:', err)
-                                        }
-                                    }
-                                    loadHistory()
-                                    // Reload status
-                                    fetchProposalTransitions(_proposalId).then((data) => {
-                                        setCurrentStatus(data.current_status)
-                                    }).catch(console.error)
-                                }
-                                onTransitionSuccessProp?.()
-                            }}
-                            onTransitionError={(error) => {
-                                console.error('Transition error:', error)
-                            }}
-                        />
                     )}
 
                     {/* Linked Events Section - Always visible */}
