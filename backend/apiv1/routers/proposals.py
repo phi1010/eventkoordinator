@@ -26,7 +26,7 @@ from apiv1.api_utils import (
 from apiv1.flows import ProposalFlow
 from apiv1.helpers import model_proposal_to_schema
 from apiv1.models import check_proposal_required_fields
-from apiv1.models import Proposal as ProposalModel
+from apiv1.models import Proposal as ProposalModel, Speaker
 from apiv1.models import Event as EventModel
 from apiv1.models import ProposalArea, ProposalLanguage, SubmissionType
 from apiv1.schemas import (
@@ -193,6 +193,17 @@ def create_proposal(
             has_building_access=has_building_access,
             owner=request.user if request.user.is_authenticated else None,
         )
+
+        # Create default speaker entry for the proposal owner
+        if request.user.is_authenticated:
+            Speaker.objects.create(
+                proposal=proposal,
+                email=request.user.email or "",
+                display_name=request.user.get_full_name() or request.user.username or "",
+                biography="",
+                role=Speaker.Role.PRIMARY,
+                sort_order=0,
+            )
 
         try:
             proposal.clean()  # Validate duration
