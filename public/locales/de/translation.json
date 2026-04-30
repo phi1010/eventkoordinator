@@ -292,7 +292,7 @@
     "userMenu": "Benutzermenü",
     "loggedInAs": "Angemeldet als:",
     "loginWithSso": "Mit SSO anmelden",
-    "ssoHint": "oder benutzername/passwort",
+    "ssoHint": "oder Benutzername/pPasswort",
     "username": "Benutzername",
     "password": "Passwort",
     "enterUsername": "Benutzernamen eingeben",
