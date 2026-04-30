@@ -24,7 +24,7 @@ export function IndexView() {
         const currentUser = await getCurrentUser()
         setUser(currentUser)
         // Set locale from user profile
-        const locale = currentUser.locale?.split('-')[0] ?? navigator.language.split('-')[0]
+        const locale = navigator.language.split('-')[0]
         i18n.changeLanguage(locale)
       } catch {
         console.log('User not authenticated')
@@ -37,7 +37,7 @@ export function IndexView() {
     setUser(authenticatedUser)
     notifyAuthChanged()
     // Set locale from user profile
-    const locale = authenticatedUser.locale?.split('-')[0] ?? navigator.language.split('-')[0]
+    const locale = navigator.language.split('-')[0]
     i18n.changeLanguage(locale)
   }
 
@@ -57,8 +57,8 @@ export function IndexView() {
             element={
               permissionsLoading ? null : canBrowse('series') ? <MainView /> : (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common:accessDenied')}</p>
-                  <p>{t('common:noPermissionBrowseSeries')}</p>
+                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common.accessDenied')}</p>
+                  <p>{t('common.noPermissionBrowseSeries')}</p>
                 </div>
               )
             }
@@ -68,8 +68,8 @@ export function IndexView() {
             element={
               permissionsLoading ? null : canBrowse('proposal') ? <ProposalSelectionPanel /> : (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common:accessDenied')}</p>
-                  <p>{t('common:noPermissionBrowseProposal')}</p>
+                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common.accessDenied')}</p>
+                  <p>{t('common.noPermissionBrowseProposal')}</p>
                 </div>
               )
             }
@@ -83,8 +83,8 @@ export function IndexView() {
             element={
               permissionsLoading ? null : canBrowse('proposal') ? <ProposalEventView /> : (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common:accessDenied')}</p>
-                  <p>{t('common:noPermissionBrowseProposal')}</p>
+                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common.accessDenied')}</p>
+                  <p>{t('common.noPermissionBrowseProposal')}</p>
                 </div>
               )
             }

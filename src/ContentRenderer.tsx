@@ -113,7 +113,7 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
       <h1>{series.name}</h1>
       {permissionLoading ? (
         <div className={styles.placeholder}>
-          <p>{t('common:loading')}</p>
+          <p>{t('common.loading')}</p>
         </div>
       ) : isGeneralInfo ? (
         canViewSelectedObject ? (
@@ -127,7 +127,7 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
           />
         ) : (
           <div className={styles.placeholder}>
-            <p>{t('series:noPermission')}</p>
+            <p>{t('series.noPermission')}</p>
           </div>
         )
       ) : selectedEvent ? (
@@ -143,12 +143,12 @@ export function ContentRenderer({ series, selectedEventId, onSeriesUpdate, onEve
           />
         ) : (
           <div className={styles.placeholder}>
-            <p>{t('event:noPermission')}</p>
+            <p>{t('event.noPermission')}</p>
           </div>
         )
       ) : (
         <div className={styles.placeholder}>
-          <p>{t('common:loading')}</p>
+          <p>{t('common.loading')}</p>
         </div>
       )}
     </>

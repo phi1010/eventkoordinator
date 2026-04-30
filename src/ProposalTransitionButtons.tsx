@@ -37,7 +37,7 @@ export function ProposalTransitionButtons({
         const data = await fetchProposalTransitions(proposalId)
         setTransitions(data.transitions)
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : t('common:genericError')
+        const errorMsg = err instanceof Error ? err.message : t('common.genericError')
         setError(errorMsg)
         console.error('Failed to load transitions:', err)
       } finally {
@@ -85,7 +85,7 @@ export function ProposalTransitionButtons({
         onTransitionSuccess(result)
       }
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : t('common:genericError')
+        const errorMsg = err instanceof Error ? err.message : t('common.genericError')
         setError(errorMsg)
         if (onTransitionError) {
           onTransitionError(errorMsg)
@@ -99,7 +99,7 @@ export function ProposalTransitionButtons({
   if (loading) {
     return (
       <div style={{ padding: '0.5rem 0', color: '#666', fontSize: '0.9rem' }}>
-        {t('common:loading')}
+        {t('common.loading')}
       </div>
     )
   }
@@ -112,7 +112,7 @@ export function ProposalTransitionButtons({
     <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       {error && (
         <div className={styles.errorBox}>
-          {t('common:error')}: {error}
+          {t('common.error')}: {error}
         </div>
       )}
 
@@ -136,7 +136,7 @@ export function ProposalTransitionButtons({
             }}
             title={transition.disable_reason || undefined}
           >
-            {executing === transition.action ? t('common:processing') : transition.label}
+            {executing === transition.action ? t('common.processing') : transition.label}
           </button>
         ))}
       </div>

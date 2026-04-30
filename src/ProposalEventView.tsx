@@ -219,7 +219,7 @@ export function ProposalEventView() {
           <div>
             {/* Series display */}
             <div className={styles.seriesSelector}>
-              <span className={styles.seriesLabel}>{t('series')}</span>
+              <span className={styles.seriesLabel}>{t('api.series')}</span>
               <div className={styles.seriesValue}>{series.name}</div>
             </div>
 

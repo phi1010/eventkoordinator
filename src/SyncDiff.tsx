@@ -49,7 +49,7 @@ export function SyncDiff() {
   useEffect(() => {
     const loadDiffData = async () => {
       if (!seriesId || !eventId || !targetId) {
-        setError(t('syncDiff:missingParams'))
+        setError(t('syncDiff.missingParams'))
         setLoading(false)
         return
       }
@@ -63,7 +63,7 @@ export function SyncDiff() {
         }
         setError(null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : t('syncDiff:failedLoad'))
+        setError(err instanceof Error ? err.message : t('syncDiff.failedLoad'))
       } finally {
         setLoading(false)
       }
@@ -160,7 +160,7 @@ export function SyncDiff() {
   if (loading) {
     return (
       <div className={styles.container}>
-        <div className={styles.loading}>{t('syncDiff:loading')}</div>
+        <div className={styles.loading}>{t('syncDiff.loading')}</div>
       </div>
     )
   }
@@ -169,15 +169,15 @@ export function SyncDiff() {
     return (
       <div className={styles.container}>
         <div className={styles.error}>
-          <h2>{t('common:error')}</h2>
+          <h2>{t('common.error')}</h2>
           <p>{error}</p>
           <button
             type="button"
             onClick={() => navigate(-1)}
             className={styles.backButton}
-            aria-label={t('common:goBack')}
+            aria-label={t('common.back')}
           >
-            {t('common:back')}
+            {t('common.back')}
           </button>
         </div>
       </div>
@@ -188,15 +188,15 @@ export function SyncDiff() {
     return (
       <div className={styles.container}>
         <div className={styles.empty}>
-          <h2>{t('syncDiff:noDifferences')}</h2>
-          <p>{t('syncDiff:inSync')}</p>
+          <h2>{t('syncDiff.noDifferences')}</h2>
+          <p>{t('syncDiff.inSync')}</p>
           <button
             type="button"
             onClick={() => navigate(-1)}
             className={styles.backButton}
-            aria-label={t('common:goBack')}
+            aria-label={t('common.back')}
           >
-            {t('common:back')}
+            {t('common.back')}
           </button>
         </div>
       </div>
@@ -211,30 +211,30 @@ export function SyncDiff() {
             type="button"
             onClick={() => navigate(-1)}
             className={styles.backButton}
-              aria-label={t('common:goBack')}
+              aria-label={t('common.back')}
           >
-            ← {t('common:back')}
+            ← {t('common.back')}
           </button>
-          <h1>{t('syncDiff:title')}</h1>
+          <h1>{t('syncDiff.title')}</h1>
           {!isNarrowScreen && (
-            <div className={styles.modeToggle} role="group" aria-label={t('syncDiff:modeToggle')}>
+            <div className={styles.modeToggle} role="group" aria-label={t('syncDiff.modeToggle')}>
               <button
                 type="button"
                 className={diffMode === DiffModeEnum.Split ? styles.active : ''}
                 onClick={() => setDiffMode(DiffModeEnum.Split)}
                 aria-pressed={diffMode === DiffModeEnum.Split}
-                aria-label={t('syncDiff:splitView')}
+                aria-label={t('syncDiff.splitView')}
               >
-                {t('syncDiff:split')}
+                {t('syncDiff.split')}
               </button>
               <button
                 type="button"
                 className={diffMode === DiffModeEnum.Unified ? styles.active : ''}
                 onClick={() => setDiffMode(DiffModeEnum.Unified)}
                 aria-pressed={diffMode === DiffModeEnum.Unified}
-                aria-label={t('syncDiff:unifiedView')}
+                aria-label={t('syncDiff.unifiedView')}
               >
-                {t('syncDiff:unified')}
+                {t('syncDiff.unified')}
               </button>
             </div>
           )}
@@ -285,7 +285,7 @@ export function SyncDiff() {
       onSelectionChange={setSelectedPropertyId}
       renderItemLabel={renderPropertyLabel}
       renderContent={renderDiffContent}
-      sidebarTitle={`${t('syncDiff:properties')} (${properties.length})`}
+      sidebarTitle={`${t('syncDiff.properties')} (${properties.length})`}
       isNested={false}
     />
   )
