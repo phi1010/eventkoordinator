@@ -78,6 +78,28 @@
   border-left: 4px solid #c62828;
 }
 
+.draftWarning {
+  padding: 1rem;
+  background-color: #fff3e0;
+  color: #e65100;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  border-left: 4px solid #ff9800;
+  margin-bottom: 1.5rem;
+}
+
+.draftWarning h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e65100;
+}
+
+.draftWarning p {
+  margin: 0;
+  line-height: 1.5;
+}
+
 .buttonGroup {
   display: flex;
   gap: 0.75rem;

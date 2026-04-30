@@ -636,6 +636,7 @@ export function ProposalEditor({
 
       {isLoading && <p aria-live="polite">{t('proposal.loadingProposal')}</p>}
 
+
       <form className={styles.form} aria-label="Proposal editor">
         {/* General Section */}
         <details
@@ -1141,6 +1142,12 @@ export function ProposalEditor({
           </div>
         </details>
 
+      {currentStatus === 'draft' && (
+        <div className={styles.draftWarning} role="alert" aria-live="assertive">
+          <h3>{t('proposal.draftWarning')}</h3>
+          <p>{t('proposal.draftWarningDesc')}</p>
+        </div>
+      )}
         {error && <div className={styles.error} role="alert">{error}</div>}
 
         <div className={styles.buttonGroup}>

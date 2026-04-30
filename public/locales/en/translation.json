@@ -133,6 +133,8 @@
     "failedToLoad": "Failed to load proposal",
     "failedToDelete": "Failed to delete proposal",
     "untitledProposal": "Untitled Proposal",
+    "draftWarning": "Draft – not yet submitted",
+    "draftWarningDesc": "This proposal will only be considered after you submit it via \"Submit Proposal\". In the meantime, you can save it, it does not get submitted by that.",
     "linkedEvents": "Linked Events ({{count}})",
     "loadingLinkedEvents": "Loading linked events...",
     "noLinkedEvents": "No events linked to this proposal yet.",

@@ -131,6 +131,8 @@
     "failedToLoad": "Laden des Vorschlags fehlgeschlagen",
     "failedToDelete": "Löschen des Vorschlags fehlgeschlagen",
     "untitledProposal": "Unbenannter Vorschlag",
+    "draftWarning": "Entwurf – noch nicht eingereicht",
+    "draftWarningDesc": "Dieser Vorschlag wird erst berücksichtigt, nachdem du ihn über „Vorschlag einreichen\" abgesendet hast. Hier kannst du den Vorschlag zwischendurch als Entwurf speichern, er wird dadurch nicht eingereicht.",
     "linkedEvents": "Verknüpfte Veranstaltungen ({{count}})",
     "loadingLinkedEvents": "Lade verknüpfte Veranstaltungen...",
     "noLinkedEvents": "Noch keine Veranstaltungen mit diesem Vorschlag verknüpft.",
