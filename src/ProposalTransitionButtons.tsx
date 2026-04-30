@@ -123,14 +123,14 @@ export function ProposalTransitionButtons({
             onClick={() => executeTransition(transition.action)}
             disabled={!transition.enabled || executing !== null}
             style={{
-              padding: '0.5rem 1rem',
+              padding: '0.6rem 1.2rem',
               borderRadius: '4px',
               border: '1px solid #ddd',
               backgroundColor: transition.enabled ? '#2196f3' : '#e0e0e0',
               color: transition.enabled ? '#fff' : '#999',
               cursor: transition.enabled && executing === null ? 'pointer' : 'not-allowed',
               fontSize: '0.9rem',
-              fontWeight: 500,
+              fontWeight: 600,
               transition: 'all 0.2s ease',
               opacity: executing !== null && executing !== transition.action ? 0.5 : 1,
             }}

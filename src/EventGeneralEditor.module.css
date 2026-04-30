@@ -534,6 +534,17 @@
   cursor: not-allowed;
 }
 
+.tabNavButtonGreen {
+  background-color: #4caf50;
+  border-color: #4caf50;
+  color: white;
+}
+
+.tabNavButtonGreen:hover:not(:disabled) {
+  background-color: #45a049;
+  border-color: #45a049;
+}
+
 @media (prefers-color-scheme: dark) {
   .tabNavigation {
     border-bottom-color: #444;
@@ -553,15 +564,26 @@
     border-bottom-color: #90b0f0;
   }
 
-  .tabNavButton {
-    background-color: #2a2a3e;
-    border-color: #555;
-    color: #e0e0e0;
-  }
+.tabNavButton {
+  background-color: #2a2a3e;
+  border-color: #555;
+  color: #e0e0e0;
+}
 
-  .tabNavButton:hover:not(:disabled) {
-    background-color: #3a3a4e;
-    border-color: #666;
-  }
+.tabNavButton:hover:not(:disabled) {
+  background-color: #3a3a4e;
+  border-color: #666;
+}
+
+.tabNavButtonGreen {
+  background-color: #4caf50;
+  border-color: #4caf50;
+  color: white;
+}
+
+.tabNavButtonGreen:hover:not(:disabled) {
+  background-color: #45a049;
+  border-color: #45a049;
+}
 }
 

@@ -1242,37 +1242,7 @@ export function ProposalEditor({
                                 </div>
                             )}
 
-                            {/* Transition Buttons */}
-                            {_proposalId && _proposalId.trim() && (
-                                <div style={{marginTop: '1.5rem'}}>
-                                    <ProposalTransitionButtons
-                                        key={`${_proposalId}-${transitionButtonsVersion}`}
-                                        proposalId={_proposalId}
-                                        onTransitionSuccess={(updatedProposal) => {
-                                            applyProposalData(updatedProposal, true)
-                                            if (_proposalId && _proposalId.trim()) {
-                                                const loadHistory = async () => {
-                                                    try {
-                                                        setHistoryLoading(true)
-                                                        const data = await fetchProposalHistory(_proposalId, 7)
-                                                        setHistory(data.entries)
-                                                    } catch (err) {
-                                                        console.error('Failed to reload history:', err)
-                                                    }
-                                                }
-                                                loadHistory()
-                                                fetchProposalTransitions(_proposalId).then((data) => {
-                                                    setCurrentStatus(data.current_status)
-                                                }).catch(console.error)
-                                            }
-                                            onTransitionSuccessProp?.()
-                                        }}
-                                        onTransitionError={(error) => {
-                                            console.error('Transition error:', error)
-                                        }}
-                                    />
-                                </div>
-                            )}
+
                         </div>
                     </div>
 
@@ -1432,22 +1402,57 @@ export function ProposalEditor({
                             </div>
                         </div>
                     )}
-                    {/* Tab Navigation Buttons */}
+                    {/* Tab Navigation Buttons - Show on all tabs except last */}
                     <div className={styles.tabNavigationButtons}>
-                        {activeTab > 0 && (
+                        {activeTab > 0 ? (
                             <button type="button" onClick={handlePreviousTab} className={styles.tabNavButton}
                                     disabled={isSaving}>
                                 ← Zurück
                             </button>
-                        )}
-                        {activeTab < tabs.length - 1 && (
-                            <button type="button" onClick={handleNextTab} className={styles.tabNavButton}
-                                    disabled={isSaving}>
-                                Weiter →
-                            </button>
-                        )}
-                    </div>
+                        ) : <div/>}
+                        <div>
+                            {activeTab < tabs.length - 1 ? (
 
+                                <button type="button" onClick={handleNextTab}
+                                        className={`${styles.tabNavButton} ${styles.tabNavButtonGreen}`}
+                                        disabled={isSaving}>
+                                    Weiter →
+                                </button>
+
+                            ) : <></>}
+                            {/* Transition Buttons */}
+                            {activeTab >=4 && _proposalId && _proposalId.trim() && (
+                                <div style={{marginTop: '1.5rem'}}>
+                                    <ProposalTransitionButtons
+                                        key={`${_proposalId}-${transitionButtonsVersion}`}
+                                        proposalId={_proposalId}
+                                        onTransitionSuccess={(updatedProposal) => {
+                                            applyProposalData(updatedProposal, true)
+                                            if (_proposalId && _proposalId.trim()) {
+                                                const loadHistory = async () => {
+                                                    try {
+                                                        setHistoryLoading(true)
+                                                        const data = await fetchProposalHistory(_proposalId, 7)
+                                                        setHistory(data.entries)
+                                                    } catch (err) {
+                                                        console.error('Failed to reload history:', err)
+                                                    }
+                                                }
+                                                loadHistory()
+                                                fetchProposalTransitions(_proposalId).then((data) => {
+                                                    setCurrentStatus(data.current_status)
+                                                }).catch(console.error)
+                                            }
+                                            onTransitionSuccessProp?.()
+                                        }}
+                                        onTransitionError={(error) => {
+                                            console.error('Transition error:', error)
+                                        }}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
                     {/* Save/Cancel/Delete Buttons - Always visible */}
                     <div className={styles.buttonGroup}>
                         <button type="button" onClick={handleSave}
