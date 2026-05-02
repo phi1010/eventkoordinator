@@ -1,5 +1,5 @@
 import {useState, useEffect, useRef} from 'react'
-import {Link, useNavigate} from 'react-router-dom'
+import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 import {
     fetchProposal,
     updateProposal,
@@ -209,6 +209,7 @@ export function ProposalEditor({
                                }: ProposalEditorProps) {
     const {t} = useTranslation()
     const navigate = useNavigate()
+    const [searchParams, setSearchParams] = useSearchParams()
     const {canView, canAdd, loading: permissionsLoading} = usePermissions()
     const [formData, setFormData] = useState<ProposalFormData>(DEFAULT_FORM_DATA)
     const [changedFields, setChangedFields] = useState<Set<ChangedFieldName>>(new Set())
@@ -647,7 +648,8 @@ export function ProposalEditor({
         setError(null)
     }
 
-    const [activeTab, setActiveTab] = useState(0)
+    const initialTabFromUrl = parseInt(searchParams.get('tab') || '0', 10)
+    const [activeTab, setActiveTab] = useState(Math.max(0, initialTabFromUrl))
 
     const tabs = [
         {id: 0, label: 'Allgemeines'},
@@ -662,15 +664,22 @@ export function ProposalEditor({
         tabs.push({id: 5, label: 'Terminfestlegung'})
     }
 
+    const handleTabChange = (tabId: number) => {
+        setActiveTab(tabId)
+        const newParams = new URLSearchParams(searchParams)
+        newParams.set('tab', tabId.toString())
+        setSearchParams(newParams)
+    }
+
     const handlePreviousTab = () => {
         if (activeTab > 0) {
-            setActiveTab(activeTab - 1)
+            handleTabChange(activeTab - 1)
         }
     }
 
     const handleNextTab = () => {
         if (activeTab < tabs.length - 1) {
-            setActiveTab(activeTab + 1)
+            handleTabChange(activeTab + 1)
         }
     }
 
@@ -693,7 +702,7 @@ export function ProposalEditor({
                                 type="button"
                                 role="tab"
                                 aria-selected={activeTab === tab.id}
-                                onClick={() => setActiveTab(tab.id)}
+                                onClick={() => handleTabChange(tab.id)}
                                 className={`${styles.tabButton} ${activeTab === tab.id ? styles.tabButtonActive : ''}`}
                                 disabled={isSaving}
                             >
