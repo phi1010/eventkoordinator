@@ -479,12 +479,23 @@ export function ProposalSelectionPanel({ onCreateProposal, onProposalSave }: Pro
                 ))
               }).catch(console.error)
             }}
-            onProposalSave={async (formData) => {
-              // Refresh proposal list after a proposal is saved
+            onProposalSave={async (formData, freshProposal) => {
+              // Update the proposal in the sidebar with fresh data from server
               try {
-                await loadProposals()
+                const transitions = await fetchProposalTransitions(freshProposal.id)
+                setProposals((prev) => prev.map((item) => {
+                  if (item.proposalId === freshProposal.id) {
+                    return {
+                      ...item,
+                      title: freshProposal.title,
+                      submission_type: freshProposal.submission_type,
+                      workflow_status: transitions.current_status,
+                    }
+                  }
+                  return item
+                }))
               } catch (err) {
-                console.error('Failed to refresh proposals after save:', err)
+                console.error('Failed to update proposal after save:', err)
               }
               // Forward event to parent if provided
               if (onProposalSave) {

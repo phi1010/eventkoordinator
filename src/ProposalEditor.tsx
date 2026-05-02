@@ -60,7 +60,7 @@ interface ProposalEditorProps {
     proposalId?: string
     canEdit?: boolean
     canDelete?: boolean
-    onProposalSave?: (formData: ProposalFormData) => void
+    onProposalSave?: (formData: ProposalFormData, freshProposal: ProposalDetail) => void
     onDeleteProposal?: (proposalId: string) => Promise<void>
     onRequestNavigation?: (confirmFn: () => Promise<boolean>) => void
     onTransitionSuccess?: () => void
@@ -630,7 +630,7 @@ export function ProposalEditor({
             setSpeakers(freshSpeakers)
             setTransitionButtonsVersion((previous) => previous + 1)
             if (onProposalSave) {
-                onProposalSave(formData)
+                onProposalSave(formData, freshData)
             }
         } catch (err) {
             setError(t('proposal.failedToSave'))
