@@ -363,7 +363,10 @@
     "guest": "Guest",
     "appName": "Event Coordinator",
     "goToHome": "go to home",
-    "adminLink": "Admin panel"
+    "adminLink": "Admin panel",
+    "imprint": "Imprint",
+    "privacyPolicy": "Privacy Policy",
+    "manageAccount": "Manage Account"
   },
   "syncDiff": {
     "missingParams": "Missing required parameters",

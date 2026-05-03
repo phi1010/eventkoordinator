@@ -1452,3 +1452,15 @@ export async function deleteCalculatedPrices(seriesId: string, eventId: string):
   }
 }
 
+export interface SiteConfig {
+  imprint_url: string
+  privacy_policy_url: string
+  account_management_url: string
+}
+
+export async function fetchSiteConfig(): Promise<SiteConfig> {
+  const response = await fetch('/api/v1/config')
+  if (!response.ok) throw new Error('Failed to fetch site config')
+  return response.json() as Promise<SiteConfig>
+}
+

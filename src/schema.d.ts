@@ -44,6 +44,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Site Config
+         * @description Return public site configuration (links for imprint, privacy policy, account management).
+         */
+        get: operations["apiv1_routers_lookups_get_site_config"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/csrf": {
         parameters: {
             query?: never;
@@ -1618,6 +1638,15 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** SiteConfigOut */
+        SiteConfigOut: {
+            /** Account Management Url */
+            account_management_url: string;
+            /** Imprint Url */
+            imprint_url: string;
+            /** Privacy Policy Url */
+            privacy_policy_url: string;
+        };
         /** SpeakerIn */
         SpeakerIn: {
             /** Biography */
@@ -1626,8 +1655,6 @@ export interface components {
             display_name?: string | null;
             /** Email */
             email?: string | null;
-            /** Use Gravatar */
-            use_gravatar?: boolean | null;
         };
         /** SpeakerOut */
         SpeakerOut: {
@@ -1647,8 +1674,6 @@ export interface components {
             id: string;
             /** Profile Picture */
             profile_picture?: string | null;
-            /** Use Gravatar */
-            use_gravatar: boolean;
         };
         /** SyncDeleteResult */
         SyncDeleteResult: {
@@ -1932,6 +1957,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_lookups_get_site_config: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteConfigOut"];
                 };
             };
         };

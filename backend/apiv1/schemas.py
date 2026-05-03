@@ -12,6 +12,12 @@ from typing import Optional, Literal
 from pydantic import Field
 
 
+class SiteConfigOut(Schema):
+    imprint_url: str
+    privacy_policy_url: str
+    account_management_url: str
+
+
 class UserIn(Schema):
     username: str
     password: str

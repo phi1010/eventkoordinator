@@ -212,3 +212,7 @@ SECURE_CSP = {
 }
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB limit for file uploads
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+
+IMPRINT_URL = "https://www.zam.haus/impressum/"
+PRIVACY_POLICY_URL = "https://www.zam.haus/datenschutzerklaerung-2/"
+ACCOUNT_MANAGEMENT_URL = "https://sso.zam.haus/realms/ZAM/account/"

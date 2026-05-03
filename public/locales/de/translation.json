@@ -318,7 +318,10 @@
     "guest": "Gast",
     "appName": "Event Coordinator",
     "goToHome": "zur Startseite",
-    "adminLink": "Admin-Bereich"
+    "adminLink": "Admin-Bereich",
+    "imprint": "Impressum",
+    "privacyPolicy": "Datenschutzerklärung",
+    "manageAccount": "Konto verwalten"
   },
   "event": {
     "statusLabel": "Veranstaltungsstatus: {{status}}",

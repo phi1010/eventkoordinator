@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { initializeCsrfToken, login as apiLogin } from './api'
+import { initializeCsrfToken, login as apiLogin, fetchSiteConfig, type SiteConfig } from './api'
 import { usePermissions } from './usePermissions'
 import { translateApiError } from './apiError'
 import { useTranslation } from 'react-i18next'
@@ -20,9 +20,14 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
   const [loginFormData, setLoginFormData] = useState({ username: '', password: '' })
   const [loginError, setLoginError] = useState<string | null>(null)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
   const { canBrowse, permissions } = usePermissions()
+
+  useEffect(() => {
+    fetchSiteConfig().then(setSiteConfig).catch(() => { /* non-critical */ })
+  }, [])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -187,6 +192,18 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
                     <span className={styles.infoValue}>{user.username}</span>
                   </div>
                   <hr className={styles.divider} />
+                  {siteConfig && (
+                    <a
+                      href={siteConfig.account_management_url}
+                      className={styles.menuLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      role="menuitem"
+                    >
+                      {t('nav.manageAccount')}
+                    </a>
+                  )}
+                  <hr className={styles.divider} />
                   <button
                     type="button"
                     className={styles.logoutButton}
@@ -258,6 +275,31 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
                     {isLoggingIn ? t('nav.loggingIn') : t('common.login')}
                   </button>
                 </form>
+              )}
+              {siteConfig && (
+                <>
+                  <hr className={styles.divider} />
+                  <div className={styles.menuFooterLinks}>
+                    <a
+                      href={siteConfig.imprint_url}
+                      className={styles.menuLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      role="menuitem"
+                    >
+                      {t('nav.imprint')}
+                    </a>
+                    <a
+                      href={siteConfig.privacy_policy_url}
+                      className={styles.menuLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      role="menuitem"
+                    >
+                      {t('nav.privacyPolicy')}
+                    </a>
+                  </div>
+                </>
               )}
             </div>
           )}
