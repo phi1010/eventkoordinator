@@ -1547,7 +1547,7 @@ export function ProposalEditor({
 
                             ) : <></>}
                             {/* Transition Buttons */}
-                            {activeTab >= 4 && _proposalId && _proposalId.trim() && (
+                            {activeTab >= 4 && !hasChanges && _proposalId && _proposalId.trim() && (
                                 <div style={{marginTop: '1.5rem'}}>
                                     <ProposalTransitionButtons
                                         key={`${_proposalId}-${transitionButtonsVersion}`}
