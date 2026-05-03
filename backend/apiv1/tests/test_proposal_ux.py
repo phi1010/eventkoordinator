@@ -32,8 +32,133 @@ from project.test_utils import (
 
 logger = logging.getLogger(__name__)
 
+class ProposalNavigationMixin:
 
-class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
+    def wait_some_more(self, page: Page, delay=100):
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(delay)
+
+    def wait_for_proposal_dropdowns_enabled(self, page: Page):
+        expect(page.get_by_label("Submission Type")).to_be_enabled()
+        expect(page.get_by_label("Area (optional)")).to_be_enabled()
+        expect(page.get_by_label("Language", exact=True)).to_be_enabled()
+
+    def navigate_from_proposaleditor_last_tab_to_submit_proposal(self, page: Page):
+        page.get_by_role("button", name="Submit proposal").click()
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+
+    def navigate_save_a_proposal(self, page: Page):
+        page.get_by_role("button", name="Save Proposal").click()
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+
+    def navigate_fill_a_proposal(self, page: Page):
+        with self.snapshotted_stage(page, "modify-page1"):
+            page.get_by_role(
+                "textbox", name="Title (max 30 characters)"
+            ).click()
+
+            page.get_by_role(
+                "textbox", name="Title (max 30 characters)"
+            ).fill("My Title")
+
+            page.get_by_label("Submission Type").select_option("workshop")
+
+            page.get_by_label("Area (optional)").select_option(
+                "woodworking"
+            )
+
+            page.get_by_label("Language", exact=True).select_option("de")
+
+            page.get_by_role(
+                "textbox", name="Abstract (50-250 characters)"
+            ).fill("Some Abstract " * 4)
+
+            page.get_by_role("textbox", name="Description (50-1000").fill(
+                "Some Description " * 8
+            )
+
+        with self.snapshotted_stage(page, "modify-page2"):
+            page.get_by_role("button", name="Next →").click()
+
+            page.get_by_text("This workshop is a basic").click()
+
+            page.get_by_role(
+                "spinbutton", name="Max. number of participants"
+            ).fill("20")
+
+            page.get_by_role(
+                "spinbutton", name="Material cost per participant"
+            ).fill("24")
+
+        with self.snapshotted_stage(page, "modify-page3"):
+            page.get_by_role("button", name="Next →").click()
+
+            page.get_by_role("spinbutton", name="Number of Days").fill("5")
+
+            page.get_by_role("textbox", name="Time per day (HH:MM or").fill(
+                "1:30"
+            )
+
+            page.get_by_role(
+                "spinbutton", name="How often would you offer"
+            ).fill("2")
+
+            page.get_by_role("textbox", name="Preferred Dates and").fill(
+                "Always"
+            )
+        with self.snapshotted_stage(page, "modify-page4"):
+            page.get_by_role("button", name="Next →").click()
+
+            page.get_by_text("Are you a regular member?").click()
+
+            page.get_by_text("Do you have access to the ZAM").click()
+
+            page.get_by_role("button", name="Edit").click()
+
+            page.get_by_role("textbox", name="Display Name:").fill(
+                "proposalux-user Name"
+            )
+
+            page.get_by_role("textbox", name="Biography:").fill("Bio")
+        with self.snapshotted_stage(page, "modify-page4b"):
+            page.get_by_role("button", name="Save", exact=True).click()
+
+            page.get_by_role(
+                "textbox", name="Internal Notes (optional)"
+            ).click()
+            page.get_by_role(
+                "textbox", name="Internal Notes (optional)"
+            ).fill("Internal Notes")
+
+        with self.snapshotted_stage(page, "modify-page5"):
+            page.get_by_role("button", name="Next →").click()
+
+    def navigate_create_new_proposal(self, page: Page):
+        page.get_by_role("button", name="Create New Proposal").click()
+
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_for_proposal_dropdowns_enabled(page)
+        self.wait_some_more(page)
+
+    def navigate_from_home_to_proposaleditor(self, page: Page):
+        page.get_by_role(
+            "button", name="🎤 Create a Proposal Submit"
+        ).click()
+
+class ProposalUxPlaywrightTest(ProposalNavigationMixin, SnapshotMixin, ViteStaticLiveServerTestCase):
     """Covers create -> save -> submit proposal flow with stage snapshots."""
 
     vite_force_rebuild = True
@@ -163,129 +288,6 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
             finally:
                 browser.close()
 
-    def navigate_from_proposaleditor_last_tab_to_submit_proposal(self, page: Page):
-        page.get_by_role("button", name="Submit proposal").click()
-        self.wait_some_more(page)
-        wait_for_loading_indicators_to_disappear(page)
-        self.wait_some_more(page)
-        wait_for_loading_indicators_to_disappear(page)
-        self.wait_some_more(page)
-        wait_for_loading_indicators_to_disappear(page)
-        self.wait_some_more(page)
-
-    def navigate_save_a_proposal(self, page: Page):
-        page.get_by_role("button", name="Save Proposal").click()
-        self.wait_some_more(page)
-        wait_for_loading_indicators_to_disappear(page)
-        self.wait_some_more(page)
-        wait_for_loading_indicators_to_disappear(page)
-        self.wait_some_more(page)
-        wait_for_loading_indicators_to_disappear(page)
-        self.wait_some_more(page)
-
-    def navigate_fill_a_proposal(self, page: Page):
-        with self.snapshotted_stage(page, "modify-page1"):
-            page.get_by_role(
-                "textbox", name="Title (max 30 characters)"
-            ).click()
-
-            page.get_by_role(
-                "textbox", name="Title (max 30 characters)"
-            ).fill("My Title")
-
-            page.get_by_label("Submission Type").select_option("workshop")
-
-            page.get_by_label("Area (optional)").select_option(
-                "woodworking"
-            )
-
-            page.get_by_label("Language", exact=True).select_option("de")
-
-            page.get_by_role(
-                "textbox", name="Abstract (50-250 characters)"
-            ).fill("Some Abstract " * 4)
-
-            page.get_by_role("textbox", name="Description (50-1000").fill(
-                "Some Description " * 8
-            )
-
-        with self.snapshotted_stage(page, "modify-page2"):
-            page.get_by_role("button", name="Next →").click()
-
-            page.get_by_text("This workshop is a basic").click()
-
-            page.get_by_role(
-                "spinbutton", name="Max. number of participants"
-            ).fill("20")
-
-            page.get_by_role(
-                "spinbutton", name="Material cost per participant"
-            ).fill("24")
-
-        with self.snapshotted_stage(page, "modify-page3"):
-            page.get_by_role("button", name="Next →").click()
-
-            page.get_by_role("spinbutton", name="Number of Days").fill("5")
-
-            page.get_by_role("textbox", name="Time per day (HH:MM or").fill(
-                "1:30"
-            )
-
-            page.get_by_role(
-                "spinbutton", name="How often would you offer"
-            ).fill("2")
-
-            page.get_by_role("textbox", name="Preferred Dates and").fill(
-                "Always"
-            )
-        with self.snapshotted_stage(page, "modify-page4"):
-            page.get_by_role("button", name="Next →").click()
-
-            page.get_by_text("Are you a regular member?").click()
-
-            page.get_by_text("Do you have access to the ZAM").click()
-
-            page.get_by_role("button", name="Edit").click()
-
-            page.get_by_role("textbox", name="Display Name:").fill(
-                "proposalux-user Name"
-            )
-
-            page.get_by_role("textbox", name="Biography:").fill("Bio")
-        with self.snapshotted_stage(page, "modify-page4b"):
-            page.get_by_role("button", name="Save", exact=True).click()
-
-            page.get_by_role(
-                "textbox", name="Internal Notes (optional)"
-            ).click()
-            page.get_by_role(
-                "textbox", name="Internal Notes (optional)"
-            ).fill("Internal Notes")
-
-        with self.snapshotted_stage(page, "modify-page5"):
-            page.get_by_role("button", name="Next →").click()
-
-    def navigate_create_new_proposal(self, page: Page):
-        page.get_by_role("button", name="Create New Proposal").click()
-
-        self.wait_some_more(page)
-        wait_for_loading_indicators_to_disappear(page)
-        self.wait_for_proposal_dropdowns_enabled(page)
-        self.wait_some_more(page)
-
-    def navigate_from_home_to_proposaleditor(self, page: Page):
-        page.get_by_role(
-            "button", name="🎤 Create a Proposal Submit"
-        ).click()
-
-    def wait_some_more(self, page: Page, delay=100):
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(delay)
-
-    def wait_for_proposal_dropdowns_enabled(self, page: Page):
-        expect(page.get_by_label("Submission Type")).to_be_enabled()
-        expect(page.get_by_label("Area (optional)")).to_be_enabled()
-        expect(page.get_by_label("Language", exact=True)).to_be_enabled()
 
     def test_delete_proposal_via_ui(self) -> None:
         user = OpenIDUser.objects.get(username=self.username)

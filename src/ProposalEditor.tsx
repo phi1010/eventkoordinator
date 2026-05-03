@@ -1484,12 +1484,12 @@ export function ProposalEditor({
                                 <button type="button" onClick={handleNextTab}
                                         className={`${styles.tabNavButton} ${styles.tabNavButtonGreen}`}
                                         disabled={isSaving}>
-                                {t("common.next")} →
+                                    {t("common.next")} →
                                 </button>
 
                             ) : <></>}
                             {/* Transition Buttons */}
-                            {activeTab >=4 && _proposalId && _proposalId.trim() && (
+                            {activeTab >= 4 && _proposalId && _proposalId.trim() && (
                                 <div style={{marginTop: '1.5rem'}}>
                                     <ProposalTransitionButtons
                                         key={`${_proposalId}-${transitionButtonsVersion}`}
@@ -1661,153 +1661,6 @@ export function ProposalEditor({
                                             </li>
                                         ))}
                                     </ul>
-                                )}
-                            </div>
-                        </details>
-                    )}
-
-                    {/* Linked Events Section - Always visible */}
-                    {canLinkEvents && (
-                        <details
-                            className={styles.fieldset}
-                            style={{marginTop: '1.5rem'}}
-                            open={true}
-                        >
-                            <summary className={styles.legend}>
-            <span className={styles.summaryContent}>
-              {t('proposal.linkedEvents', {count: linkedEvents.length})}
-            </span>
-                            </summary>
-                            <div className={styles.detailsContent}>
-                                {linkedEventsLoading ? (
-                                    <p style={{
-                                        color: '#888',
-                                        fontSize: '0.9rem'
-                                    }}>{t('proposal.loadingLinkedEvents')}</p>
-                                ) : linkedEvents.length === 0 ? (
-                                    <p style={{
-                                        color: '#888',
-                                        fontSize: '0.9rem'
-                                    }}>{t('proposal.noLinkedEvents')}</p>
-                                ) : (
-                                    <ul style={{margin: 0, padding: 0, listStyle: 'none'}}>
-                                        {linkedEvents.map((ev) => (
-                                            <li key={ev.id}
-                                                style={{padding: '0.5rem 0', borderBottom: '1px solid #eee'}}>
-                                                <Link
-                                                    to={`/proposal/${_proposalId}/event/${ev.id}`}
-                                                    style={{
-                                                        color: '#1976d2',
-                                                        textDecoration: 'none',
-                                                        fontWeight: 500
-                                                    }}
-                                                >
-                                                    {ev.name}
-                                                </Link>
-                                                <div style={{fontSize: '0.8rem', color: '#666'}}>
-                                                    {t('proposal.series')}: {ev.series_name}
-                                                </div>
-                                                <div style={{fontSize: '0.8rem', color: '#666'}}>
-                                                    {new Date(ev.startTime).toLocaleDateString('de-DE', {
-                                                        year: 'numeric',
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                        hour: '2-digit',
-                                                        minute: '2-digit',
-                                                    })}
-                                                    {' – '}
-                                                    {new Date(ev.endTime).toLocaleDateString('de-DE', {
-                                                        year: 'numeric',
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                        hour: '2-digit',
-                                                        minute: '2-digit',
-                                                    })}
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                                {canShowLinkedEventCreateControls && (
-                                    <div style={{
-                                        marginTop: '1rem',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '0.5rem'
-                                    }}>
-                                        <div>
-                                            <label htmlFor="create-event-series-filter" style={{
-                                                display: 'block',
-                                                fontSize: '0.85rem',
-                                                fontWeight: 500,
-                                                marginBottom: '0.3rem'
-                                            }}>
-                                                {t('proposal.series')}
-                                            </label>
-                                            <input
-                                                id="create-event-series-filter"
-                                                type="text"
-                                                placeholder={t('proposal.filterSeries')}
-                                                value={seriesSearchQuery}
-                                                onChange={(e) => {
-                                                    setSeriesSearchQuery(e.target.value)
-                                                    setSelectedSeriesId('')
-                                                }}
-                                                style={{
-                                                    width: '100%',
-                                                    padding: '0.5rem',
-                                                    border: '1px solid #ccc',
-                                                    borderRadius: '4px',
-                                                    fontSize: '0.9rem',
-                                                    boxSizing: 'border-box'
-                                                }}
-                                            />
-                                        </div>
-                                        <select
-                                            id="create-event-series-select"
-                                            aria-label={t('proposal.series')}
-                                            value={selectedSeriesId}
-                                            onChange={(e) => setSelectedSeriesId(e.target.value)}
-                                            style={{
-                                                width: '100%',
-                                                padding: '0.5rem',
-                                                border: '1px solid #ccc',
-                                                borderRadius: '4px',
-                                                fontSize: '0.9rem'
-                                            }}
-                                        >
-                                            <option value="">{t('proposal.selectSeries')}</option>
-                                            {seriesSearchResults.map((s) => (
-                                                <option key={s.id} value={s.id}>{s.name}</option>
-                                            ))}
-                                        </select>
-                                        <button
-                                            type="button"
-                                            onClick={handleCreateEvent}
-                                            disabled={!selectedSeriesId || isCreatingEvent}
-                                            style={{
-                                                padding: '0.5rem 1.2rem',
-                                                backgroundColor: '#4caf50',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: '4px',
-                                                cursor: !selectedSeriesId || isCreatingEvent ? 'not-allowed' : 'pointer',
-                                                fontWeight: 600,
-                                                fontSize: '0.9rem',
-                                                opacity: !selectedSeriesId || isCreatingEvent ? 0.6 : 1,
-                                                alignSelf: 'flex-start',
-                                            }}
-                                        >
-                                            {isCreatingEvent ? t('proposal.creating') : t('proposal.createNewEvent')}
-                                        </button>
-                                        {createEventError && (
-                                            <div style={{
-                                                color: '#d32f2f',
-                                                fontSize: '0.85rem',
-                                                marginTop: '0.3rem'
-                                            }}>{createEventError}</div>
-                                        )}
-                                    </div>
                                 )}
                             </div>
                         </details>

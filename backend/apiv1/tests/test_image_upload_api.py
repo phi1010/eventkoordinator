@@ -141,7 +141,7 @@ class ImageUploadApiTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()['error'], 'Invalid proposal image')
+        self.assertEqual(response.json()['code'], 'proposals.invalidImage')
 
     def test_non_owner_cannot_upload_proposal_image(self) -> None:
         proposal = self._create_proposal()
@@ -160,5 +160,5 @@ class ImageUploadApiTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 401)
-        self.assertEqual(response.json()['error'], 'Unauthorized to change this proposal')
+        self.assertEqual(response.json()['code'], 'auth.permissionDenied')
 
