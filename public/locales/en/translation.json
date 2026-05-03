@@ -90,6 +90,7 @@
     "numberOfDays": "Number of Days",
     "numberOfDaysHint": "Number of days for a single occurrence of the event (minimum 1).",
     "occurrenceCount": "How often would you offer this event?",
+    "occurrenceCountHint": "E.g. 4 = monthly for a trimester call for proposals.",
     "timePerDay": "Duration per day (HH:MM or minutes)",
     "timePerDayHint": "Duration per day in HH:MM format. The product of days and time must be greater than zero. (Example: 08:30 for 8 hours 30 minutes)",
     "durationDaysLabel": "Duration Days",

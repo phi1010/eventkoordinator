@@ -92,6 +92,7 @@
     "timePerDay": "Dauer pro Tag (HH:MM oder Minuten)",
     "timePerDayHint": "Dauer pro Tag im HH:MM Format. Produkt aus Tagen und Zeit sollte größer als null sein. (Beispiel: 08:30 für 8 Stunden 30 Minuten)",
     "occurrenceCount": "Wie oft würden Sie diese Veranstaltung anbieten?",
+    "occurrenceCountHint": "Z.B. 4 = monatlich bei einem Trimester-Ausschreibungsverfahren.",
     "additionalInformation": "Zusätzliche Informationen",
     "isBasicCourse": "Dieser Workshop ist ein Grundlagenkurs",
     "isBasicCourseDesc": "Ein Grundlagenkurs ist ein Kurs, der für die Nutzung bestimmter Ressourcen obligatorisch ist, wie Maschinen oder Räume.",

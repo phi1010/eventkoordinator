@@ -435,7 +435,7 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
     abstract = models.TextField(validators=[MinLengthValidator(50)], max_length=250)
     description = models.TextField(validators=[MinLengthValidator(50)], max_length=1000)
     internal_notes = models.TextField(blank=True, max_length=2000)
-    occurrence_count = models.PositiveSmallIntegerField(default=0)
+    occurrence_count = models.PositiveSmallIntegerField(default=1)
     photo = models.ImageField(
         upload_to=UUIDFilenameUploadTo("proposal_photos"),
         validators=IMAGE_FILE_VALIDATORS,

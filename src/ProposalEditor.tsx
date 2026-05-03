@@ -1116,6 +1116,9 @@ export function ProposalEditor({
                                     disabled={isSaving || !canEdit}
                                     required
                                 />
+                                <small className={styles.fieldHint}>
+                                    {t('proposal.occurrenceCountHint')}
+                                </small>
                             </div>
 
                             <div className={styles.formGroup}>
