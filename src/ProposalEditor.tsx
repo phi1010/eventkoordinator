@@ -648,13 +648,22 @@ export function ProposalEditor({
         }
     }
 
-    const handleCancel = () => {
-        setFormData(DEFAULT_FORM_DATA)
-        setOwner(null)
-        setEditors([])
+    const handleCancel = async () => {
         setParticipantSearchQuery('')
-        clearChangedFields()
         setError(null)
+        if (_proposalId && _proposalId.trim()) {
+            try {
+                const data = await fetchProposal(_proposalId)
+                applyProposalData(data, true)
+            } catch (err) {
+                setError(t('proposal.failedToLoad'))
+            }
+        } else {
+            setFormData(DEFAULT_FORM_DATA)
+            setOwner(null)
+            setEditors([])
+            clearChangedFields()
+        }
     }
 
     const [searchParams, setSearchParams] = useSearchParams()
@@ -1578,7 +1587,7 @@ export function ProposalEditor({
                             {isSaving ? t('proposal.saving') : t('proposal.saveProposal')}
                         </button>
                         {hasChanges && (
-                            <button type="button" onClick={handleCancel}
+                            <button type="button" onClick={() => void handleCancel()}
                                     disabled={isSaving || isDeleting || !canEdit}
                                     className={styles.cancelButton}>
                                 {t('common.cancel')}
