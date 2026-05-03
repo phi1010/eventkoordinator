@@ -209,7 +209,6 @@ export function ProposalEditor({
                                }: ProposalEditorProps) {
     const {t} = useTranslation()
     const navigate = useNavigate()
-    const [searchParams, setSearchParams] = useSearchParams()
     const {canView, canAdd, loading: permissionsLoading} = usePermissions()
     const [formData, setFormData] = useState<ProposalFormData>(DEFAULT_FORM_DATA)
     const [changedFields, setChangedFields] = useState<Set<ChangedFieldName>>(new Set())
@@ -648,6 +647,7 @@ export function ProposalEditor({
         setError(null)
     }
 
+    const [searchParams, setSearchParams] = useSearchParams()
     const initialTabFromUrl = parseInt(searchParams.get('tab') || '0', 10)
     const [activeTab, setActiveTab] = useState(Math.max(0, initialTabFromUrl))
 

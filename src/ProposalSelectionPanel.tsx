@@ -106,10 +106,6 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
                     ? urlProposalId
                     : items[0].id
                 setSelectedProposalId(effectiveProposalId)
-                // Update URL without navigation if no proposalId in URL
-                if (!urlProposalId || !items.some((p) => p.id === urlProposalId)) {
-                    window.history.pushState({}, '', `/proposal-editor/${effectiveProposalId}`)
-                }
             }
         } catch (error) {
             console.error('Failed to load proposals:', error)
@@ -121,6 +117,12 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
     useEffect(() => {
         void loadProposals()
     }, [loadProposals])
+
+    useEffect(() => {
+        if (!urlProposalId && proposals.length > 0) {
+            navigate(`/proposal-editor/${proposals[0].id}`, {replace: true})
+        }
+    }, [urlProposalId, proposals, navigate])
 
     const checkSelectedProposalPermissions = useCallback(async () => {
         const selected = proposals.find((item) => item.id === selectedProposalId)
@@ -183,7 +185,7 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
 
             setProposals((prev) => [newItem, ...prev])
             setSelectedProposalId(newItem.id)
-            navigate(`/proposal-editor/${newItem.id}`)
+            navigate(`/proposal-editor/${newItem.id}`, {replace: true})
 
             if (onCreateProposal) {
                 onCreateProposal()
@@ -198,7 +200,7 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
 
     const handleProposalChange = (newProposalId: string) => {
         setSelectedProposalId(newProposalId)
-        window.history.pushState({}, '', `/proposal-editor/${newProposalId}`)
+        navigate(`/proposal-editor/${newProposalId}`, {replace: true})
     }
 
     const handleProposalDelete = async (proposalId: string) => {
@@ -215,14 +217,14 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
             }
             setProposals([emptyItem])
             setSelectedProposalId('empty')
-            navigate('/proposal-editor')
+            navigate('/proposal-editor', {replace: true})
             return
         }
 
         const nextProposalId = remainingProposals[0].id
         setProposals(remainingProposals)
         setSelectedProposalId(nextProposalId)
-        navigate(`/proposal-editor/${nextProposalId}`)
+        navigate(`/proposal-editor/${nextProposalId}`, {replace: true})
     }
 
     if (loading) {
