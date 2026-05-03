@@ -93,8 +93,8 @@ const TAB_FIELD_MAP: Record<number, Array<ChangedFieldName>> = {
     0: ['title', 'submission_type', 'area', 'language', 'abstract', 'description'],
     1: ['is_basic_course', 'max_participants', 'material_cost_eur'],
     2: ['duration_days', 'duration_time_per_day', 'occurrence_count', 'preferred_dates'],
-    3: ['is_regular_member', 'has_building_access', 'internal_notes', 'editors'],
-    4: [],
+    3: ['is_regular_member', 'has_building_access', 'editors'],
+    4: ['internal_notes'],
     5: [],
 }
 
@@ -701,35 +701,35 @@ export function ProposalEditor({
             {isLoading && <p aria-live="polite">{t('proposal.loadingProposal')}</p>}
 
             {currentStatus === 'draft' && (
-                                <div className={styles.draftWarning} role="alert" aria-live="assertive">
-                                    <h3>{t('proposal.draftWarning')}</h3>
-                                    <p>{t('proposal.draftWarningDesc')}</p>
-                                </div>
-                            )}
+                <div className={styles.draftWarning} role="alert" aria-live="assertive">
+                    <h3>{t('proposal.draftWarning')}</h3>
+                    <p>{t('proposal.draftWarningDesc')}</p>
+                </div>
+            )}
             {currentStatus === 'revise' && (
-                                <div className={styles.statusBannerRevise} role="alert" aria-live="assertive">
-                                    <h3>{t('proposal.statusRevise')}</h3>
-                                    <p>{t('proposal.statusReviseDesc')}</p>
-                                </div>
-                            )}
+                <div className={styles.statusBannerRevise} role="alert" aria-live="assertive">
+                    <h3>{t('proposal.statusRevise')}</h3>
+                    <p>{t('proposal.statusReviseDesc')}</p>
+                </div>
+            )}
             {currentStatus === 'accepted' && (
-                                <div className={styles.statusBannerAccepted} role="alert" aria-live="assertive">
-                                    <h3>{t('proposal.statusAccepted')}</h3>
-                                    <p>{t('proposal.statusAcceptedDesc')}</p>
-                                </div>
-                            )}
+                <div className={styles.statusBannerAccepted} role="alert" aria-live="assertive">
+                    <h3>{t('proposal.statusAccepted')}</h3>
+                    <p>{t('proposal.statusAcceptedDesc')}</p>
+                </div>
+            )}
             {currentStatus === 'rejected' && (
-                                <div className={styles.statusBannerRejected} role="alert" aria-live="assertive">
-                                    <h3>{t('proposal.statusRejected')}</h3>
-                                    <p>{t('proposal.statusRejectedDesc')}</p>
-                                </div>
-                            )}
+                <div className={styles.statusBannerRejected} role="alert" aria-live="assertive">
+                    <h3>{t('proposal.statusRejected')}</h3>
+                    <p>{t('proposal.statusRejectedDesc')}</p>
+                </div>
+            )}
             {currentStatus === 'submitted' && (
-                                <div className={styles.statusBannerSubmitted} role="alert" aria-live="assertive">
-                                    <h3>{t('proposal.statusSubmitted')}</h3>
-                                    <p>{t('proposal.statusSubmittedDesc')}</p>
-                                </div>
-                            )}
+                <div className={styles.statusBannerSubmitted} role="alert" aria-live="assertive">
+                    <h3>{t('proposal.statusSubmitted')}</h3>
+                    <p>{t('proposal.statusSubmittedDesc')}</p>
+                </div>
+            )}
 
             <form className={styles.form} aria-label="Proposal editor">
                 {/* Tab Navigation - Desktop */}
@@ -1180,9 +1180,6 @@ export function ProposalEditor({
                                     {changedFields.has('editors') &&
                                         <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                                 </label>
-                                <small className={styles.fieldHint} style={{marginBottom: '0.75rem'}}>
-                                    {t('proposal.editorsHint')}
-                                </small>
                                 <div style={{display: 'flex', flexDirection: 'column', gap: '0.5rem'}}>
                                     <input
                                         id="proposal-editors-search"
@@ -1281,6 +1278,13 @@ export function ProposalEditor({
                                 />
                             </div>
 
+                        </div>
+                    </div>
+
+                    {/* Tab 5: Einreichung (Checklist) */}
+                    <div className={activeTab === 4 ? styles.tabPanelActive : styles.tabPanelHidden} role="tabpanel">
+                        <div className={styles.detailsContent}>
+
                             <div className={styles.formGroup}>
                                 <label htmlFor="proposal-internal-notes" className={styles.label}>
                                     {t('proposal.internalNotes')}
@@ -1299,14 +1303,6 @@ export function ProposalEditor({
                                     {t('proposal.internalNotesHint')}
                                 </small>
                             </div>
-                        </div>
-                    </div>
-
-                    {/* Tab 5: Einreichung (Checklist) */}
-                    <div className={activeTab === 4 ? styles.tabPanelActive : styles.tabPanelHidden} role="tabpanel">
-                        <div className={styles.detailsContent}>
-
-                            {error && <div className={styles.error} role="alert">{error}</div>}
 
                             {hasChanges ? (
                                 <div className={styles.checklistBox}>
@@ -1394,7 +1390,12 @@ export function ProposalEditor({
                                                             padding: '0.5rem 0',
                                                             borderBottom: '1px solid #eee'
                                                         }}>
-                                                            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap'}}>
+                                                            <div style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '0.5rem',
+                                                                flexWrap: 'wrap'
+                                                            }}>
                                                                 <Link
                                                                     to={`/proposal/${_proposalId}/event/${ev.id}`}
                                                                     style={{
@@ -1590,6 +1591,9 @@ export function ProposalEditor({
                             </button>
                         )}
                     </div>
+
+                    {error && <div className={styles.error} role="alert">{error}</div>}
+
 
                     {/* History Display - Always visible */}
                     {_proposalId && _proposalId.trim() && (
