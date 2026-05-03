@@ -36,13 +36,15 @@ import re
 import shutil
 import subprocess
 import textwrap
+from contextlib import contextmanager
 from pathlib import Path
 
 import playwright.sync_api
 from django.conf import settings
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
-from django.test import override_settings
+from django.test import override_settings, TestCase
 from icecream import ic
+from playwright._impl._errors import TargetClosedError
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,9 @@ def playwright_launch_options() -> dict:
     Reads ``settings.PLAYWRIGHT_HEADLESS`` so the same test code runs
     headless in CI and with a visible browser window in development.
     """
-    return {"headless": getattr(settings, "PLAYWRIGHT_HEADLESS", True)}
+    return {
+        "headless": getattr(settings, "PLAYWRIGHT_HEADLESS", True),
+    }
 
 
 def wait_for_loading_indicators_to_disappear(
@@ -79,7 +83,7 @@ def wait_for_loading_indicators_to_disappear(
           const hasVisibleLoading = Array.from(document.querySelectorAll('body *')).some((el) => {
             if (!(el instanceof HTMLElement)) return false;
             const text = (el.innerText || '').trim();
-            if (!/^Loading/i.test(text)) return false;
+            if (!/^(Loading|Processing)/i.test(text)) return false;
             const style = window.getComputedStyle(el);
             if (style.display === 'none' || style.visibility === 'hidden') return false;
             const rect = el.getBoundingClientRect();
@@ -156,7 +160,7 @@ class SnapshotMixin:
         if not subtest_id.startswith(base_id):
             return base_id
 
-        suffix = subtest_id[len(base_id):].strip()
+        suffix = subtest_id[len(base_id) :].strip()
         safe_suffix = self._sanitize_snapshot_fragment(suffix)
         if not safe_suffix:
             return base_id
@@ -254,7 +258,9 @@ class SnapshotMixin:
         committed = _git_show_committed(out)
         if committed is None:
             # File is new / untracked — nothing to compare against.
-            logger.info("New snapshot %s — commit it to establish a baseline.", out.name)
+            logger.info(
+                "New snapshot %s — commit it to establish a baseline.", out.name
+            )
             return
 
         normalized_committed = self._normalize_snapshot_for_compare(committed)
@@ -274,6 +280,25 @@ class SnapshotMixin:
                 f"Commit the new file to accept the change.\n\n{patch}"
             )
 
+    @contextmanager
+    def snapshotted_stage(self, page: playwright.async_api.Page, stagename: str):
+        with self.subTest(stagename):
+            with print_aria_on_timeout(page):
+                try:
+                    yield
+                finally:
+                    try:
+                        page.locator("body").screenshot(
+                            path=self._snapshot_path().with_suffix(f".{stagename}.png")
+                        )
+                        self.assert_snapshot(page.locator("body").aria_snapshot())
+                    except TargetClosedError:
+                        logger.warning(
+                            "Failed to take snapshot for stage because page was closed: %s",
+                            stagename,
+                        )
+
+
 # ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
@@ -291,6 +316,7 @@ _STATIC_ROOT: Path = Path(settings.STATIC_ROOT)
 # ---------------------------------------------------------------------------
 # Build helpers
 # ---------------------------------------------------------------------------
+
 
 def build_vite(*, force: bool = False) -> None:
     """Run ``npm run build`` in the repository root.
@@ -341,6 +367,7 @@ def populate_static_root(*, vite_dist: Path = VITE_DIST_DIR) -> None:
 # Test case
 # ---------------------------------------------------------------------------
 
+
 class ViteStaticLiveServerTestCase(StaticLiveServerTestCase):
     """``StaticLiveServerTestCase`` that builds the Vite SPA before tests run.
 
@@ -374,16 +401,20 @@ class ViteStaticLiveServerTestCase(StaticLiveServerTestCase):
         # FileSystemFinder picks up the Vite dist directory.
         # enterClassContext applies the override before super().setUpClass()
         # starts the live-server thread and reverses it in tearDownClass.
-        cls.enterClassContext(override_settings(
-            STATICFILES_DIRS=list(getattr(settings, "STATICFILES_DIRS", [])) + [
-                ("spa", str(VITE_DIST_DIR)),
-            ],
-        ))
+        cls.enterClassContext(
+            override_settings(
+                STATICFILES_DIRS=list(getattr(settings, "STATICFILES_DIRS", []))
+                + [
+                    ("spa", str(VITE_DIST_DIR)),
+                ],
+            )
+        )
 
         super().setUpClass()
 
+
 @contextlib.contextmanager
-def print_aria_on_timeout(page : playwright.sync_api.Page):
+def print_aria_on_timeout(page: playwright.sync_api.Page):
     """Context manager to print ARIA snapshots on timeout exceptions.
 
     Use this to wrap any block of code where a Playwright timeout might occur
@@ -400,5 +431,7 @@ def print_aria_on_timeout(page : playwright.sync_api.Page):
     try:
         yield
     except playwright.sync_api.TimeoutError as e:
-        logger.error(f"Unexpected page after error {e!r} looks like this:\n{textwrap.indent(page.locator("body").aria_snapshot(), prefix='    ')}")
+        logger.error(
+            f"Unexpected page after error {e!r} looks like this:\n{textwrap.indent(page.locator('body').aria_snapshot(), prefix='    ')}"
+        )
         raise

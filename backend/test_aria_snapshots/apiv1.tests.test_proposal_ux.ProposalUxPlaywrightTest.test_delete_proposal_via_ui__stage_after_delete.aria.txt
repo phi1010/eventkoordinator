@@ -4,13 +4,15 @@
     - heading "Event Coordinator" [level=1]
   - list:
     - listitem: Proposal Editor
+  - button "Switch to English" [pressed]: 🇬🇧
+  - button "Auf Deutsch wechseln": 🇩🇪
   - button "User menu": proposalux-user
 - main:
   - complementary "Proposals":
     - heading "Proposals" [level=2]
     - button "Create New Proposal"
     - listbox "Proposals":
-      - option "No proposals yet Click \"Create New Proposal\" to get started" [selected]
+      - option "No proposals yet Click the \"Create New Proposal\" button to get started" [selected]
   - main "Proposals content":
     - paragraph: No proposals yet
     - paragraph: Click the "Create New Proposal" button to get started

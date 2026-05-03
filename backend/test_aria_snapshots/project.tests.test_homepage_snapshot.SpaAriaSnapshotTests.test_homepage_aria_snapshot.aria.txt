@@ -3,6 +3,8 @@
     - /url: /
     - heading "Event Coordinator" [level=1]
   - list
+  - button "Switch to English" [pressed]: 🇬🇧
+  - button "Auf Deutsch wechseln": 🇩🇪
   - button "User menu": Guest
 - main:
   - heading "Welcome to Event Coordinator" [level=1]

@@ -8,10 +8,11 @@ import logging
 
 import django.contrib.auth
 from django.http import HttpResponse
-from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie
 from ninja import Router
 
 from apiv1.schemas import ErrorOut, UserIn, UserOut
+from openid_user_management.models import OpenIDUser
 
 logger = logging.getLogger(__name__)
 

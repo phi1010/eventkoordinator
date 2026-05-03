@@ -5,6 +5,8 @@
   - list:
     - listitem: Coordinator
     - listitem: Proposal Editor
+  - button "Switch to English" [pressed]: 🇬🇧
+  - button "Auf Deutsch wechseln": 🇩🇪
   - button "User menu": eventux-user
 - main:
   - complementary "Series":

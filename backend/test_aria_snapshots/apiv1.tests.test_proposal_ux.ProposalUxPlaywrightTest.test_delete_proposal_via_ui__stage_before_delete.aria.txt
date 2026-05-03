@@ -4,6 +4,8 @@
     - heading "Event Coordinator" [level=1]
   - list:
     - listitem: Proposal Editor
+  - button "Switch to English" [pressed]: 🇬🇧
+  - button "Auf Deutsch wechseln": 🇩🇪
   - button "User menu": proposalux-user
 - main:
   - complementary "Proposals":
@@ -14,8 +16,14 @@
   - main "Proposals content":
     - heading "Proposal Editor" [level=1]
     - form "Proposal editor":
-      - group:
-        - text: General Information Title (max 30 characters)
+      - tablist:
+        - tab "1 General" [selected]
+        - tab "2 Participants and Costs"
+        - tab "3 Scheduling"
+        - tab "4 Speakers"
+        - tab "5 Submission"
+      - tabpanel:
+        - text: Title (max 30 characters)
         - textbox "Title (max 30 characters)": Delete Me Proposal
         - text: 18/30 No image uploaded yet. Proposal image
         - button "Proposal image"
@@ -35,33 +43,8 @@
         - textbox "Abstract (50-250 characters)": This draft proposal exists only to exercise delete confirmation in the UI.
         - text: This will be published on our website in the program overview. (50–250 characters) 74/250 Description (50-1000 characters)
         - textbox "Description (50-1000 characters)": This draft proposal contains enough detail to satisfy model validation during the delete UX test.
-        - text: This will be published on our website in the detailed description. Please include goal, prerequisites and whether participants take something home. (50–1000 characters) 97/1000 Internal Notes (optional)
-        - textbox "Internal Notes (optional)"
-        - text: Internal notes are not public. Mention equipment needs (e.g., laptops, projector, laser cutter). Number of Days
-        - spinbutton "Number of Days": "1"
-        - text: Number of days for the event (minimum 1). Time per Day (HH:MM or minutes)
-        - textbox "Time per Day (HH:MM or minutes)":
-          - /placeholder: HH:MM
-          - text: 02:00
-        - text: "Time per day in HH:MM format. Product of days and time should be greater than zero. (Example: 08:30 for 8 hours 30 minutes) How often would you offer this event?"
-        - spinbutton "How often would you offer this event?": "1"
-      - group: Additional Information
-      - group: About Yourself
+        - text: This will be published on our website in the detailed description. Please include goal, prerequisites and whether participants take something home. (50–1000 characters) 97/1000
+      - button "Next →"
       - button "Save Proposal" [disabled]
       - button "Delete Proposal"
-    - heading "Submission Checklist" [level=3]
-    - list:
-      - listitem: ✓ Title (max 30 characters)
-      - listitem: ✓ Abstract (50-250 characters)
-      - listitem: ✓ Description (50-1000 characters)
-      - listitem: ✓ Duration set
-      - listitem: ✓ Max participants set
-      - listitem: ✓ Occurrence count set
-      - listitem: ✓ Preferred dates specified
-      - listitem: ✓ Language selected
-      - listitem: ✓ Submission type selected
-      - listitem: ✓ Workshop area selected
-      - listitem: ⚠ At least one speaker added
-      - listitem: ✓ All speakers have biography
-    - group: Edit history last changed just now
-    - button "Submit proposal" [disabled]
+      - group: Edit history last changed just now
