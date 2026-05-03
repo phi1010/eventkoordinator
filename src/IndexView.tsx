@@ -4,13 +4,13 @@ import { useTranslation } from 'react-i18next'
 import { Navbar } from './Navbar'
 import { DefaultScreen } from './DefaultScreen'
 import { MainView } from './MainView'
-import { ProposalSelectionPanel } from './SelectionPanel'
 import { ProposalEventView } from './ProposalEventView'
 import { SyncDiff } from './SyncDiff'
 import { getCurrentUser, initializeCsrfToken, type User } from './api'
 import { usePermissions, notifyAuthChanged } from './usePermissions'
 import i18n from './i18n'
 import styles from './IndexView.module.css'
+import {ProposalSelectionPanel} from "./ProposalSelectionPanel.tsx";
 
 export function IndexView() {
   const { t } = useTranslation()
