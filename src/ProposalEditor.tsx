@@ -30,6 +30,7 @@ import {useTranslation} from 'react-i18next'
 import {ImageUploadField} from './ImageUploadField'
 import {SpeakerListEditor} from './SpeakerListEditor'
 import {ProposalTransitionButtons} from './ProposalTransitionButtons'
+import {EventStatusBadge} from './EventStatusBadge'
 import styles from './EventGeneralEditor.module.css'
 
 interface ProposalFormData {
@@ -668,6 +669,7 @@ export function ProposalEditor({
         {id: 4, label: t('proposal.tabSubmission')},
     ]
 
+    const isStatusFinal = ['submitted', 'accepted', 'rejected'].includes(currentStatus)
     const showTerminfestlegungTab = currentStatus === 'accepted' || currentStatus === 'archived'
     if (showTerminfestlegungTab) {
         tabs.push({id: 5, label: t('proposal.tabDateArrangement')})
@@ -720,6 +722,24 @@ export function ProposalEditor({
                                         <span className={styles.tabUnsavedIcon} title="Unsaved changes">
                                             ✎
                                         </span>
+                                    ) : isStatusFinal && tab.id <= 3 ? (
+                                        <span className={styles.tabCheckIcon} title="Completed">
+                                            ✓
+                                        </span>
+                                    ) : isStatusFinal && tab.id === 4 ? (
+                                        currentStatus === 'submitted' ? (
+                                            <span className={styles.tabHourglassIcon} title="Pending review">
+                                                ⧗
+                                            </span>
+                                        ) : currentStatus === 'rejected' ? (
+                                            <span className={styles.tabCrossIcon} title="Rejected">
+                                                ✗
+                                            </span>
+                                        ) : (
+                                            <span className={styles.tabCheckIcon} title="Accepted">
+                                                ✓
+                                            </span>
+                                        )
                                     ) : (
                                         <span className={styles.tabNumber}>{tabNumber}</span>
                                     )}
@@ -1349,16 +1369,19 @@ export function ProposalEditor({
                                                             padding: '0.5rem 0',
                                                             borderBottom: '1px solid #eee'
                                                         }}>
-                                                            <Link
-                                                                to={`/proposal/${_proposalId}/event/${ev.id}`}
-                                                                style={{
-                                                                    color: '#1976d2',
-                                                                    textDecoration: 'none',
-                                                                    fontWeight: 500
-                                                                }}
-                                                            >
-                                                                {ev.name}
-                                                            </Link>
+                                                            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap'}}>
+                                                                <Link
+                                                                    to={`/proposal/${_proposalId}/event/${ev.id}`}
+                                                                    style={{
+                                                                        color: '#1976d2',
+                                                                        textDecoration: 'none',
+                                                                        fontWeight: 500
+                                                                    }}
+                                                                >
+                                                                    {ev.name}
+                                                                </Link>
+                                                                <EventStatusBadge status={ev.status}/>
+                                                            </div>
                                                             <div style={{fontSize: '0.8rem', color: '#666'}}>
                                                                 {t('proposal.series')}: {ev.series_name}
                                                             </div>

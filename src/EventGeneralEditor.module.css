@@ -534,6 +534,45 @@
   line-height: 1;
 }
 
+.tabButton .tabCheckIcon {
+  background-color: #4caf50;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.tabButton .tabHourglassIcon {
+  background-color: #2196f3;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.tabButton .tabCrossIcon {
+  background-color: #f44336;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
 .tabButton:hover:not(:disabled) {
   color: #333;
   background-color: rgba(0, 0, 0, 0.03);
@@ -556,6 +595,21 @@
 .tabButtonActive .tabUnsavedIcon {
   background-color: #ffc107;
   color: #000;
+}
+
+.tabButtonActive .tabCheckIcon {
+  background-color: #4caf50;
+  color: white;
+}
+
+.tabButtonActive .tabHourglassIcon {
+  background-color: #2196f3;
+  color: white;
+}
+
+.tabButtonActive .tabCrossIcon {
+  background-color: #f44336;
+  color: white;
 }
 
 .tabButton:disabled {
@@ -712,6 +766,24 @@
   .tabButtonActive .tabUnsavedIcon {
     background-color: #ffc107;
     color: #000;
+  }
+
+  .tabButton .tabCheckIcon,
+  .tabButtonActive .tabCheckIcon {
+    background-color: #43a047;
+    color: white;
+  }
+
+  .tabButton .tabHourglassIcon,
+  .tabButtonActive .tabHourglassIcon {
+    background-color: #1e88e5;
+    color: white;
+  }
+
+  .tabButton .tabCrossIcon,
+  .tabButtonActive .tabCrossIcon {
+    background-color: #e53935;
+    color: white;
   }
 
   .tabNavButton {
