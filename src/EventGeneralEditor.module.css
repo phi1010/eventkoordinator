@@ -100,6 +100,94 @@
   line-height: 1.5;
 }
 
+.statusBannerRevise {
+  padding: 1rem;
+  background-color: #fffde7;
+  color: #f57f17;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  border-left: 4px solid #f9a825;
+  margin-bottom: 1.5rem;
+}
+
+.statusBannerRevise h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f57f17;
+}
+
+.statusBannerRevise p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.statusBannerAccepted {
+  padding: 1rem;
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  border-left: 4px solid #43a047;
+  margin-bottom: 1.5rem;
+}
+
+.statusBannerAccepted h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2e7d32;
+}
+
+.statusBannerAccepted p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.statusBannerRejected {
+  padding: 1rem;
+  background-color: #ffebee;
+  color: #b71c1c;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  border-left: 4px solid #e53935;
+  margin-bottom: 1.5rem;
+}
+
+.statusBannerRejected h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #b71c1c;
+}
+
+.statusBannerRejected p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.statusBannerSubmitted {
+  padding: 1rem;
+  background-color: #e3f2fd;
+  color: #0d47a1;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  border-left: 4px solid #1e88e5;
+  margin-bottom: 1.5rem;
+}
+
+.statusBannerSubmitted h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0d47a1;
+}
+
+.statusBannerSubmitted p {
+  margin: 0;
+  line-height: 1.5;
+}
+
 .buttonGroup {
   display: flex;
   gap: 0.75rem;

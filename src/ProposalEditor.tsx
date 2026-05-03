@@ -700,6 +700,36 @@ export function ProposalEditor({
 
             {isLoading && <p aria-live="polite">{t('proposal.loadingProposal')}</p>}
 
+            {currentStatus === 'draft' && (
+                                <div className={styles.draftWarning} role="alert" aria-live="assertive">
+                                    <h3>{t('proposal.draftWarning')}</h3>
+                                    <p>{t('proposal.draftWarningDesc')}</p>
+                                </div>
+                            )}
+            {currentStatus === 'revise' && (
+                                <div className={styles.statusBannerRevise} role="alert" aria-live="assertive">
+                                    <h3>{t('proposal.statusRevise')}</h3>
+                                    <p>{t('proposal.statusReviseDesc')}</p>
+                                </div>
+                            )}
+            {currentStatus === 'accepted' && (
+                                <div className={styles.statusBannerAccepted} role="alert" aria-live="assertive">
+                                    <h3>{t('proposal.statusAccepted')}</h3>
+                                    <p>{t('proposal.statusAcceptedDesc')}</p>
+                                </div>
+                            )}
+            {currentStatus === 'rejected' && (
+                                <div className={styles.statusBannerRejected} role="alert" aria-live="assertive">
+                                    <h3>{t('proposal.statusRejected')}</h3>
+                                    <p>{t('proposal.statusRejectedDesc')}</p>
+                                </div>
+                            )}
+            {currentStatus === 'submitted' && (
+                                <div className={styles.statusBannerSubmitted} role="alert" aria-live="assertive">
+                                    <h3>{t('proposal.statusSubmitted')}</h3>
+                                    <p>{t('proposal.statusSubmittedDesc')}</p>
+                                </div>
+                            )}
 
             <form className={styles.form} aria-label="Proposal editor">
                 {/* Tab Navigation - Desktop */}
@@ -1275,12 +1305,7 @@ export function ProposalEditor({
                     {/* Tab 5: Einreichung (Checklist) */}
                     <div className={activeTab === 4 ? styles.tabPanelActive : styles.tabPanelHidden} role="tabpanel">
                         <div className={styles.detailsContent}>
-                            {currentStatus === 'draft' && (
-                                <div className={styles.draftWarning} role="alert" aria-live="assertive">
-                                    <h3>{t('proposal.draftWarning')}</h3>
-                                    <p>{t('proposal.draftWarningDesc')}</p>
-                                </div>
-                            )}
+
                             {error && <div className={styles.error} role="alert">{error}</div>}
 
                             {hasChanges ? (
