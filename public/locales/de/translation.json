@@ -189,7 +189,8 @@
     "checkingPermissions": "Prüfe Vorschlagsberechtigungen...",
     "noPermissionViewProposal": "Sie haben keine Berechtigung, diesen Vorschlag anzuzeigen",
     "noPermissionBrowse": "Sie haben keine Berechtigung zum Anzeigen",
-    "select": "{{title}} auswählen"
+    "select": "{{title}} auswählen",
+    "confirmUnsavedSwitch": "Sie haben ungespeicherte Änderungen. Möchten Sie wirklich zu einem anderen Vorschlag wechseln?"
   },
   "speakers": {
     "title": "Referenten",

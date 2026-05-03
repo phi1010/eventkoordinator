@@ -64,6 +64,7 @@ interface ProposalEditorProps {
     onDeleteProposal?: (proposalId: string) => Promise<void>
     onRequestNavigation?: (confirmFn: () => Promise<boolean>) => void
     onTransitionSuccess?: () => void
+    onUnsavedChangesChange?: (hasChanges: boolean) => void
 }
 
 const DEFAULT_FORM_DATA: ProposalFormData = {
@@ -206,6 +207,7 @@ export function ProposalEditor({
                                    onDeleteProposal,
                                    onRequestNavigation,
                                    onTransitionSuccess: onTransitionSuccessProp,
+                                   onUnsavedChangesChange,
                                }: ProposalEditorProps) {
     const {t} = useTranslation()
     const navigate = useNavigate()
@@ -496,6 +498,13 @@ export function ProposalEditor({
     const canShowLinkedEventCreateControls =
         canLinkEvents && !permissionsLoading && canView('series') && canAdd('event')
     const {confirmNavigation} = useUnsavedChanges(hasChanges)
+
+    // Notify parent about unsaved changes state
+    useEffect(() => {
+        if (onUnsavedChangesChange) {
+            onUnsavedChangesChange(hasChanges)
+        }
+    }, [hasChanges, onUnsavedChangesChange])
 
     // Expose confirmation function to parent
     useEffect(() => {

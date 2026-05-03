@@ -191,7 +191,8 @@
     "checkingPermissions": "Checking proposal permissions...",
     "noPermissionViewProposal": "You don't have permission to view this proposal",
     "noPermissionBrowse": "You don't have permission to browse",
-    "select": "Select {{title}}"
+    "select": "Select {{title}}",
+    "confirmUnsavedSwitch": "You have unsaved changes. Are you sure you want to switch to another proposal?"
   },
   "speakers": {
     "title": "Speakers",

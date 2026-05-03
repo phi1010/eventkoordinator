@@ -1,7 +1,7 @@
 import {useTranslation} from "react-i18next";
 import {useCallback, useEffect, useState} from "react";
 import {usePermissions} from "./usePermissions.tsx";
-import {Navigate, useNavigate, useParams} from "react-router-dom";
+import {useNavigate, useParams} from "react-router-dom";
 import {
     checkObjectPermission,
     createProposal,
@@ -37,6 +37,7 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
     const [canEditSelectedProposal, setCanEditSelectedProposal] = useState<boolean | null>(null)
     const [canDeleteSelectedProposal, setCanDeleteSelectedProposal] = useState(false)
     const [editorPermissionLoading, setEditorPermissionLoading] = useState(false)
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
     const {canAdd, canBrowse} = usePermissions()
     const navigate = useNavigate()
     const {proposalId: urlProposalId} = useParams<{ proposalId?: string }>()
@@ -168,6 +169,13 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
     }, [checkSelectedProposalPermissions])
 
     const handleCreateProposal = async () => {
+        if (hasUnsavedChanges) {
+            const confirmed = window.confirm(t('selection.confirmUnsavedSwitch'))
+            if (!confirmed) {
+                return
+            }
+        }
+
         try {
             setIsCreating(true)
             setCreateError(null)
@@ -196,6 +204,13 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
         } finally {
             setIsCreating(false)
         }
+    }
+
+    const handleBeforeProposalChange = async (_newProposalId: string): Promise<boolean> => {
+        if (!hasUnsavedChanges) {
+            return true
+        }
+        return window.confirm(t('selection.confirmUnsavedSwitch'))
     }
 
     const handleProposalChange = (newProposalId: string) => {
@@ -290,6 +305,7 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
             items={proposals}
             selectedItemId={selectedProposalIdFromState}
             onSelectionChange={handleProposalChange}
+            onBeforeSelectionChange={handleBeforeProposalChange}
             renderItemLabel={renderProposalLabel}
             renderContent={(proposal) => (
                 proposal.proposalId === '' ? (
@@ -313,6 +329,7 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
                         canEdit={canEditSelectedProposal ?? false}
                         canDelete={canDeleteSelectedProposal}
                         onDeleteProposal={handleProposalDelete}
+                        onUnsavedChangesChange={setHasUnsavedChanges}
                         onTransitionSuccess={() => {
                             void checkSelectedProposalPermissions()
                             void fetchProposalTransitions(proposal.proposalId).then((data) => {
