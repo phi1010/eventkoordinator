@@ -151,7 +151,7 @@ def create_proposal(
             payload.max_participants if payload.max_participants is not None else 0
         )
         occurrence_count = (
-            payload.occurrence_count if payload.occurrence_count is not None else 0
+            payload.occurrence_count if payload.occurrence_count is not None else 1
         )
         material_cost_eur = (
             payload.material_cost_eur
