@@ -6,7 +6,6 @@ import {
   uploadSpeakerImage,
   updateSpeaker,
   type ProposalSpeakerOut,
-  type SpeakerIn,
 } from './api'
 import { ImageUploadField } from './ImageUploadField'
 import styles from './SpeakerListEditor.module.css'
@@ -313,10 +312,10 @@ export function SpeakerListEditor({
                       className={styles.speakerImage}
                     />
                   ) : (
-                    <div
-                      className={styles.speakerImagePlaceholder}
-                      title={t('speakers.noImage')}
-                    />
+                      <div
+                        className={styles.speakerImagePlaceholder}
+                        title={t('common.noImageUploaded')}
+                      />
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className={styles.speakerName}>
