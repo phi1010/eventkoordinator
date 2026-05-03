@@ -160,7 +160,13 @@
     "yearAgo": "1 year ago",
     "yearsAgo": "{{count}} years ago",
     "noRecentChanges": "no recent changes",
-    "saveBeforeChecking": "Please save your changes before checking the submission checklist."
+    "saveBeforeChecking": "Please save your changes before checking the submission checklist.",
+    "tabGeneral": "General",
+    "tabParticipantsCost": "Participants and Costs",
+    "tabScheduling": "Scheduling",
+    "tabSpeakers": "Speakers",
+    "tabSubmission": "Submission",
+    "tabDateArrangement": "Date Arrangement"
   },
   "defaultScreen": {
     "welcomeTitle": "Welcome to Event Coordinator",

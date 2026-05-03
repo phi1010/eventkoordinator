@@ -661,16 +661,16 @@ export function ProposalEditor({
     const [activeTab, setActiveTab] = useState(Math.max(0, initialTabFromUrl))
 
     const tabs = [
-        {id: 0, label: 'Allgemeines'},
-        {id: 1, label: 'Teilnehmer und Kosten'},
-        {id: 2, label: 'Zeitplanung'},
-        {id: 3, label: 'Referent*innen'},
-        {id: 4, label: 'Einreichung'},
+        {id: 0, label: t('proposal.tabGeneral')},
+        {id: 1, label: t('proposal.tabParticipantsCost')},
+        {id: 2, label: t('proposal.tabScheduling')},
+        {id: 3, label: t('proposal.tabSpeakers')},
+        {id: 4, label: t('proposal.tabSubmission')},
     ]
 
     const showTerminfestlegungTab = currentStatus === 'accepted' || currentStatus === 'archived'
     if (showTerminfestlegungTab) {
-        tabs.push({id: 5, label: 'Terminfestlegung'})
+        tabs.push({id: 5, label: t('proposal.tabDateArrangement')})
     }
 
     const handleTabChange = (tabId: number) => {

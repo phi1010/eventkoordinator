@@ -157,8 +157,12 @@
     "yearsAgo": "vor {{count}} Jahren",
     "noRecentChanges": "keine aktuellen Änderungen",
     "saveBeforeChecking": "Bitte speichern Sie Ihre Änderungen, bevor Sie die Einreichungs-Checkliste prüfen.",
-    "durationDaysLabel": "Dauer (Tage)",
-    "occurrencesLabel": "Anzahl der Durchläufe"
+    "tabGeneral": "Allgemeines",
+    "tabParticipantsCost": "Teilnehmer*innen und Kosten",
+    "tabScheduling": "Zeitplanung",
+    "tabSpeakers": "Referent*innen",
+    "tabSubmission": "Einreichung",
+    "tabDateArrangement": "Terminfestlegung"
   },
   "defaultScreen": {
     "welcomeTitle": "Willkommen bei Event Coordinator",
