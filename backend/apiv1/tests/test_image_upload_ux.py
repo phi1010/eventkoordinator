@@ -116,7 +116,7 @@ class ImageUploadUxTest(ViteStaticLiveServerTestCase, SnapshotMixin):
             'Participants will exercise proposal editing features while adding a speaker and uploading images through the new API endpoints.'
         )
         page.get_by_label('Number of Days').fill('1')
-        page.get_by_label('Time per Day (HH:MM or minutes)').fill('02:00')
+        page.get_by_label('Duration per Day (HH:MM or minutes)').fill('02:00')
         page.get_by_label('How often would you offer this event?').fill('1')
 
         page.locator('summary', has_text='Additional Information').click()
