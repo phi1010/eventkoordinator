@@ -76,7 +76,7 @@ const DEFAULT_FORM_DATA: ProposalFormData = {
     abstract: '',
     description: '',
     internal_notes: '',
-    occurrence_count: 0,
+    occurrence_count: 1,
     duration_days: 1,
     duration_time_per_day: '00:00',
 
