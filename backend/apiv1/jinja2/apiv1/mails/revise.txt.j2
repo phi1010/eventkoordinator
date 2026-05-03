@@ -1,13 +1,24 @@
+[Deutsch]
+
+Sehr geehrte(r) {{object.owner.username | safe}},
+
+Ihr Vorschlag mit dem Titel "{{object.title | safe}}" wurde zur Überarbeitung markiert.
+Bitte überprüfen Sie das Feedback und reichen Sie Ihren Vorschlag erneut ein, wenn Sie bereit sind.
+
+
+[English]
+
 Dear {{object.owner.username | safe}},
 
 Your proposal titled "{{object.title | safe}}" has been marked for revision.
 Please review the feedback provided and resubmit your proposal when ready.
 
-See the internal comments for details on what needs to be revised:
 
+================================
+Interne Kommentare / Internal comments:
 ================================
 {% filter indent(4, True) %}{% filter textwrap(50) %}{{ object.internal_notes | safe }}{% endfilter %}{% endfilter %}
 ================================
 
-Best regards,
+Mit freundlichen Grüßen / Best regards,
 The ZAM Program Review Team

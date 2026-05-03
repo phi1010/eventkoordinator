@@ -134,7 +134,7 @@ class ProposalFlow:
         logger.info(f"Revising proposal: {self.object}")
         try:
             send_mail(
-                subject=f"Revision requested for your proposal: {self.object.title}",
+                subject=f"Überarbeitung angefordert / Revision requested: {self.object.title}",
                 message=render_to_string(
                     "apiv1/mails/revise.txt.j2", dict(object=self.object)
                 ),

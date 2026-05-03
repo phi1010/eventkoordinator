@@ -28,20 +28,44 @@
             margin-top: 30px;
             font-style: italic;
         }
+        .divider {
+            border: none;
+            border-top: 2px solid #ddd;
+            margin: 30px 0;
+        }
+        .lang-label {
+            font-size: 0.75em;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+        .feedback-label {
+            font-weight: bold;
+            color: #555;
+        }
     </style>
 </head>
 <body>
+    <p class="lang-label">Deutsch</p>
+    <p>Sehr geehrte(r) {{object.owner.username}},</p>
+
+    <p>Ihr Vorschlag mit dem Titel <span class="proposal-title">"{{object.title}}"</span> wurde zur Überarbeitung markiert.<br>
+    Bitte überprüfen Sie das Feedback und reichen Sie Ihren Vorschlag erneut ein, wenn Sie bereit sind.</p>
+
+    <hr class="divider">
+
+    <p class="lang-label">English</p>
     <p>Dear {{object.owner.username}},</p>
 
     <p>Your proposal titled <span class="proposal-title">"{{object.title}}"</span> has been marked for revision.<br>
     Please review the feedback provided and resubmit your proposal when ready.</p>
 
-    <p>See the internal comments for details on what needs to be revised:</p>
+    <hr class="divider">
 
+    <p class="feedback-label">Interne Kommentare / Internal comments:</p>
     <div class="feedback-box">{{ object.internal_notes }}</div>
 
-    <p class="signature">Best regards,<br>
+    <p class="signature">Mit freundlichen Grüßen / Best regards,<br>
     The ZAM Program Review Team</p>
 </body>
 </html>
-
