@@ -106,13 +106,17 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
                     ? urlProposalId
                     : items[0].id
                 setSelectedProposalId(effectiveProposalId)
+                // Update URL without navigation if no proposalId in URL
+                if (!urlProposalId || !items.some((p) => p.id === urlProposalId)) {
+                    window.history.pushState({}, '', `/proposal-editor/${effectiveProposalId}`)
+                }
             }
         } catch (error) {
             console.error('Failed to load proposals:', error)
         } finally {
             setLoading(false)
         }
-    }, [refreshWorkflowStatuses, urlProposalId])
+    }, [refreshWorkflowStatuses, urlProposalId, t])
 
     useEffect(() => {
         void loadProposals()
@@ -193,7 +197,8 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
     }
 
     const handleProposalChange = (newProposalId: string) => {
-        navigate(`/proposal-editor/${newProposalId}`)
+        setSelectedProposalId(newProposalId)
+        window.history.pushState({}, '', `/proposal-editor/${newProposalId}`)
     }
 
     const handleProposalDelete = async (proposalId: string) => {
@@ -233,15 +238,7 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
         )
     }
 
-    // Determine effective selection from URL, falling back to first proposal
-    const effectiveProposalId = (urlProposalId && proposals.some((p) => p.id === urlProposalId))
-        ? urlProposalId
-        : proposals[0]?.id ?? ''
-
-    // If the URL proposalId is absent or invalid and we have proposals, redirect to the first one
-    if (proposals.length > 0 && effectiveProposalId !== urlProposalId) {
-        return <Navigate to={`/proposal-editor/${effectiveProposalId}`} replace/>
-    }
+    const selectedProposalIdFromState = selectedProposalId
 
     const createButton = canAdd('proposal') ? (
         <div style={{marginBottom: '1rem'}}>
@@ -289,7 +286,7 @@ export function ProposalSelectionPanel({onCreateProposal, onProposalSave}: Propo
     return (
         <SelectionPanel<ProposalItem>
             items={proposals}
-            selectedItemId={effectiveProposalId}
+            selectedItemId={selectedProposalIdFromState}
             onSelectionChange={handleProposalChange}
             renderItemLabel={renderProposalLabel}
             renderContent={(proposal) => (
