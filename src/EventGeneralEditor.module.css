@@ -456,9 +456,36 @@
 /* ── Tabs ───────────────────────────────────────────────────────────────── */
 .tabNavigation {
   display: flex;
+  flex-wrap: wrap;
   gap: 0;
   border-bottom: 2px solid #ddd;
   margin-bottom: 1.5rem;
+}
+
+.tabNavigationDropdown {
+  display: none;
+}
+
+.tabNavigationDropdown select {
+  width: 100%;
+  padding: 0.75rem;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tabNavigationDropdown select:hover {
+  border-color: #646cff;
+}
+
+.tabNavigationDropdown select:focus {
+  outline: none;
+  border-color: #646cff;
+  box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.1);
 }
 
 .tabButton {
@@ -588,6 +615,58 @@
 .tabNavButtonGreen:hover:not(:disabled) {
   background-color: #45a049;
   border-color: #45a049;
+}
+
+/* Mobile tab dropdown - using same breakpoints as SelectionPanel (749px/750px) */
+@media (max-width: 749px) {
+  .tabNavigation {
+    display: none;
+  }
+
+  .tabNavigationDropdown {
+    display: block;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .tabNavigationDropdown select {
+    background-color: white;
+    border-color: #ddd;
+    color: #333;
+  }
+
+  .tabNavigationDropdown select:hover {
+    border-color: #646cff;
+  }
+
+  .tabNavigationDropdown select:focus {
+    border-color: #646cff;
+    box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tabNavigationDropdown {
+      background-color: #1e1e2e;
+      border-bottom-color: #444;
+    }
+
+    .tabNavigationDropdown select {
+      background-color: #2a2a3e;
+      border-color: #555;
+      color: #e0e0e0;
+    }
+
+    .tabNavigationDropdown select:hover {
+      border-color: #646cff;
+    }
+
+    .tabNavigationDropdown select:focus {
+      border-color: #646cff;
+      box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.1);
+    }
+  }
 }
 
 @media (prefers-color-scheme: dark) {

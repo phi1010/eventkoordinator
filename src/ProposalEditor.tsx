@@ -700,7 +700,7 @@ export function ProposalEditor({
 
 
             <form className={styles.form} aria-label="Proposal editor">
-                {/* Tab Navigation */}
+                {/* Tab Navigation - Desktop */}
                 <div className={styles.tabNavigation} role="tablist">
                     {tabs.map((tab) => {
                         const tabHasChanges = hasTabUnsavedChanges(tab.id, changedFields)
@@ -728,6 +728,22 @@ export function ProposalEditor({
                             </button>
                         )
                     })}
+                </div>
+
+                {/* Tab Navigation - Mobile Dropdown */}
+                <div className={styles.tabNavigationDropdown}>
+                    <select
+                        value={activeTab}
+                        onChange={(e) => handleTabChange(parseInt(e.target.value, 10))}
+                        disabled={isSaving}
+                        aria-label={t('proposal.tabScheduling')}
+                    >
+                        {tabs.map((tab) => (
+                            <option key={tab.id} value={tab.id}>
+                                {tab.id + 1}. {tab.label}
+                            </option>
+                        ))}
+                    </select>
                 </div>
 
                 {/* Tab Content */}
