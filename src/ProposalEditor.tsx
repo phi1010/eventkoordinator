@@ -460,7 +460,7 @@ export function ProposalEditor({
             setCreateEventError(null)
             const newEvent = await createEvent({
                 seriesId: selectedSeriesId,
-                name: formData.title + ' Session',
+                name: formData.title,
                 proposal_id: _proposalId,
             })
             navigate(`/proposal/${_proposalId}/event/${newEvent.id}`)
