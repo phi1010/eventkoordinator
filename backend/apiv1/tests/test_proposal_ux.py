@@ -123,7 +123,7 @@ class ProposalNavigationMixin:
 
             page.get_by_text("Are you a regular member?").click()
 
-            page.get_by_text("Do you have access to the ZAM").click()
+            page.get_by_text("At least one speaker has access to the ZAM building").click()
 
             page.get_by_role("button", name="Edit").click()
 

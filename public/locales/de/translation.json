@@ -101,7 +101,7 @@
     "preferredDates": "Bevorzugte Termine und Alternativen",
     "preferredDatesHint": "Bitte spezifische Daten und Zeiten angeben, die für Sie passen.",
     "aboutYourself": "Über Sie",
-    "hasBuildingAccess": "Haben Sie Zugang zum ZAM-Gebäude?",
+    "hasBuildingAccess": "Mind. ein Referent hat Zugang zum ZAM-Gebäude",
     "owner": "Inhaber",
     "ownerWillBeSet": "Der Inhaber wird automatisch festgelegt, wenn der Vorschlag erstellt wird",
     "ownerHint": "Der Inhaber wird automatisch auf den Benutzer festgelegt, der den Vorschlag erstellt, und kann nicht geändert werden.",

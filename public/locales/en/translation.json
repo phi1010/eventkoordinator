@@ -103,7 +103,7 @@
     "preferredDates": "Preferred Dates and Alternatives",
     "preferredDatesHint": "Please specify dates and times that work for you.",
     "aboutYourself": "About Yourself",
-    "hasBuildingAccess": "Do you have access to the ZAM building?",
+    "hasBuildingAccess": "At least one speaker has access to the ZAM building",
     "owner": "Owner",
     "ownerWillBeSet": "The owner will be automatically set when the proposal is created",
     "ownerHint": "The owner is automatically set to the user who creates the proposal and cannot be changed.",
