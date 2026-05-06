@@ -248,21 +248,21 @@ class ProposalSpeakerOut(Schema):
 # Unified schemas with all optional fields
 class ProposalIn(Schema):
     title: Optional[str] = Field(default=None, max_length=30)
-    submission_type: Optional[str] = None
-    area: Optional[str] = None
-    language: Optional[str] = None
-    abstract: Optional[str] = None
-    description: Optional[str] = None
-    internal_notes: Optional[str] = None
-    occurrence_count: Optional[int] = None
-    duration_days: Optional[int] = None
-    duration_time_per_day: Optional[str] = None
-    is_basic_course: Optional[bool] = None
-    max_participants: Optional[int] = None
-    material_cost_eur: Optional[str] = None
-    preferred_dates: Optional[str] = None
-    is_regular_member: Optional[bool] = None
-    has_building_access: Optional[bool] = None
+    submission_type: Optional[str] = Field(default=None, max_length=1000)
+    area: Optional[str] = Field(default=None, max_length=1000)
+    language: Optional[str] = Field(default=None, max_length=1000)
+    abstract: Optional[str] = Field(default=None, max_length=1000)
+    description: Optional[str] = Field(default=None, max_length=5000)
+    internal_notes: Optional[str] = Field(default=None, max_length=5000)
+    occurrence_count: Optional[int] = Field(default=None)
+    duration_days: Optional[int] = Field(default=None, max_length=1000)
+    duration_time_per_day: Optional[str] = Field(default=None, max_length=1000)
+    is_basic_course: Optional[bool] = Field(default=None)
+    max_participants: Optional[int] = Field(default=None)
+    material_cost_eur: Optional[str] = Field(default=None, max_length=1000)
+    preferred_dates: Optional[str] = Field(default=None, max_length=1000)
+    is_regular_member: Optional[bool] = Field(default=None)
+    has_building_access: Optional[bool] = Field(default=None)
 
 
 class SpeakerIn(Schema):
