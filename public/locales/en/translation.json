@@ -103,7 +103,6 @@
     "preferredDates": "Preferred Dates and Alternatives",
     "preferredDatesHint": "Please specify dates and times that work for you.",
     "aboutYourself": "About Yourself",
-    "isRegularMember": "Are you a regular member?",
     "hasBuildingAccess": "Do you have access to the ZAM building?",
     "owner": "Owner",
     "ownerWillBeSet": "The owner will be automatically set when the proposal is created",

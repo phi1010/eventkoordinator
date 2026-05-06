@@ -170,7 +170,6 @@ class ProposalCreateIn(Schema):
     max_participants: Optional[int] = None
     material_cost_eur: Optional[str] = None
     preferred_dates: Optional[str] = None
-    is_regular_member: Optional[bool] = None
     has_building_access: Optional[bool] = None
 
 
@@ -189,7 +188,6 @@ class ProposalUpdateIn(Schema):
     max_participants: Optional[int] = None
     material_cost_eur: Optional[str] = None
     preferred_dates: Optional[str] = None
-    is_regular_member: Optional[bool] = None
     has_building_access: Optional[bool] = None
     # owner_id removed - owner is set on creation and cannot be changed
     editor_ids: Optional[list[str]] = None
@@ -211,7 +209,6 @@ class ProposalDetail(Schema):
     max_participants: int
     material_cost_eur: str
     preferred_dates: str
-    is_regular_member: bool
     has_building_access: bool
     photo: Optional[str] = None
     owner: Optional[UserBasic] = None
@@ -261,7 +258,6 @@ class ProposalIn(Schema):
     max_participants: Optional[int] = Field(default=None)
     material_cost_eur: Optional[str] = Field(default=None, max_length=1000)
     preferred_dates: Optional[str] = Field(default=None, max_length=1000)
-    is_regular_member: Optional[bool] = Field(default=None)
     has_building_access: Optional[bool] = Field(default=None)
 
 

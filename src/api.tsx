@@ -940,7 +940,6 @@ export async function createProposal(formData?: {
   max_participants?: number
   material_cost_eur?: string
   preferred_dates?: string
-  is_regular_member?: boolean
   has_building_access?: boolean
 }): Promise<ProposalSummary> {
   const { data, error, response } = await client.POST('/api/v1/proposals/create', {
@@ -1009,7 +1008,6 @@ export interface ProposalDetail {
   max_participants: number
   material_cost_eur: string
   preferred_dates: string
-  is_regular_member: boolean
   has_building_access: boolean
   photo?: string | null
   owner?: UserBasic | null
@@ -1047,7 +1045,6 @@ export async function updateProposal(proposalId: string, formData: {
   max_participants?: number
   material_cost_eur?: string
   preferred_dates?: string
-  is_regular_member?: boolean
   has_building_access?: boolean
   // owner_id removed - owner is set on creation and cannot be changed
   editor_ids?: string[]

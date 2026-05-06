@@ -306,7 +306,6 @@ class ProposalUxPlaywrightTest(ProposalNavigationMixin, SnapshotMixin, ViteStati
             max_participants=8,
             material_cost_eur="0.00",
             preferred_dates="2026-09-10",
-            is_regular_member=False,
             has_building_access=False,
             owner=user,
         )

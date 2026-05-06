@@ -77,7 +77,6 @@ def _proposal_to_detail_schema(proposal: ProposalModel) -> ProposalDetail:
         max_participants=proposal.max_participants,
         material_cost_eur=str(proposal.material_cost_eur),
         preferred_dates=proposal.preferred_dates,
-        is_regular_member=proposal.is_regular_member,
         has_building_access=proposal.has_building_access,
         photo=proposal.photo.url if proposal.photo else None,
         owner=owner,
@@ -162,11 +161,6 @@ def create_proposal(
         is_basic_course = (
             payload.is_basic_course if payload.is_basic_course is not None else False
         )
-        is_regular_member = (
-            payload.is_regular_member
-            if payload.is_regular_member is not None
-            else False
-        )
         has_building_access = (
             payload.has_building_access
             if payload.has_building_access is not None
@@ -189,7 +183,6 @@ def create_proposal(
             max_participants=max_participants,
             material_cost_eur=material_cost_eur,
             preferred_dates=preferred_dates,
-            is_regular_member=is_regular_member,
             has_building_access=has_building_access,
             owner=request.user if request.user.is_authenticated else None,
         )
@@ -369,9 +362,6 @@ def update_proposal(
 
     if payload.preferred_dates is not None:
         proposal.preferred_dates = payload.preferred_dates
-
-    if payload.is_regular_member is not None:
-        proposal.is_regular_member = payload.is_regular_member
 
     if payload.has_building_access is not None:
         proposal.has_building_access = payload.has_building_access

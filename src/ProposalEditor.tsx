@@ -53,7 +53,6 @@ interface ProposalFormData {
     preferred_dates: string
 
     // Profile section
-    is_regular_member: boolean
     has_building_access: boolean
 }
 
@@ -85,7 +84,6 @@ const DEFAULT_FORM_DATA: ProposalFormData = {
     material_cost_eur: '0.00',
     preferred_dates: '',
 
-    is_regular_member: false,
     has_building_access: false,
 }
 
@@ -93,7 +91,7 @@ const TAB_FIELD_MAP: Record<number, Array<ChangedFieldName>> = {
     0: ['title', 'submission_type', 'area', 'language', 'abstract', 'description'],
     1: ['is_basic_course', 'max_participants', 'material_cost_eur'],
     2: ['duration_days', 'duration_time_per_day', 'occurrence_count', 'preferred_dates'],
-    3: ['is_regular_member', 'has_building_access', 'editors'],
+    3: ['has_building_access', 'editors'],
     4: ['internal_notes'],
     5: [],
 }
@@ -124,7 +122,6 @@ function proposalToFormData(data: ProposalDetail): ProposalFormData {
         max_participants: data.max_participants,
         material_cost_eur: data.material_cost_eur,
         preferred_dates: data.preferred_dates,
-        is_regular_member: data.is_regular_member,
         has_building_access: data.has_building_access,
     }
 }
@@ -603,7 +600,6 @@ export function ProposalEditor({
                 'max_participants',
                 'material_cost_eur',
                 'preferred_dates',
-                'is_regular_member',
                 'has_building_access',
             ]
 
@@ -1146,19 +1142,6 @@ export function ProposalEditor({
                     {/* Tab 4: Referent*innen */}
                     <div className={activeTab === 3 ? styles.tabPanelActive : styles.tabPanelHidden} role="tabpanel">
                         <div className={styles.detailsContent}>
-                            <div className={styles.formGroup}>
-                                <label className={styles.label}>
-                                    <input
-                                        id="proposal-is-regular-member"
-                                        type="checkbox"
-                                        checked={formData.is_regular_member}
-                                        onChange={(e) => handleFieldChange('is_regular_member', e.target.checked)}
-                                        disabled={isSaving || !canEdit}
-                                    />
-                                    {t('proposal.isRegularMember')}
-                                </label>
-                            </div>
-
                             <div className={styles.formGroup}>
                                 <label className={styles.label}>
                                     <input

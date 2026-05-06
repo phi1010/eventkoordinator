@@ -1395,8 +1395,6 @@ export interface components {
             internal_notes?: string | null;
             /** Is Basic Course */
             is_basic_course?: boolean | null;
-            /** Is Regular Member */
-            is_regular_member?: boolean | null;
             /** Language */
             language?: string | null;
             /** Material Cost Eur */
@@ -1440,8 +1438,6 @@ export interface components {
             internal_notes: string;
             /** Is Basic Course */
             is_basic_course: boolean;
-            /** Is Regular Member */
-            is_regular_member: boolean;
             /** Language */
             language?: string | null;
             /** Material Cost Eur */
@@ -1595,8 +1591,6 @@ export interface components {
             internal_notes?: string | null;
             /** Is Basic Course */
             is_basic_course?: boolean | null;
-            /** Is Regular Member */
-            is_regular_member?: boolean | null;
             /** Language */
             language?: string | null;
             /** Material Cost Eur */

@@ -454,7 +454,6 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
     )
     preferred_dates = models.TextField(max_length=1000)
 
-    is_regular_member = models.BooleanField(default=False)
     has_building_access = models.BooleanField(default=False)
 
     owner = models.ForeignKey(

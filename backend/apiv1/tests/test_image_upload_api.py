@@ -65,7 +65,6 @@ class ImageUploadApiTests(TestCase):
             max_participants=10,
             material_cost_eur='0.00',
             preferred_dates='2026-07-10',
-            is_regular_member=False,
             has_building_access=False,
             owner=self.owner,
         )
