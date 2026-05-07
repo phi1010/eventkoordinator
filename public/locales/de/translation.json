@@ -23,7 +23,8 @@
     "noPermissionBrowseSeries": "Du hast keine Berechtigung, Reihen anzusehen",
     "noPermissionBrowseProposal": "Du hast keine Berechtigung, Vorschläge anzusehen",
     "genericError": "Ein Fehler ist aufgetreten",
-    "processing": "Verarbeite..."
+    "processing": "Verarbeite...",
+    "imageUploadCopyrightConsent": "Ich lade nur Bilder hoch, an denen ich das Urheberrecht besitze, und erlaube dem ZAM, diese öffentlich zu verwenden"
   },
   "mainView": {
     "loadingSeries": "Lade Reihen...",
@@ -256,7 +257,8 @@
     "failedToUpdate": "Referent*in konnte nicht aktualisiert werden",
     "failedToRemove": "Referent*in konnte nicht entfernt werden",
     "failedToUploadImage": "Referent*innenbild konnte nicht hochgeladen werden",
-    "speakerListHeader": "Hinzugefügte Referent*innen"
+    "speakerListHeader": "Hinzugefügte Referent*innen",
+    "speakerImageHelp": "Lade ein JPG- oder PNG-Bild bis zu 10 MB für diese Referent*in hoch."
   },
   "api": {
     "loadingSeries": "Lade Reihen...",

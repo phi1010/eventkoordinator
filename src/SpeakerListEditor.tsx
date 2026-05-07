@@ -28,6 +28,7 @@ interface UploadState {
   isUploading: boolean
   progress: number | null
   error: string | null
+  copyrightChecked: boolean
 }
 
 function getSpeakerFieldId(prefix: string, speakerId: string, fieldName: string) {
@@ -51,6 +52,7 @@ export function SpeakerListEditor({
       isUploading: false,
       progress: null,
       error: null,
+      copyrightChecked: false,
     }
   )
 
@@ -62,6 +64,7 @@ export function SpeakerListEditor({
           isUploading: false,
           progress: null,
           error: null,
+          copyrightChecked: false,
         }),
         ...updates,
       },
@@ -198,9 +201,20 @@ export function SpeakerListEditor({
                       isUploading={getUploadState(speaker.id).isUploading}
                       uploadProgress={getUploadState(speaker.id).progress}
                       error={getUploadState(speaker.id).error}
-                      helpText="Upload a JPG or PNG image up to 10 MB for this speaker."
+                      helpText={t('speakers.speakerImageHelp')}
+                      uploadEnabled={getUploadState(speaker.id).copyrightChecked}
                       onFileSelected={(file) => handleSpeakerImageUpload(speaker, file)}
-                    />
+                    >
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={getUploadState(speaker.id).copyrightChecked}
+                          onChange={(e) => updateUploadState(speaker.id, { copyrightChecked: e.target.checked })}
+                          disabled={disabled || isSaving}
+                        />
+                        {t('common.imageUploadCopyrightConsent')}
+                      </label>
+                    </ImageUploadField>
                   </div>
 
                   <div style={{ marginBottom: '0.75rem' }}>

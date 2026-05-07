@@ -250,6 +250,7 @@ export function ProposalEditor({
     const [isProposalImageUploading, setIsProposalImageUploading] = useState(false)
     const [proposalImageUploadProgress, setProposalImageUploadProgress] = useState<number | null>(null)
     const [proposalImageError, setProposalImageError] = useState<string | null>(null)
+    const [proposalImageCopyrightChecked, setProposalImageCopyrightChecked] = useState(false)
 
     // Event creation state
     const [seriesSearchQuery, setSeriesSearchQuery] = useState('')
@@ -852,8 +853,19 @@ export function ProposalEditor({
                                     uploadProgress={proposalImageUploadProgress}
                                     error={proposalImageError}
                                     helpText={t('proposal.proposalImageHelp')}
+                                    uploadEnabled={proposalImageCopyrightChecked}
                                     onFileSelected={handleProposalImageUpload}
-                                />
+                                >
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={proposalImageCopyrightChecked}
+                                            onChange={(e) => setProposalImageCopyrightChecked(e.target.checked)}
+                                            disabled={isSaving || !canEdit}
+                                        />
+                                        {t('common.imageUploadCopyrightConsent')}
+                                    </label>
+                                </ImageUploadField>
                             </div>
 
                             {lookupLoading && (

@@ -23,7 +23,8 @@
     "noPermissionBrowseSeries": "You don't have permission to browse series",
     "noPermissionBrowseProposal": "You don't have permission to browse proposals",
     "genericError": "An error occurred",
-    "processing": "Processing..."
+    "processing": "Processing...",
+    "imageUploadCopyrightConsent": "I will only upload images that I hold the copyright of and permit the ZAM to use publicly"
   },
   "mainView": {
     "loadingSeries": "Loading series...",
@@ -260,7 +261,8 @@
     "failedToUpdate": "Failed to update speaker",
     "failedToRemove": "Failed to remove speaker",
     "failedToUploadImage": "Failed to upload speaker image",
-    "speakerListHeader": "Added Speakers"
+    "speakerListHeader": "Added Speakers",
+    "speakerImageHelp": "Upload a JPG or PNG image up to 10 MB for this speaker."
   },
   "event": {
     "statusLabel": "Event status: {{status}}",

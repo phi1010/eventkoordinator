@@ -14,6 +14,8 @@ interface ImageUploadFieldProps {
   isUploading?: boolean
   uploadProgress?: number | null
   error?: string | null
+  uploadEnabled?: boolean
+  children?: React.ReactNode
   onFileSelected: (file: File) => void | Promise<void>
 }
 
@@ -28,6 +30,8 @@ export function ImageUploadField({
   isUploading = false,
   uploadProgress = null,
   error = null,
+  uploadEnabled = true,
+  children,
   onFileSelected,
 }: ImageUploadFieldProps) {
   const { t } = useTranslation()
@@ -68,14 +72,17 @@ export function ImageUploadField({
         <label htmlFor={inputId} className={styles.label}>
           {label}
         </label>
-        <input
-          id={inputId}
-          type="file"
-          accept="image/png,image/jpeg"
-          onChange={handleChange}
-          disabled={disabled || shouldShowProgress}
-          className={styles.fileInput}
-        />
+        {children}
+        {uploadEnabled && (
+          <input
+            id={inputId}
+            type="file"
+            accept="image/png,image/jpeg"
+            onChange={handleChange}
+            disabled={disabled || shouldShowProgress}
+            className={styles.fileInput}
+          />
+        )}
         {effectiveHelpText && <small className={styles.helpText}>{effectiveHelpText}</small>}
         {shouldShowProgress && (
           <div className={styles.progressWrapper}>
