@@ -70,7 +70,7 @@
     "generalInformation": "General Information",
     "title": "Title (max 30 characters)",
     "proposalImage": "Proposal image",
-    "proposalImageHelp": "Upload a JPG or PNG image up to 10 MB for this proposal.",
+    "proposalImageHelp": "Upload a JPG or PNG image up to 10 MB for this proposal. Minimum resolution: 1080×1440 pixels.",
     "loading": "Loading...",
     "submissionType": "Submission Type",
     "submissionTypeHint": "Workshop: Fixed booking, fee required, providers receive a remuneration; Open offer: No booking or fee required; takes place in the main building.",

@@ -70,7 +70,7 @@
     "generalInformation": "Allgemeine Informationen",
     "title": "Titel (max 30 Zeichen)",
     "proposalImage": "Vorschlagsbild",
-    "proposalImageHelp": "Laden Sie ein JPG- oder PNG-Bild bis zu 10 MB für diesen Vorschlag hoch.",
+    "proposalImageHelp": "Laden Sie ein JPG- oder PNG-Bild bis zu 10 MB für diesen Vorschlag hoch. Mindestauflösung: 1080×1440 Pixel.",
     "loading": "Laden...",
     "submissionType": "Einreichungstyp",
     "submissionTypeHint": "Workshop: Feste Buchung, Gebühr erforderlich, Anbieter erhalten eine Vergütung; Offenes Angebot: Keine Buchung oder Gebühr erforderlich; findet im Hauptgebäude statt.",
