@@ -203,7 +203,7 @@ class CallOut(Schema):
     description: str
     execution_period_start: str  # ISO date string
     execution_period_end: str    # ISO date string
-    submission_deadline: str     # ISO datetime string
+    submission_deadline: str     # ISO date string
     print_deadline: str          # ISO date string
     responsible_name: str
     responsible_email: str

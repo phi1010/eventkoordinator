@@ -34,11 +34,12 @@ function formatDateRange(start: string, end: string): string {
   }
 }
 
-function daysUntil(isoDatetime: string): number {
-  const deadline = new Date(isoDatetime)
-  const now = new Date()
-  const diff = deadline.getTime() - now.getTime()
-  return Math.ceil(diff / (1000 * 60 * 60 * 24))
+function daysUntilDate(isoDate: string): number {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  const deadline = new Date(year, month - 1, day)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 }
 
 interface CallCardProps {
@@ -51,9 +52,12 @@ interface CallCardProps {
 }
 
 function CallCard({ call, myProposals, onSubmit, onOpenProposal, isSubmitting, t }: CallCardProps) {
-  const days = daysUntil(call.submission_deadline)
-  const isUrgent = days >= 0 && days <= 7
-  const isOverdue = days < 0
+  const d1 = daysUntilDate(call.submission_deadline)
+  const d2 = daysUntilDate(call.print_deadline)
+  const upcomingDays = [d1, d2].filter(d => d >= 0)
+  const isOverdue = upcomingDays.length === 0
+  const days = isOverdue ? -1 : Math.min(...upcomingDays)
+  const isUrgent = !isOverdue && days <= 7
 
   const badgeClass = isOverdue
     ? styles.deadlineBadgeOverdue

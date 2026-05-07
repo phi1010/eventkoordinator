@@ -6,7 +6,7 @@ Handles CRUD endpoints for Calls (Ausschreibungen).
 
 import logging
 import uuid
-from datetime import date, datetime
+from datetime import date
 
 import apiv1
 from apiv1.api_utils import api_permission_mandatory, api_permission_required
@@ -92,7 +92,7 @@ def create_call(request, payload: CallCreateIn):
             description=payload.description or "",
             execution_period_start=date.fromisoformat(payload.execution_period_start),
             execution_period_end=date.fromisoformat(payload.execution_period_end),
-            submission_deadline=datetime.fromisoformat(payload.submission_deadline),
+            submission_deadline=date.fromisoformat(payload.submission_deadline),
             print_deadline=date.fromisoformat(payload.print_deadline),
             responsible_name=payload.responsible_name,
             responsible_email=payload.responsible_email,
@@ -126,7 +126,7 @@ def update_call(request, call_id: uuid.UUID, payload: CallUpdateIn):
         if payload.execution_period_end is not None:
             call.execution_period_end = date.fromisoformat(payload.execution_period_end)
         if payload.submission_deadline is not None:
-            call.submission_deadline = datetime.fromisoformat(payload.submission_deadline)
+            call.submission_deadline = date.fromisoformat(payload.submission_deadline)
         if payload.print_deadline is not None:
             call.print_deadline = date.fromisoformat(payload.print_deadline)
         if payload.responsible_name is not None:

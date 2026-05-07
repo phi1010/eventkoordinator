@@ -53,7 +53,8 @@ export interface paths {
         };
         /**
          * List Calls
-         * @description List calls. Defaults to active calls only.
+         * @description List calls. Requires browse_proposal (submitters) or view_call (managers).
+         *     Submitters always see active-only calls; managers respect the active_only param.
          */
         get: operations["apiv1_routers_calls_list_calls"];
         put?: never;
@@ -75,7 +76,7 @@ export interface paths {
         put?: never;
         /**
          * Create Call
-         * @description Create a new call.
+         * @description Create a new call. Requires add_call permission.
          */
         post: operations["apiv1_routers_calls_create_call"];
         delete?: never;
@@ -93,18 +94,18 @@ export interface paths {
         };
         /**
          * Get Call
-         * @description Get a single call by ID.
+         * @description Get a single call by ID. Requires browse_proposal or view_call.
          */
         get: operations["apiv1_routers_calls_get_call"];
         /**
          * Update Call
-         * @description Update an existing call.
+         * @description Update an existing call. Requires change_call permission.
          */
         put: operations["apiv1_routers_calls_update_call"];
         post?: never;
         /**
          * Delete Call
-         * @description Delete a call.
+         * @description Delete a call. Requires delete_call permission.
          */
         delete: operations["apiv1_routers_calls_delete_call"];
         options?: never;

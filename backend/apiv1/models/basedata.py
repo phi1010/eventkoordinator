@@ -383,7 +383,7 @@ class Call(HistoricalMetaBase):
     description = models.TextField(blank=True)
     execution_period_start = models.DateField()
     execution_period_end = models.DateField()
-    submission_deadline = models.DateTimeField()
+    submission_deadline = models.DateField()
     print_deadline = models.DateField()
     responsible_name = models.CharField(max_length=120)
     responsible_email = models.EmailField()
