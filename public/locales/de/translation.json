@@ -63,7 +63,8 @@
       "submissionType": "Einreichungstyp ausgewählt",
       "workshopArea": "Workshop-Bereich ausgewählt",
       "atLeastOneSpeaker": "Mindestens ein Referent hinzugefügt",
-      "speakersHaveBio": "Alle Referenten haben eine Biografie"
+      "speakersHaveBio": "Alle Referenten haben eine Biografie",
+      "photo": "Vorschlagsbild hochgeladen (min. 1080×1440 Px)"
     },
     "editorTitle": "Vorschlagseditor",
     "loadingProposal": "Lade Vorschlag...",
@@ -295,6 +296,7 @@
     "proposals.invalidLanguage": "Ungültige Sprache",
     "proposals.invalidEditorId": "Ungültige Redakteur-ID",
     "proposals.invalidImage": "Ungültiges Vorschlagsbild",
+    "proposals.imageTooSmall": "Die Bildauflösung ist zu gering (mindestens 1080×1440 Px erforderlich)",
     "proposals.unknownTransition": "Diese Aktion ist nicht verfügbar",
     "proposals.transitionNotAllowed": "Diese Aktion kann gerade nicht ausgeführt werden",
     "proposals.transitionFailed": "Die angeforderte Aktion konnte nicht ausgeführt werden",

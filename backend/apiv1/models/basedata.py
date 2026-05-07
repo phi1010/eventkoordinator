@@ -597,6 +597,8 @@ def check_proposal_required_fields(proposal: Proposal) -> dict[Any, Any]:
     ).exists()
     checklist["speakersHaveBio"] = {"status": "error" if empty_bio_present else "ok"}
 
+    checklist["photo"] = {"status": "ok" if proposal.photo else "error"}
+
     return checklist
 
 

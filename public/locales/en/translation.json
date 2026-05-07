@@ -63,7 +63,8 @@
       "submissionType": "Submission type selected",
       "workshopArea": "Workshop area selected",
       "atLeastOneSpeaker": "At least one speaker added",
-      "speakersHaveBio": "All speakers have a biography"
+      "speakersHaveBio": "All speakers have a biography",
+      "photo": "Proposal image uploaded (min. 1080×1440 px)"
     },
     "editorTitle": "Proposal Editor",
     "loadingProposal": "Loading proposal...",
@@ -452,6 +453,7 @@
     "proposals.invalidLanguage": "Invalid language",
     "proposals.invalidEditorId": "Invalid editor ID",
     "proposals.invalidImage": "Invalid proposal image",
+    "proposals.imageTooSmall": "The image resolution is too low (minimum 1080×1440 px)",
     "proposals.unknownTransition": "This action is not available",
     "proposals.transitionNotAllowed": "This action cannot be performed right now",
     "proposals.transitionFailed": "Failed to execute the requested action",

@@ -279,6 +279,20 @@ def upload_proposal_photo(
             detail=" ".join(exc.messages),
         )
 
+    try:
+        from PIL import Image as PilImage
+        img = PilImage.open(file)
+        width, height = img.size
+        if width < 1080 or height < 1440:
+            return 400, ErrorOut(
+                code="proposals.imageTooSmall",
+                detail=f"Image must be at least 1080×1440 pixels, got {width}×{height}.",
+            )
+    except Exception:
+        return 400, ErrorOut(code="proposals.invalidImage", detail="Could not read image dimensions.")
+    finally:
+        file.seek(0)
+
     previous_photo_name = proposal.photo.name if proposal.photo else None
     proposal.photo = file
     proposal.save(update_fields=["photo"])
