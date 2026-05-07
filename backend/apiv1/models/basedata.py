@@ -418,7 +418,11 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
         if perm.endswith(f".reject_{Proposal.__name__.lower()}"):
             return user.has_perm(perm, None)
         if perm.endswith(f".submit_{Proposal.__name__.lower()}"):
-            return user == self.owner or user in self.editors.all()
+            return (
+                (user == self.owner or user in self.editors.all())
+                and self.call is not None
+                and self.call.submission_deadline <= datetime.now().date()
+            )
         if perm.endswith(f".moderate_{Proposal.__name__.lower()}"):
             return user.has_perm(perm, None)
         return False
