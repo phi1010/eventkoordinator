@@ -1444,6 +1444,11 @@ export interface components {
             material_cost_eur: string;
             /** Max Participants */
             max_participants: number;
+            /**
+             * Moderation Comment
+             * @default
+             */
+            moderation_comment: string;
             /** Occurrence Count */
             occurrence_count: number;
             owner?: components["schemas"]["UserBasic"] | null;
@@ -1597,6 +1602,8 @@ export interface components {
             material_cost_eur?: string | null;
             /** Max Participants */
             max_participants?: number | null;
+            /** Moderation Comment */
+            moderation_comment?: string | null;
             /** Occurrence Count */
             occurrence_count?: number | null;
             /** Preferred Dates */

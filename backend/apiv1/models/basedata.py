@@ -399,6 +399,8 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
             return user.has_perm(perm, None)
         if perm.endswith(f".submit_{Proposal.__name__.lower()}"):
             return user == self.owner or user in self.editors.all()
+        if perm.endswith(f".moderate_{Proposal.__name__.lower()}"):
+            return user.has_perm(perm, None)
         return False
 
     class Status(models.TextChoices):
@@ -456,6 +458,8 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
 
     has_building_access = models.BooleanField(default=False)
 
+    moderation_comment = models.TextField(blank=True, max_length=2000)
+
     owner = models.ForeignKey(
         OpenIDUser,
         on_delete=models.SET_NULL,
@@ -477,6 +481,10 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
             (
                 "revise_proposal",
                 "Can request for revision of proposals (when the workflow allows it)",
+            ),
+            (
+                "moderate_proposal",
+                "Can write moderation comments on proposals",
             ),
         ]
 

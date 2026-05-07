@@ -54,6 +54,9 @@ interface ProposalFormData {
 
     // Profile section
     has_building_access: boolean
+
+    // Moderation section (requires moderate_proposal permission to edit)
+    moderation_comment: string
 }
 
 interface ProposalEditorProps {
@@ -85,6 +88,8 @@ const DEFAULT_FORM_DATA: ProposalFormData = {
     preferred_dates: '',
 
     has_building_access: false,
+
+    moderation_comment: '',
 }
 
 const TAB_FIELD_MAP: Record<number, Array<ChangedFieldName>> = {
@@ -123,6 +128,7 @@ function proposalToFormData(data: ProposalDetail): ProposalFormData {
         material_cost_eur: data.material_cost_eur,
         preferred_dates: data.preferred_dates,
         has_building_access: data.has_building_access,
+        moderation_comment: data.moderation_comment || '',
     }
 }
 
@@ -209,7 +215,7 @@ export function ProposalEditor({
                                }: ProposalEditorProps) {
     const {t} = useTranslation()
     const navigate = useNavigate()
-    const {canView, canAdd, loading: permissionsLoading} = usePermissions()
+    const {canView, canAdd, hasPermission, loading: permissionsLoading} = usePermissions()
     const [formData, setFormData] = useState<ProposalFormData>(DEFAULT_FORM_DATA)
     const [changedFields, setChangedFields] = useState<Set<ChangedFieldName>>(new Set())
     const changedFieldsRef = useRef(changedFields)
@@ -601,6 +607,7 @@ export function ProposalEditor({
                 'material_cost_eur',
                 'preferred_dates',
                 'has_building_access',
+                'moderation_comment',
             ]
 
             for (const fieldName of formFields) {
@@ -1565,6 +1572,24 @@ export function ProposalEditor({
                             )}
                         </div>
                     </div>
+                    {/* Moderation Comment - visible when not in draft, editable only with moderate_proposal permission */}
+                    {_proposalId && _proposalId.trim() && currentStatus && currentStatus !== 'draft' && (
+                        <fieldset className={styles.fieldset} style={{marginTop: '2rem'}}>
+                            <legend className={styles.legend}>{t('proposal.moderationComment')}</legend>
+                            <textarea
+                                value={formData.moderation_comment}
+                                readOnly={!hasPermission('moderate_proposal')}
+                                disabled={!hasPermission('moderate_proposal')}
+                                maxLength={2000}
+                                rows={3}
+                                onChange={(e) => {
+                                    setFormData((prev) => ({...prev, moderation_comment: e.target.value}))
+                                    markFieldAsChanged('moderation_comment')
+                                }}
+                                style={{width: '100%', boxSizing: 'border-box', resize: 'vertical'}}
+                            />
+                        </fieldset>
+                    )}
                     {/* Save/Cancel/Delete Buttons - Always visible */}
                     <div className={styles.buttonGroup}>
                         <button type="button" onClick={handleSave}

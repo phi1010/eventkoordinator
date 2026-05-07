@@ -85,8 +85,8 @@
     "abstractHint": "Dies wird auf unserer Website in der Programmübersicht veröffentlicht. (50–250 Zeichen)",
     "description": "Beschreibung (50-1000 Zeichen)",
     "descriptionHint": "Dies wird auf unserer Website in der detaillierten Beschreibung veröffentlicht. Bitte Ziel, Voraussetzungen und ob Teilnehmer*innen etwas mitnehmen angeben. (50–1000 Zeichen)",
-    "internalNotes": "Interne Notizen (optional)",
-    "internalNotesHint": "Interne Notizen sind nicht öffentlich. Erwähnen Sie Geräteeinsatz (z.B. Laptops, Beamer, Schneidläser).",
+    "internalNotes": "Hinweise an das ZAM (optional)",
+    "internalNotesHint": "Nicht öffentlich. Nutze dieses Feld für Rückmeldungen ans ZAM-Team, z.B. Gerätebedarf (Laptops, Beamer, Laser) oder sonstige Hinweise.",
     "numberOfDays": "Anzahl der Tage",
     "numberOfDaysHint": "Anzahl der Tage für eine einzelne Durchführung der Veranstaltung (mindestens 1).",
     "timePerDay": "Dauer pro Tag (HH:MM oder Minuten)",
@@ -135,7 +135,7 @@
     "draftWarning": "Entwurf – noch nicht eingereicht",
     "draftWarningDesc": "Dieser Vorschlag wird erst berücksichtigt, nachdem du ihn über „Vorschlag einreichen\" abgesendet hast. Hier kannst du den Vorschlag zwischendurch als Entwurf speichern, er wird dadurch nicht eingereicht.",
     "statusRevise": "Überarbeitung erbeten",
-    "statusReviseDesc": "Bitte schau dir die internen Hinweise an, nimm die nötigen Änderungen vor und reiche deinen Vorschlag erneut ein.",
+    "statusReviseDesc": "Das ZAM-Team hat unten einen Moderationskommentar hinterlassen – bitte lies ihn, nimm die nötigen Änderungen vor und reiche deinen Vorschlag erneut ein. Im Feld „Hinweise an das ZAM" im Reiter „Einreichung" kannst du auch direkt Rückmeldung geben.",
     "statusAccepted": "Angenommen",
     "statusAcceptedDesc": "Dein Vorschlag wurde angenommen! Wir werden dir Terminvorschläge zusenden – bitte warte darauf und bestätige anschließend.",
     "statusRejected": "Nicht angenommen",
@@ -170,7 +170,8 @@
     "tabScheduling": "Zeitplanung",
     "tabSpeakers": "Referent*innen",
     "tabSubmission": "Einreichung",
-    "tabDateArrangement": "Terminfestlegung"
+    "tabDateArrangement": "Terminfestlegung",
+    "moderationComment": "Moderationskommentar"
   },
   "defaultScreen": {
     "welcomeTitle": "Willkommen bei Event Coordinator",

@@ -85,8 +85,8 @@
     "abstractHint": "This will be published on our website in the program overview. (50–250 characters)",
     "description": "Description (50-1000 characters)",
     "descriptionHint": "This will be published on our website in the detailed description. Please include goal, prerequisites and whether participants take something home. (50–1000 characters)",
-    "internalNotes": "Internal Notes (optional)",
-    "internalNotesHint": "Internal notes are not public. Mention equipment needs (e.g., laptops, projector, laser cutter).",
+    "internalNotes": "Additional Information for the ZAM (optional)",
+    "internalNotesHint": "Not public. Use this to communicate with the ZAM team, e.g. equipment needs (laptops, projector, laser cutter) or other notes.",
     "numberOfDays": "Number of Days",
     "numberOfDaysHint": "Number of days for a single occurrence of the event (minimum 1).",
     "occurrenceCount": "How often would you offer this event?",
@@ -137,7 +137,7 @@
     "draftWarning": "Draft – not yet submitted",
     "draftWarningDesc": "This proposal will only be considered after you submit it via \"Submit Proposal\". In the meantime, you can save it, it does not get submitted by that.",
     "statusRevise": "Revision requested",
-    "statusReviseDesc": "Please look at the internal notes, make the necessary changes, and resubmit your proposal.",
+    "statusReviseDesc": "The ZAM team has left a moderation comment below — please read it, make the necessary changes, and resubmit your proposal. You can also leave feedback for the ZAM team in the \"Additional Information for the ZAM\" field on the Submission tab.",
     "statusAccepted": "Accepted",
     "statusAcceptedDesc": "Your proposal was accepted! Please await date and time proposals from us and confirm.",
     "statusRejected": "Not accepted",
@@ -174,7 +174,8 @@
     "tabScheduling": "Scheduling",
     "tabSpeakers": "Speakers",
     "tabSubmission": "Submission",
-    "tabDateArrangement": "Date Arrangement"
+    "tabDateArrangement": "Date Arrangement",
+    "moderationComment": "Moderation Comment"
   },
   "defaultScreen": {
     "welcomeTitle": "Welcome to Event Coordinator",

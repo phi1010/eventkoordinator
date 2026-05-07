@@ -191,6 +191,7 @@ class ProposalUpdateIn(Schema):
     has_building_access: Optional[bool] = None
     # owner_id removed - owner is set on creation and cannot be changed
     editor_ids: Optional[list[str]] = None
+    moderation_comment: Optional[str] = None
 
 
 class ProposalDetail(Schema):
@@ -213,6 +214,7 @@ class ProposalDetail(Schema):
     photo: Optional[str] = None
     owner: Optional[UserBasic] = None
     editors: list[UserBasic] = []
+    moderation_comment: str = ""
 
 
 class SpeakerOut(Schema):

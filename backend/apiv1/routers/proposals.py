@@ -81,6 +81,7 @@ def _proposal_to_detail_schema(proposal: ProposalModel) -> ProposalDetail:
         photo=proposal.photo.url if proposal.photo else None,
         owner=owner,
         editors=editors,
+        moderation_comment=proposal.moderation_comment,
     )
 
 
@@ -379,6 +380,10 @@ def update_proposal(
         except (ValueError, Exception) as e:
             logger.error(f"Failed to update editors: {str(e)}")
             return 400, ErrorOut(code="proposals.invalidEditorId")
+
+    if payload.moderation_comment is not None:
+        if request.user.has_perm((apiv1, "moderate", ProposalModel), proposal):
+            proposal.moderation_comment = payload.moderation_comment
 
     try:
         proposal.clean()  # Validate duration

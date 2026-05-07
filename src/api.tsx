@@ -1012,6 +1012,7 @@ export interface ProposalDetail {
   photo?: string | null
   owner?: UserBasic | null
   editors?: UserBasic[]
+  moderation_comment?: string
 }
 
 export async function fetchProposal(proposalId: string): Promise<ProposalDetail> {
@@ -1048,6 +1049,7 @@ export async function updateProposal(proposalId: string, formData: {
   has_building_access?: boolean
   // owner_id removed - owner is set on creation and cannot be changed
   editor_ids?: string[]
+  moderation_comment?: string
 }): Promise<ProposalDetail> {
   const { data, error, response } = await client.PUT('/api/v1/proposals/{proposal_id}', {
     params: {
