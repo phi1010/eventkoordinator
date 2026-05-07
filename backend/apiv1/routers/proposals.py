@@ -28,6 +28,7 @@ from apiv1.helpers import model_proposal_to_schema
 from apiv1.models import check_proposal_required_fields
 from apiv1.models import Proposal as ProposalModel, Speaker
 from apiv1.models import Event as EventModel
+from apiv1.models import Call as CallModel
 from apiv1.models import ProposalArea, ProposalLanguage, SubmissionType
 from apiv1.schemas import (
     ErrorOut,
@@ -82,6 +83,7 @@ def _proposal_to_detail_schema(proposal: ProposalModel) -> ProposalDetail:
         owner=owner,
         editors=editors,
         moderation_comment=proposal.moderation_comment,
+        call_id=proposal.call_id,
     )
 
 
@@ -168,6 +170,13 @@ def create_proposal(
             else False
         )
 
+        call = None
+        if payload.call_id:
+            try:
+                call = CallModel.objects.get(pk=payload.call_id)
+            except CallModel.DoesNotExist:
+                return 400, ErrorOut(code="proposals.callNotFound")
+
         # Create proposal with owner set to authenticated user
         proposal = ProposalModel.objects.create(
             title=title,
@@ -185,6 +194,7 @@ def create_proposal(
             material_cost_eur=material_cost_eur,
             preferred_dates=preferred_dates,
             has_building_access=has_building_access,
+            call=call,
             owner=request.user if request.user.is_authenticated else None,
         )
 
@@ -384,6 +394,21 @@ def update_proposal(
     if payload.moderation_comment is not None:
         if request.user.has_perm((apiv1, "moderate", ProposalModel), proposal):
             proposal.moderation_comment = payload.moderation_comment
+
+    if payload.call_id is not None:
+        if str(payload.call_id) != str(proposal.call_id or ''):
+            if proposal.status != ProposalModel.Status.DRAFT:
+                return 400, ErrorOut(code="proposals.callChangeNotAllowedInStatus")
+            try:
+                proposal.call = CallModel.objects.get(pk=payload.call_id)
+            except CallModel.DoesNotExist:
+                return 400, ErrorOut(code="proposals.callNotFound")
+    elif 'call_id' in (payload.model_fields_set if hasattr(payload, 'model_fields_set') else set()):
+        # Explicitly set to null — only act if there is a change
+        if proposal.call_id is not None:
+            if proposal.status != ProposalModel.Status.DRAFT:
+                return 400, ErrorOut(code="proposals.callChangeNotAllowedInStatus")
+            proposal.call = None
 
     try:
         proposal.clean()  # Validate duration

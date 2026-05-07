@@ -195,6 +195,28 @@ class ProposalAdmin(fsm.FlowAdminMixin, SimpleHistoryAdmin):
     )
 
 
+@admin.register(models.Call)
+class CallAdmin(SimpleHistoryAdmin):
+    list_display = ("id", "title", "submission_deadline", "is_active", "responsible_name")
+    list_filter = ("is_active",)
+    search_fields = ("title", "responsible_name", "responsible_email")
+    list_editable = ("is_active",)
+    fieldsets = (
+        (
+            "Allgemein",
+            {"fields": ("title", "description", "is_active")},
+        ),
+        (
+            "Zeitraum",
+            {"fields": ("execution_period_start", "execution_period_end", "submission_deadline", "print_deadline")},
+        ),
+        (
+            "Verantwortlich",
+            {"fields": ("responsible_name", "responsible_email")},
+        ),
+    )
+
+
 @admin.register(SyncBaseTarget)
 class SyncBaseTargetAdmin(PolymorphicParentModelAdmin, SimpleHistoryAdmin):
     list_display = (

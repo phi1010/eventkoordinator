@@ -376,6 +376,26 @@ class Speaker(HistoricalMetaBase):
         return self.display_name
 
 
+class Call(HistoricalMetaBase):
+    """An open call for workshop/event proposals."""
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    execution_period_start = models.DateField()
+    execution_period_end = models.DateField()
+    submission_deadline = models.DateTimeField()
+    print_deadline = models.DateField()
+    responsible_name = models.CharField(max_length=120)
+    responsible_email = models.EmailField()
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["submission_deadline"]
+
+    def __str__(self):
+        return self.title
+
+
 class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
     """Submission form content for workshops and open activities."""
 
@@ -459,6 +479,14 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
     has_building_access = models.BooleanField(default=False)
 
     moderation_comment = models.TextField(blank=True, max_length=2000)
+
+    call = models.ForeignKey(
+        Call,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="proposals",
+    )
 
     owner = models.ForeignKey(
         OpenIDUser,

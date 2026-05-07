@@ -189,7 +189,32 @@
     "editSchedule": "Edit Schedule",
     "viewSchedule": "View Schedule",
     "editScheduleDesc": "Manage events and coordinate the schedule",
-    "viewScheduleDesc": "View the event schedule"
+    "viewScheduleDesc": "View the event schedule",
+    "loadingCalls": "Loading calls...",
+    "errorLoadingCalls": "Failed to load calls.",
+    "coordinatorLink": "Go to Coordinator →"
+  },
+  "call": {
+    "sectionTitle": "Current Calls",
+    "sectionSubtitle": "Submit a proposal for a workshop, course, or talk.",
+    "daysLeft_one": "1 day left",
+    "daysLeft_other": "{{count}} days left",
+    "today": "Due today",
+    "overdue": "Overdue",
+    "executionPeriod": "Execution period",
+    "deadline": "Submission deadline",
+    "printDeadline": "Print deadline",
+    "responsible": "Responsible",
+    "submitNew": "Submit proposal",
+    "submitAnother": "+ Submit another proposal",
+    "myProposalsForCall": "My submissions for this call",
+    "otherProposals": "Other proposals",
+    "fieldLabel": "Call",
+    "fieldPlaceholder": "– No call assigned –",
+    "noActiveCalls": "No active calls at the moment.",
+    "callChangeNotAllowed": "The call can only be changed in draft status.",
+    "loadingCalls": "Loading calls...",
+    "open": "Open"
   },
   "indexView": {
     "accessDenied": "Access Denied",

@@ -358,6 +358,7 @@ export interface ProposalSummary {
   id: string
   title: string
   submission_type: string
+  call_id?: string | null
 }
 
 export async function fetchSyncTargets(): Promise<SyncTarget[]> {
@@ -941,6 +942,7 @@ export async function createProposal(formData?: {
   material_cost_eur?: string
   preferred_dates?: string
   has_building_access?: boolean
+  call_id?: string | null
 }): Promise<ProposalSummary> {
   const { data, error, response } = await client.POST('/api/v1/proposals/create', {
     body: formData || {},
@@ -1013,6 +1015,7 @@ export interface ProposalDetail {
   owner?: UserBasic | null
   editors?: UserBasic[]
   moderation_comment?: string
+  call_id?: string | null
 }
 
 export async function fetchProposal(proposalId: string): Promise<ProposalDetail> {
@@ -1050,6 +1053,7 @@ export async function updateProposal(proposalId: string, formData: {
   // owner_id removed - owner is set on creation and cannot be changed
   editor_ids?: string[]
   moderation_comment?: string
+  call_id?: string | null
 }): Promise<ProposalDetail> {
   const { data, error, response } = await client.PUT('/api/v1/proposals/{proposal_id}', {
     params: {
@@ -1461,5 +1465,34 @@ export async function fetchSiteConfig(): Promise<SiteConfig> {
   const response = await fetch('/api/v1/config')
   if (!response.ok) throw new Error('Failed to fetch site config')
   return response.json() as Promise<SiteConfig>
+}
+
+export interface CallOut {
+  id: string
+  title: string
+  description: string
+  execution_period_start: string  // ISO date string
+  execution_period_end: string    // ISO date string
+  submission_deadline: string     // ISO datetime string
+  print_deadline: string          // ISO date string
+  responsible_name: string
+  responsible_email: string
+  is_active: boolean
+}
+
+export async function fetchCalls(activeOnly = true): Promise<CallOut[]> {
+  const response = await fetch(`/api/v1/calls/?active_only=${activeOnly}`, {
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`Failed to fetch calls: ${response.statusText}`)
+  return response.json() as Promise<CallOut[]>
+}
+
+export async function fetchCall(callId: string): Promise<CallOut> {
+  const response = await fetch(`/api/v1/calls/${callId}`, {
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`Failed to fetch call: ${response.statusText}`)
+  return response.json() as Promise<CallOut>
 }
 

@@ -44,6 +44,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/calls/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Calls
+         * @description List calls. Defaults to active calls only.
+         */
+        get: operations["apiv1_routers_calls_list_calls"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calls/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Call
+         * @description Create a new call.
+         */
+        post: operations["apiv1_routers_calls_create_call"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calls/{call_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Call
+         * @description Get a single call by ID.
+         */
+        get: operations["apiv1_routers_calls_get_call"];
+        /**
+         * Update Call
+         * @description Update an existing call.
+         */
+        put: operations["apiv1_routers_calls_update_call"];
+        post?: never;
+        /**
+         * Delete Call
+         * @description Delete a call.
+         */
+        delete: operations["apiv1_routers_calls_delete_call"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/config": {
         parameters: {
             query?: never;
@@ -1104,6 +1172,80 @@ export interface components {
             /** Pricing Configuration Id */
             pricing_configuration_id?: string | null;
         };
+        /** CallCreateIn */
+        CallCreateIn: {
+            /**
+             * Description
+             * @default
+             */
+            description: string | null;
+            /** Execution Period End */
+            execution_period_end: string;
+            /** Execution Period Start */
+            execution_period_start: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean | null;
+            /** Print Deadline */
+            print_deadline: string;
+            /** Responsible Email */
+            responsible_email: string;
+            /** Responsible Name */
+            responsible_name: string;
+            /** Submission Deadline */
+            submission_deadline: string;
+            /** Title */
+            title: string;
+        };
+        /** CallOut */
+        CallOut: {
+            /** Description */
+            description: string;
+            /** Execution Period End */
+            execution_period_end: string;
+            /** Execution Period Start */
+            execution_period_start: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Print Deadline */
+            print_deadline: string;
+            /** Responsible Email */
+            responsible_email: string;
+            /** Responsible Name */
+            responsible_name: string;
+            /** Submission Deadline */
+            submission_deadline: string;
+            /** Title */
+            title: string;
+        };
+        /** CallUpdateIn */
+        CallUpdateIn: {
+            /** Description */
+            description?: string | null;
+            /** Execution Period End */
+            execution_period_end?: string | null;
+            /** Execution Period Start */
+            execution_period_start?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Print Deadline */
+            print_deadline?: string | null;
+            /** Responsible Email */
+            responsible_email?: string | null;
+            /** Responsible Name */
+            responsible_name?: string | null;
+            /** Submission Deadline */
+            submission_deadline?: string | null;
+            /** Title */
+            title?: string | null;
+        };
         /**
          * CreateCalculatedPricesIn
          * @description Creation mode for calculated prices: default configuration or manual empty values.
@@ -1383,6 +1525,8 @@ export interface components {
             abstract?: string | null;
             /** Area */
             area?: string | null;
+            /** Call Id */
+            call_id?: string | null;
             /** Description */
             description?: string | null;
             /** Duration Days */
@@ -1416,6 +1560,8 @@ export interface components {
             abstract: string;
             /** Area */
             area?: string | null;
+            /** Call Id */
+            call_id?: string | null;
             /** Description */
             description: string;
             /** Duration Days */
@@ -1535,6 +1681,8 @@ export interface components {
         };
         /** ProposalSummary */
         ProposalSummary: {
+            /** Call Id */
+            call_id?: string | null;
             /**
              * Id
              * Format: uuid
@@ -1582,6 +1730,8 @@ export interface components {
             abstract?: string | null;
             /** Area */
             area?: string | null;
+            /** Call Id */
+            call_id?: string | null;
             /** Description */
             description?: string | null;
             /** Duration Days */
@@ -1953,6 +2103,255 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calls_list_calls: {
+        parameters: {
+            query?: {
+                active_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallOut"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calls_create_call: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CallCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calls_get_call: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calls_update_call: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CallUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calls_delete_call: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

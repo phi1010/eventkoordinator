@@ -9,6 +9,7 @@ import {
     fetchSubmissionTypes,
     fetchProposalLanguages,
     fetchProposalAreas,
+    fetchCalls,
     searchUsers,
     fetchProposalEvents,
     fetchProposalTransitions,
@@ -23,6 +24,7 @@ import {
     type UserBasic,
     type ProposalEventSummary,
     type Series,
+    type CallOut,
 } from './api'
 import {useUnsavedChanges} from './useUnsavedChanges'
 import {usePermissions} from './usePermissions'
@@ -45,6 +47,7 @@ interface ProposalFormData {
     occurrence_count: number
     duration_days: number
     duration_time_per_day: string
+    call_id: string | null
 
     // Additional information section
     is_basic_course: boolean
@@ -78,6 +81,7 @@ const DEFAULT_FORM_DATA: ProposalFormData = {
     abstract: '',
     description: '',
     internal_notes: '',
+    call_id: null,
     occurrence_count: 1,
     duration_days: 1,
     duration_time_per_day: '00:00',
@@ -93,7 +97,7 @@ const DEFAULT_FORM_DATA: ProposalFormData = {
 }
 
 const TAB_FIELD_MAP: Record<number, Array<ChangedFieldName>> = {
-    0: ['title', 'submission_type', 'area', 'language', 'abstract', 'description'],
+    0: ['title', 'submission_type', 'area', 'language', 'abstract', 'description', 'call_id'],
     1: ['is_basic_course', 'max_participants', 'material_cost_eur'],
     2: ['duration_days', 'duration_time_per_day', 'occurrence_count', 'preferred_dates'],
     3: ['has_building_access', 'editors'],
@@ -123,6 +127,7 @@ function proposalToFormData(data: ProposalDetail): ProposalFormData {
         occurrence_count: data.occurrence_count,
         duration_days: data.duration_days,
         duration_time_per_day: data.duration_time_per_day,
+        call_id: data.call_id || null,
         is_basic_course: data.is_basic_course,
         max_participants: data.max_participants,
         material_cost_eur: data.material_cost_eur,
@@ -231,6 +236,7 @@ export function ProposalEditor({
     const [submissionTypes, setSubmissionTypes] = useState<LookupItem[]>([])
     const [proposalLanguages, setProposalLanguages] = useState<LookupItem[]>([])
     const [proposalAreas, setProposalAreas] = useState<LookupItem[]>([])
+    const [availableCalls, setAvailableCalls] = useState<CallOut[]>([])
     const [lookupLoading, setLookupLoading] = useState(true)
     const [owner, setOwner] = useState<UserBasic | null>(null)
     const [editors, setEditors] = useState<UserBasic[]>([])
@@ -479,14 +485,16 @@ export function ProposalEditor({
         const loadLookups = async () => {
             try {
                 setLookupLoading(true)
-                const [types, languages, areas] = await Promise.all([
+                const [types, languages, areas, calls] = await Promise.all([
                     fetchSubmissionTypes(),
                     fetchProposalLanguages(),
                     fetchProposalAreas(),
+                    fetchCalls(false),
                 ])
                 setSubmissionTypes(types)
                 setProposalLanguages(languages)
                 setProposalAreas(areas)
+                setAvailableCalls(calls)
             } catch (err) {
                 console.error('Failed to load lookup tables:', err)
             } finally {
@@ -602,6 +610,7 @@ export function ProposalEditor({
                 'occurrence_count',
                 'duration_days',
                 'duration_time_per_day',
+                'call_id',
                 'is_basic_course',
                 'max_participants',
                 'material_cost_eur',
@@ -852,6 +861,33 @@ export function ProposalEditor({
                                     {t('proposal.loading')}
                                 </p>
                             )}
+
+                            <div className={styles.formGroup}>
+                                <label htmlFor="proposal-call" className={styles.label}>
+                                    {t('call.fieldLabel')}
+                                    {changedFields.has('call_id') &&
+                                        <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+                                </label>
+                                <select
+                                    id="proposal-call"
+                                    value={formData.call_id ?? ''}
+                                    onChange={(e) => handleFieldChange('call_id', e.target.value || null)}
+                                    className={`${styles.input} ${changedFields.has('call_id') ? styles.changed : ''}`}
+                                    disabled={isSaving || lookupLoading || !canEdit || (currentStatus !== '' && currentStatus !== 'draft')}
+                                >
+                                    <option value="">{t('call.fieldPlaceholder')}</option>
+                                    {availableCalls.map((call) => (
+                                        <option key={String(call.id)} value={String(call.id)}>
+                                            {call.title}
+                                        </option>
+                                    ))}
+                                </select>
+                                {currentStatus !== 'draft' && currentStatus !== '' && (
+                                    <small className={styles.fieldHint}>
+                                        {t('call.callChangeNotAllowed')}
+                                    </small>
+                                )}
+                            </div>
 
                             <div className={styles.formGroup}>
                                 <label htmlFor="proposal-submission-type" className={styles.label}>

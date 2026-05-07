@@ -145,6 +145,7 @@ class ProposalSummary(Schema):
     id: uuid.UUID
     title: str
     submission_type: str
+    call_id: Optional[uuid.UUID] = None
 
 
 class ProposalChecklistItem(Schema):
@@ -171,6 +172,7 @@ class ProposalCreateIn(Schema):
     material_cost_eur: Optional[str] = None
     preferred_dates: Optional[str] = None
     has_building_access: Optional[bool] = None
+    call_id: Optional[uuid.UUID] = None
 
 
 class ProposalUpdateIn(Schema):
@@ -192,6 +194,44 @@ class ProposalUpdateIn(Schema):
     # owner_id removed - owner is set on creation and cannot be changed
     editor_ids: Optional[list[str]] = None
     moderation_comment: Optional[str] = None
+    call_id: Optional[uuid.UUID] = None
+
+
+class CallOut(Schema):
+    id: uuid.UUID
+    title: str
+    description: str
+    execution_period_start: str  # ISO date string
+    execution_period_end: str    # ISO date string
+    submission_deadline: str     # ISO datetime string
+    print_deadline: str          # ISO date string
+    responsible_name: str
+    responsible_email: str
+    is_active: bool
+
+
+class CallCreateIn(Schema):
+    title: str
+    description: Optional[str] = ""
+    execution_period_start: str
+    execution_period_end: str
+    submission_deadline: str
+    print_deadline: str
+    responsible_name: str
+    responsible_email: str
+    is_active: Optional[bool] = True
+
+
+class CallUpdateIn(Schema):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    execution_period_start: Optional[str] = None
+    execution_period_end: Optional[str] = None
+    submission_deadline: Optional[str] = None
+    print_deadline: Optional[str] = None
+    responsible_name: Optional[str] = None
+    responsible_email: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class ProposalDetail(Schema):
@@ -215,6 +255,7 @@ class ProposalDetail(Schema):
     owner: Optional[UserBasic] = None
     editors: list[UserBasic] = []
     moderation_comment: str = ""
+    call_id: Optional[uuid.UUID] = None
 
 
 class SpeakerOut(Schema):
