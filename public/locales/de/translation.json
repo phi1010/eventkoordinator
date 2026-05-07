@@ -96,7 +96,7 @@
     "occurrenceCountHint": "Z.B. 4 = monatlich bei einem Trimester-Ausschreibungsverfahren.",
     "additionalInformation": "Zusätzliche Informationen",
     "isBasicCourse": "Dieser Workshop ist ein Grundlagenkurs",
-    "isBasicCourseDesc": "Ein Grundlagenkurs ist ein Kurs, der für die Nutzung bestimmter Ressourcen obligatorisch ist, wie Maschinen oder Räume.",
+    "isBasicCourseDesc": "Ein Grundlagenkurs ist ein Kurs, der für die Nutzung bestimmter Maschinen, Räume, etc. verpflichtend ist.",
     "maxParticipants": "Max. Anzahl der Teilnehmer*innen",
     "materialCost": "Materialkosten pro Teilnehmer*in (EUR)",
     "preferredDates": "Bevorzugte Termine, Tageszeit und Alternativen",
