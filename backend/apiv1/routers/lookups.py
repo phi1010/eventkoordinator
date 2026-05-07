@@ -141,7 +141,7 @@ def search_users(request: HttpRequest, q: str = ""):
 @api_permission_required((apiv1, "view", SeriesModel))
 def search_series(request, q: str = ""):
     """Search series by name for autocomplete dropdowns."""
-    series_list = SeriesModel.objects.filter(name__icontains=q).order_by("name")[:20]
+    series_list = SeriesModel.objects.filter(name__icontains=q).order_by("name")
     return [model_series_to_schema(s) for s in series_list]
 
 

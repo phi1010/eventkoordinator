@@ -14,6 +14,7 @@ import {
     fetchProposalEvents,
     fetchProposalTransitions,
     createEvent,
+    createSeries,
     searchSeriesAutocomplete,
     uploadProposalImage,
     type ProposalDetail,
@@ -34,6 +35,8 @@ import {SpeakerListEditor} from './SpeakerListEditor'
 import {ProposalTransitionButtons} from './ProposalTransitionButtons'
 import {EventStatusBadge} from './EventStatusBadge'
 import styles from './EventGeneralEditor.module.css'
+
+const NEW_SERIES_SENTINEL = '__new__'
 
 interface ProposalFormData {
     // General section
@@ -468,8 +471,13 @@ export function ProposalEditor({
         try {
             setIsCreatingEvent(true)
             setCreateEventError(null)
+            let seriesId = selectedSeriesId
+            if (selectedSeriesId === NEW_SERIES_SENTINEL) {
+                const newSeries = await createSeries({name: formData.title})
+                seriesId = newSeries.id
+            }
             const newEvent = await createEvent({
-                seriesId: selectedSeriesId,
+                seriesId,
                 name: formData.title,
                 proposal_id: _proposalId,
             })
@@ -510,7 +518,34 @@ export function ProposalEditor({
     const canLinkEvents = Boolean(_proposalId && _proposalId.trim()) && currentStatus === 'accepted'
     const canShowLinkedEventCreateControls =
         canLinkEvents && !permissionsLoading && canView('series') && canAdd('event')
+    const matchingSeries =
+        canShowLinkedEventCreateControls && formData.title.trim() !== ''
+            ? seriesSearchResults.find(
+                  (s) => s.name.toLowerCase() === formData.title.toLowerCase()
+              ) ?? null
+            : null
+    const showCreateNewSeriesOption =
+        canShowLinkedEventCreateControls &&
+        !permissionsLoading &&
+        canAdd('series') &&
+        formData.title.trim() !== '' &&
+        !matchingSeries
     const {confirmNavigation} = useUnsavedChanges(hasChanges)
+
+    // Auto-select the matching or "create new" series option when it becomes available and nothing is selected
+    useEffect(() => {
+        if (matchingSeries) {
+            if (selectedSeriesId === '' || selectedSeriesId === NEW_SERIES_SENTINEL) {
+                setSelectedSeriesId(matchingSeries.id)
+            }
+        } else if (showCreateNewSeriesOption) {
+            if (selectedSeriesId === '') {
+                setSelectedSeriesId(NEW_SERIES_SENTINEL)
+            }
+        } else if (selectedSeriesId === NEW_SERIES_SENTINEL) {
+            setSelectedSeriesId('')
+        }
+    }, [matchingSeries?.id, showCreateNewSeriesOption])
 
     // Notify parent about unsaved changes state
     useEffect(() => {
@@ -1530,10 +1565,20 @@ export function ProposalEditor({
                                                             fontSize: '0.9rem'
                                                         }}
                                                     >
+                                                        {matchingSeries && (
+                                                            <option value={matchingSeries.id}>{matchingSeries.name}</option>
+                                                        )}
+                                                        {!matchingSeries && showCreateNewSeriesOption && (
+                                                            <option value={NEW_SERIES_SENTINEL}>
+                                                                {formData.title} {t('proposal.createNewSeriesHint')}
+                                                            </option>
+                                                        )}
                                                         <option value="">{t('proposal.selectSeries')}</option>
-                                                        {seriesSearchResults.map((s) => (
-                                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                                        ))}
+                                                        {seriesSearchResults
+                                                            .filter((s) => s.id !== matchingSeries?.id)
+                                                            .map((s) => (
+                                                                <option key={s.id} value={s.id}>{s.name}</option>
+                                                            ))}
                                                     </select>
                                                     <button
                                                         type="button"

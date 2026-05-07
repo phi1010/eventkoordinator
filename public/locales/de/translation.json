@@ -149,6 +149,7 @@
     "series": "Reihe",
     "filterSeries": "Reihe filtern...",
     "selectSeries": "-- Reihe auswählen --",
+    "createNewSeriesHint": "(neu erstellen)",
     "createNewEvent": "Neue Veranstaltung erstellen",
     "creating": "Erstelle...",
     "failedToCreateEvent": "Erstellen der Veranstaltung fehlgeschlagen",

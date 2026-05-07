@@ -153,6 +153,7 @@
     "series": "Series",
     "filterSeries": "Filter series...",
     "selectSeries": "-- Select series --",
+    "createNewSeriesHint": "(create new)",
     "createNewEvent": "Create New Event",
     "creating": "Creating...",
     "failedToCreateEvent": "Failed to create event",
