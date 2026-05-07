@@ -59,6 +59,12 @@ function CallCard({ call, myProposals, onSubmit, onOpenProposal, isSubmitting, t
   const days = isOverdue ? -1 : Math.min(...upcomingDays)
   const isUrgent = !isOverdue && days <= 7
 
+  const dateClass = (d: number) => {
+    if (d < 0) return styles.callMetaValueExpired
+    if (!isOverdue && d === days) return styles.callMetaValueNearest
+    return styles.callMetaValue
+  }
+
   const badgeClass = isOverdue
     ? styles.deadlineBadgeOverdue
     : isUrgent
@@ -70,8 +76,6 @@ function CallCard({ call, myProposals, onSubmit, onOpenProposal, isSubmitting, t
     : days === 0
       ? t('call.today')
       : t('call.daysLeft', { count: days })
-
-  const deadlineClass = isUrgent && !isOverdue ? styles.callMetaValueUrgent : styles.callMetaValue
 
   return (
     <div className={styles.callCard}>
@@ -95,13 +99,13 @@ function CallCard({ call, myProposals, onSubmit, onOpenProposal, isSubmitting, t
             </span>
             <span>
               {t('call.deadline')}:{' '}
-              <strong className={deadlineClass}>{formatDate(call.submission_deadline)}</strong>
+              <strong className={dateClass(d1)}>{formatDate(call.submission_deadline)}</strong>
             </span>
           </div>
           <div className={styles.callMetaRow}>
             <span>
               {t('call.printDeadline')}:{' '}
-              <strong className={styles.callMetaValue}>{formatDate(call.print_deadline)}</strong>
+              <strong className={dateClass(d2)}>{formatDate(call.print_deadline)}</strong>
             </span>
           </div>
           <div className={styles.callMetaRow}>

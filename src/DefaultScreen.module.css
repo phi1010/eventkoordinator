@@ -122,6 +122,16 @@
   font-weight: 600;
 }
 
+.callMetaValueNearest {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.callMetaValueExpired {
+  color: #9ca3af;
+  font-weight: 600;
+}
+
 .responsibleLink {
   color: #374151;
   font-weight: 600;
