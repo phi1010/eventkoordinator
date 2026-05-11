@@ -108,6 +108,34 @@
   text-align: right;
 }
 
+/* Filterable column header */
+.filterableHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.colFilter {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  width: auto !important;
+  min-width: 0 !important;
+  flex-shrink: 0;
+}
+
+.colFilterTrigger {
+  padding: 0.15rem 0.3rem !important;
+  color: #9ca3af;
+  border-radius: 4px;
+  width: auto !important;
+}
+
+.colFilterActive {
+  color: #2563eb !important;
+}
+
 .expandedSection {
   padding: 0.5rem 1rem 1rem;
 }

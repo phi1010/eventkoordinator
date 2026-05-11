@@ -1003,6 +1003,7 @@ export interface ProposalListItem {
   speakers: string[]
   occurrence_count: number
   accepted_event_count: number
+  call_title?: string | null
 }
 
 export async function fetchProposalsList(): Promise<ProposalListItem[]> {

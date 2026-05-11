@@ -237,7 +237,7 @@ _ACCEPTED_EVENT_STATUSES = {
 def list_proposals(request) -> list[ProposalListItem]:
     """List all proposals visible to the current user."""
     proposals = (
-        ProposalModel.objects.select_related("submission_type", "owner")
+        ProposalModel.objects.select_related("submission_type", "owner", "call")
         .prefetch_related("speakers", "events")
         .order_by("title")
     )
@@ -256,6 +256,7 @@ def list_proposals(request) -> list[ProposalListItem]:
                 speakers=[s.display_name for s in sorted(p.speakers.all(), key=lambda s: s.sort_order)],
                 occurrence_count=p.occurrence_count,
                 accepted_event_count=accepted,
+                call_title=p.call.title if p.call else None,
             )
         )
     return result

@@ -157,6 +157,7 @@ class ProposalListItem(Schema):
     speakers: list[str]
     occurrence_count: int
     accepted_event_count: int
+    call_title: Optional[str] = None
 
 
 class ProposalChecklistItem(Schema):

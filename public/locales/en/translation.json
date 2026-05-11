@@ -502,12 +502,14 @@
   "proposalDashboard": {
     "title": "Proposal Dashboard",
     "toggleColumns": "Show/hide columns",
+    "filterAll": "All",
     "proposalColumns": "Proposal",
     "eventColumns": "Events",
     "loadingEvents": "Loading events…",
     "noEvents": "No linked events",
     "columns": {
       "title": "Title",
+      "call": "Call",
       "creator": "Creator",
       "speakers": "Speakers",
       "type": "Type",

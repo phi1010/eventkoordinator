@@ -498,12 +498,14 @@
   "proposalDashboard": {
     "title": "Vorschlagsübersicht",
     "toggleColumns": "Spalten ein-/ausblenden",
+    "filterAll": "Alle",
     "proposalColumns": "Vorschlag",
     "eventColumns": "Veranstaltungen",
     "loadingEvents": "Veranstaltungen werden geladen…",
     "noEvents": "Keine verknüpften Veranstaltungen",
     "columns": {
       "title": "Titel",
+      "call": "Ausschreibung",
       "creator": "Ersteller",
       "speakers": "Referenten",
       "type": "Typ",

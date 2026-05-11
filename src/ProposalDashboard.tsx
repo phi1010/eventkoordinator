@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DataTable, type DataTableExpandedRows, type DataTableRowEvent } from 'primereact/datatable'
 import { Column } from 'primereact/column'
@@ -14,7 +14,7 @@ import {
 import { usePermissions } from './usePermissions'
 import styles from './ProposalDashboard.module.css'
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── display helpers ───────────────────────────────────────────────────────────
 
 function formatDatetimeSpan(startTime: string, endTime: string): string {
   const start = new Date(startTime)
@@ -33,15 +33,13 @@ function formatDatetimeSpan(startTime: string, endTime: string): string {
 function ProposalStatusBadge({ status }: { status: string }) {
   const { t } = useTranslation()
   const cls = `${styles.badge} ${styles[`badge--${status}`] ?? styles['badge--unknown']}`
-  const label = t(`proposal.statusValues.${status}`, status)
-  return <span className={cls}>{label}</span>
+  return <span className={cls}>{t(`proposal.statusValues.${status}`, status)}</span>
 }
 
 function EventStatusBadge({ status }: { status: string }) {
   const { t } = useTranslation()
   const cls = `${styles.badge} ${styles[`badge--event-${status}`] ?? styles['badge--unknown']}`
-  const label = t(`event.statusValues.${status}`, status)
-  return <span className={cls}>{label}</span>
+  return <span className={cls}>{t(`event.statusValues.${status}`, status)}</span>
 }
 
 function SyncStatusBadge({ platform, status }: { platform: string; status: string }) {
@@ -56,8 +54,6 @@ function SyncStatusBadge({ platform, status }: { platform: string; status: strin
   return <span className={cls}>{platform}</span>
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-
 function AgreedDatesBar({ accepted, intended }: { accepted: number; intended: number }) {
   const pct = intended > 0 ? Math.min((accepted / intended) * 100, 100) : 0
   return (
@@ -70,19 +66,60 @@ function AgreedDatesBar({ accepted, intended }: { accepted: number; intended: nu
   )
 }
 
-// ── column definitions ────────────────────────────────────────────────────────
+// ── filterable column header ──────────────────────────────────────────────────
+
+function FilterableHeader({ label, options, value, onChange }: {
+  label: string
+  options: { label: string; value: string }[]
+  value: string[]
+  onChange: (vals: string[]) => void
+}) {
+  const isActive = value.length > 0
+  return (
+    <div className={styles.filterableHeader}>
+      <span>{label}</span>
+      <div onClick={e => e.stopPropagation()}>
+        <MultiSelect
+          value={value}
+          options={options}
+          onChange={(e: MultiSelectChangeEvent) => onChange(e.value as string[])}
+          dropdownIcon={isActive ? 'pi pi-filter-fill' : 'pi pi-filter'}
+          pt={{
+            root: { className: styles.colFilter },
+            label: { style: { display: 'none' } },
+            trigger: { className: `${styles.colFilterTrigger} ${isActive ? styles.colFilterActive : ''}` },
+          }}
+          panelStyle={{ minWidth: '14rem' }}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── filter state ──────────────────────────────────────────────────────────────
+
+interface FilterValues {
+  callTitles: string[]
+  creators: string[]
+  types: string[]
+  statuses: string[]
+}
+
+const EMPTY_FILTERS: FilterValues = { callTitles: [], creators: [], types: [], statuses: [] }
+
+// ── column toggle config ──────────────────────────────────────────────────────
 
 type ColKey =
-  | 'creator' | 'speakers' | 'type' | 'status' | 'agreedDates'
+  | 'call' | 'creator' | 'speakers' | 'type' | 'status' | 'agreedDates'
   | 'eventDatetime' | 'eventStatus' | 'eventSync'
 
 const ALL_COLUMN_KEYS: ColKey[] = [
-  'creator', 'speakers', 'type', 'status', 'agreedDates',
+  'call', 'creator', 'speakers', 'type', 'status', 'agreedDates',
   'eventDatetime', 'eventStatus', 'eventSync',
 ]
 
 const DEFAULT_VISIBLE: Record<ColKey, boolean> = {
-  creator: true, speakers: true, type: true, status: true, agreedDates: true,
+  call: true, creator: true, speakers: true, type: true, status: true, agreedDates: true,
   eventDatetime: true, eventStatus: true, eventSync: true,
 }
 
@@ -106,8 +143,8 @@ export function ProposalDashboard() {
 
   const [expandedRows, setExpandedRows] = useState<DataTableExpandedRows>({})
   const [expandedData, setExpandedData] = useState<Record<string, ExpandedData>>({})
-
   const [visibleColumns, setVisibleColumns] = useState<Record<ColKey, boolean>>(DEFAULT_VISIBLE)
+  const [filterValues, setFilterValues] = useState<FilterValues>(EMPTY_FILTERS)
 
   useEffect(() => {
     fetchProposalsList()
@@ -116,22 +153,56 @@ export function ProposalDashboard() {
       .finally(() => setLoading(false))
   }, [])
 
+  // ── filter options & filtered rows ────────────────────────────────────────
+
+  const callOptions = useMemo(() =>
+    [...new Set(proposals.map(p => p.call_title).filter((v): v is string => !!v))].sort()
+      .map(v => ({ label: v, value: v })), [proposals])
+
+  const creatorOptions = useMemo(() =>
+    [...new Set(proposals.map(p => p.owner?.username).filter((v): v is string => !!v))].sort()
+      .map(v => ({ label: v, value: v })), [proposals])
+
+  const typeOptions = useMemo(() =>
+    [...new Set(proposals.map(p => p.submission_type).filter((v): v is string => !!v))].sort()
+      .map(v => ({ label: v, value: v })), [proposals])
+
+  const statusOptions = useMemo(() => [
+    { label: t('proposal.statusValues.draft'),     value: 'draft' },
+    { label: t('proposal.statusValues.submitted'), value: 'submitted' },
+    { label: t('proposal.statusValues.revise'),    value: 'revise' },
+    { label: t('proposal.statusValues.accepted'),  value: 'accepted' },
+    { label: t('proposal.statusValues.rejected'),  value: 'rejected' },
+  ], [t])
+
+  const filteredProposals = useMemo(() => proposals.filter(p => {
+    if (filterValues.callTitles.length > 0 && !filterValues.callTitles.includes(p.call_title ?? '')) return false
+    if (filterValues.creators.length > 0 && !filterValues.creators.includes(p.owner?.username ?? '')) return false
+    if (filterValues.types.length > 0 && !filterValues.types.includes(p.submission_type ?? '')) return false
+    if (filterValues.statuses.length > 0 && !filterValues.statuses.includes(p.status)) return false
+    return true
+  }), [proposals, filterValues])
+
+  // ── filter onChange handlers (stable references) ──────────────────────────
+
+  const setCallFilter    = useCallback((v: string[]) => setFilterValues(f => ({ ...f, callTitles: v })), [])
+  const setCreatorFilter = useCallback((v: string[]) => setFilterValues(f => ({ ...f, creators: v })), [])
+  const setTypeFilter    = useCallback((v: string[]) => setFilterValues(f => ({ ...f, types: v })), [])
+  const setStatusFilter  = useCallback((v: string[]) => setFilterValues(f => ({ ...f, statuses: v })), [])
+
+  // ── row expansion ─────────────────────────────────────────────────────────
+
   const onRowExpand = useCallback(async (e: DataTableRowEvent) => {
     const proposal = e.data as ProposalListItem
     if (expandedData[proposal.id]) return
 
     setExpandedData(prev => ({ ...prev, [proposal.id]: { events: [], syncStatus: {}, loading: true } }))
-
     try {
       const events = await fetchProposalEvents(proposal.id)
       const syncStatus: Record<string, EventSyncInfo> = {}
       await Promise.all(
         events.map(async ev => {
-          try {
-            syncStatus[ev.id] = await fetchSyncStatus(ev.series_id, ev.id)
-          } catch {
-            // sync status optional — ignore errors
-          }
+          try { syncStatus[ev.id] = await fetchSyncStatus(ev.series_id, ev.id) } catch { /* optional */ }
         })
       )
       setExpandedData(prev => ({ ...prev, [proposal.id]: { events, syncStatus, loading: false } }))
@@ -184,17 +255,18 @@ export function ProposalDashboard() {
     )
   }, [expandedData, visibleColumns, t])
 
-  // ── column toggle MultiSelect ───────────────────────────────────────────────
+  // ── column toggle ─────────────────────────────────────────────────────────
 
   const columnToggleOptions = [
     {
       label: t('proposalDashboard.proposalColumns'),
       items: [
-        { key: 'creator',        label: t('proposalDashboard.columns.creator') },
-        { key: 'speakers',       label: t('proposalDashboard.columns.speakers') },
-        { key: 'type',           label: t('proposalDashboard.columns.type') },
-        { key: 'status',         label: t('proposalDashboard.columns.status') },
-        { key: 'agreedDates',    label: t('proposalDashboard.columns.agreedDates') },
+        { key: 'call',        label: t('proposalDashboard.columns.call') },
+        { key: 'creator',     label: t('proposalDashboard.columns.creator') },
+        { key: 'speakers',    label: t('proposalDashboard.columns.speakers') },
+        { key: 'type',        label: t('proposalDashboard.columns.type') },
+        { key: 'status',      label: t('proposalDashboard.columns.status') },
+        { key: 'agreedDates', label: t('proposalDashboard.columns.agreedDates') },
       ],
     },
     {
@@ -260,7 +332,7 @@ export function ProposalDashboard() {
   return (
     <div className={styles.container}>
       <DataTable
-        value={proposals}
+        value={filteredProposals}
         loading={loading}
         expandedRows={expandedRows}
         onRowToggle={e => setExpandedRows(e.data as DataTableExpandedRows)}
@@ -274,17 +346,35 @@ export function ProposalDashboard() {
         dataKey="id"
       >
         <Column expander style={{ width: '3rem' }} />
-        <Column
-          field="title"
-          header={t('proposalDashboard.columns.title')}
-          sortable
-        />
+        <Column field="title" header={t('proposalDashboard.columns.title')} sortable />
+        {visibleColumns.call && (
+          <Column
+            field="call_title"
+            header={
+              <FilterableHeader
+                label={t('proposalDashboard.columns.call')}
+                options={callOptions}
+                value={filterValues.callTitles}
+                onChange={setCallFilter}
+              />
+            }
+            sortable
+            body={(p: ProposalListItem) => p.call_title ?? '—'}
+          />
+        )}
         {visibleColumns.creator && (
           <Column
-            header={t('proposalDashboard.columns.creator')}
-            body={(p: ProposalListItem) => p.owner?.username ?? '—'}
-            sortable
             sortField="owner.username"
+            header={
+              <FilterableHeader
+                label={t('proposalDashboard.columns.creator')}
+                options={creatorOptions}
+                value={filterValues.creators}
+                onChange={setCreatorFilter}
+              />
+            }
+            sortable
+            body={(p: ProposalListItem) => p.owner?.username ?? '—'}
           />
         )}
         {visibleColumns.speakers && (
@@ -292,9 +382,7 @@ export function ProposalDashboard() {
             header={t('proposalDashboard.columns.speakers')}
             body={(p: ProposalListItem) => (
               <div className={styles.speakerList}>
-                {p.speakers.length > 0
-                  ? p.speakers.map((s, i) => <div key={i}>{s}</div>)
-                  : '—'}
+                {p.speakers.length > 0 ? p.speakers.map((s, i) => <div key={i}>{s}</div>) : '—'}
               </div>
             )}
           />
@@ -302,7 +390,14 @@ export function ProposalDashboard() {
         {visibleColumns.type && (
           <Column
             field="submission_type"
-            header={t('proposalDashboard.columns.type')}
+            header={
+              <FilterableHeader
+                label={t('proposalDashboard.columns.type')}
+                options={typeOptions}
+                value={filterValues.types}
+                onChange={setTypeFilter}
+              />
+            }
             sortable
             body={(p: ProposalListItem) => p.submission_type ?? '—'}
           />
@@ -310,16 +405,23 @@ export function ProposalDashboard() {
         {visibleColumns.status && (
           <Column
             field="status"
-            header={t('proposalDashboard.columns.status')}
+            header={
+              <FilterableHeader
+                label={t('proposalDashboard.columns.status')}
+                options={statusOptions}
+                value={filterValues.statuses}
+                onChange={setStatusFilter}
+              />
+            }
             sortable
             body={(p: ProposalListItem) => <ProposalStatusBadge status={p.status} />}
           />
         )}
         {visibleColumns.agreedDates && (
           <Column
+            sortField="accepted_event_count"
             header={t('proposalDashboard.columns.agreedDates')}
             sortable
-            sortField="accepted_event_count"
             style={{ minWidth: '10rem' }}
             body={(p: ProposalListItem) => (
               <AgreedDatesBar accepted={p.accepted_event_count} intended={p.occurrence_count} />

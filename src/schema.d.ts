@@ -1712,6 +1712,8 @@ export interface components {
         ProposalListItem: {
             /** Accepted Event Count */
             accepted_event_count: number;
+            /** Call Title */
+            call_title?: string | null;
             /**
              * Id
              * Format: uuid
