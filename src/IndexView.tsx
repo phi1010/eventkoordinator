@@ -11,6 +11,7 @@ import { usePermissions, notifyAuthChanged } from './usePermissions'
 import i18n from './i18n'
 import styles from './IndexView.module.css'
 import {ProposalSelectionPanel} from "./ProposalSelectionPanel.tsx";
+import { ProposalDashboard } from './ProposalDashboard'
 
 export function IndexView() {
   const { t } = useTranslation()
@@ -59,6 +60,17 @@ export function IndexView() {
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
                   <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common.accessDenied')}</p>
                   <p>{t('common.noPermissionBrowseSeries')}</p>
+                </div>
+              )
+            }
+          />
+          <Route
+            path="/proposal-dashboard"
+            element={
+              permissionsLoading ? null : canBrowse('proposal') ? <ProposalDashboard /> : (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common.accessDenied')}</p>
+                  <p>{t('common.noPermissionBrowseProposal')}</p>
                 </div>
               )
             }

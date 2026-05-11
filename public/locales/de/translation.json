@@ -345,6 +345,7 @@
   "nav": {
     "coordinator": "Koordinator",
     "proposalEditor": "Vorschlagseditor",
+    "proposalDashboard": "Vorschlagsübersicht",
     "adminPanel": "Admin",
     "userMenu": "Benutzermenü",
     "loggedInAs": "Angemeldet als:",
@@ -493,5 +494,24 @@
     "organizer_slug": "Organizer-Slug",
     "description": "Beschreibung",
     "url": "URL"
+  },
+  "proposalDashboard": {
+    "title": "Vorschlagsübersicht",
+    "toggleColumns": "Spalten ein-/ausblenden",
+    "proposalColumns": "Vorschlag",
+    "eventColumns": "Veranstaltungen",
+    "loadingEvents": "Veranstaltungen werden geladen…",
+    "noEvents": "Keine verknüpften Veranstaltungen",
+    "columns": {
+      "title": "Titel",
+      "creator": "Ersteller",
+      "speakers": "Referenten",
+      "type": "Typ",
+      "status": "Status",
+      "agreedDates": "Vereinbarte Termine",
+      "eventDatetime": "Datum / Uhrzeit",
+      "eventStatus": "Status",
+      "eventSync": "Sync"
+    }
   }
 }

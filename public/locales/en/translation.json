@@ -400,6 +400,7 @@
   "nav": {
     "coordinator": "Coordinator",
     "proposalEditor": "Proposal Editor",
+    "proposalDashboard": "Proposal Dashboard",
     "adminPanel": "Admin",
     "userMenu": "User menu",
     "loggedInAs": "Logged in as:",
@@ -497,5 +498,24 @@
     "users.notFound": "User not found",
     "common.internalError": "An unexpected error occurred",
     "common.invalidRequest": "Invalid request"
+  },
+  "proposalDashboard": {
+    "title": "Proposal Dashboard",
+    "toggleColumns": "Show/hide columns",
+    "proposalColumns": "Proposal",
+    "eventColumns": "Events",
+    "loadingEvents": "Loading events…",
+    "noEvents": "No linked events",
+    "columns": {
+      "title": "Title",
+      "creator": "Creator",
+      "speakers": "Speakers",
+      "type": "Type",
+      "status": "Status",
+      "agreedDates": "Vereinbarte Termine",
+      "eventDatetime": "Date / Time",
+      "eventStatus": "Status",
+      "eventSync": "Sync"
+    }
   }
 }

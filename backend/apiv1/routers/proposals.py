@@ -37,6 +37,7 @@ from apiv1.schemas import (
     ProposalEventSummary,
     ProposalHistory,
     ProposalHistoryEntry,
+    ProposalListItem,
     ProposalSummary,
     ProposalTransitionOut,
     ProposalTransitions,
@@ -219,6 +220,45 @@ def create_proposal(
     except Exception as e:
         logger.error(f"Failed to create proposal: {str(e)}")
         return 400, ErrorOut(code="proposals.createFailed")
+
+
+_ACCEPTED_EVENT_STATUSES = {
+    EventModel.Status.CONFIRMED,
+    EventModel.Status.PUBLISHED,
+    EventModel.Status.COMPLETED,
+}
+
+
+@router.get(
+    "/",
+    response={200: list[ProposalListItem], 401: ErrorOut, 403: ErrorOut},
+)
+@api_permission_required((apiv1, "browse", ProposalModel))
+def list_proposals(request) -> list[ProposalListItem]:
+    """List all proposals visible to the current user."""
+    proposals = (
+        ProposalModel.objects.select_related("submission_type", "owner")
+        .prefetch_related("speakers", "events")
+        .order_by("title")
+    )
+    result = []
+    for p in proposals:
+        if not request.user.has_perm((apiv1, "view", ProposalModel), p):
+            continue
+        accepted = sum(1 for e in p.events.all() if e.status in _ACCEPTED_EVENT_STATUSES)
+        result.append(
+            ProposalListItem(
+                id=p.id,
+                title=p.title,
+                status=p.status,
+                submission_type=p.submission_type.code if p.submission_type else None,
+                owner=UserBasic(id=p.owner.pk, username=p.owner.username) if p.owner else None,
+                speakers=[s.display_name for s in sorted(p.speakers.all(), key=lambda s: s.sort_order)],
+                occurrence_count=p.occurrence_count,
+                accepted_event_count=accepted,
+            )
+        )
+    return result
 
 
 @router.get(

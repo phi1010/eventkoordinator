@@ -994,6 +994,25 @@ export interface SpeakerIn {
   biography?: string
 }
 
+export interface ProposalListItem {
+  id: string
+  title: string
+  status: string
+  submission_type?: string | null
+  owner?: UserBasic | null
+  speakers: string[]
+  occurrence_count: number
+  accepted_event_count: number
+}
+
+export async function fetchProposalsList(): Promise<ProposalListItem[]> {
+  const { data, error, response } = await client.GET('/api/v1/proposals/' as never, undefined as never)
+  if (error || !response.ok) {
+    throw new Error(`Failed to fetch proposals: ${response.statusText}`)
+  }
+  return (data as unknown as ProposalListItem[]) || []
+}
+
 export interface ProposalDetail {
   id: string
   title: string

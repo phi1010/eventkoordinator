@@ -148,6 +148,17 @@ class ProposalSummary(Schema):
     call_id: Optional[uuid.UUID] = None
 
 
+class ProposalListItem(Schema):
+    id: uuid.UUID
+    title: str
+    status: str
+    submission_type: Optional[str] = None
+    owner: Optional[UserBasic] = None
+    speakers: list[str]
+    occurrence_count: int
+    accepted_event_count: int
+
+
 class ProposalChecklistItem(Schema):
     status: Literal["ok", "error"]
 

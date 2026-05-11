@@ -134,6 +134,16 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
               {t('nav.proposalEditor')}
             </Link>
           )}
+          {canBrowse('proposal') && (
+            <Link
+              role="listitem"
+              className={location.pathname === '/proposal-dashboard' ? styles.activeNavLink : styles.navLink}
+              to="/proposal-dashboard"
+              aria-current={location.pathname === '/proposal-dashboard' ? 'page' : undefined}
+            >
+              {t('nav.proposalDashboard')}
+            </Link>
+          )}
           {permissions?.is_staff && (
             <a
               role="listitem"

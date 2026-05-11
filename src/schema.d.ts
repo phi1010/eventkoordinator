@@ -309,6 +309,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/proposals/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Proposals
+         * @description List all proposals visible to the current user.
+         */
+        get: operations["apiv1_routers_proposals_list_proposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/proposals/create": {
         parameters: {
             query?: never;
@@ -1688,6 +1708,27 @@ export interface components {
             /** Timestamp */
             timestamp: string;
         };
+        /** ProposalListItem */
+        ProposalListItem: {
+            /** Accepted Event Count */
+            accepted_event_count: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Occurrence Count */
+            occurrence_count: number;
+            owner?: components["schemas"]["UserBasic"] | null;
+            /** Speakers */
+            speakers: string[];
+            /** Status */
+            status: string;
+            /** Submission Type */
+            submission_type?: string | null;
+            /** Title */
+            title: string;
+        };
         /** ProposalSpeakerOut */
         ProposalSpeakerOut: {
             /**
@@ -2793,6 +2834,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LookupOut"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_proposals_list_proposals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalListItem"][];
                 };
             };
             /** @description Unauthorized */
