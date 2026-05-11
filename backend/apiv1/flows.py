@@ -17,19 +17,29 @@ from openid_user_management.models import OpenIDUser
 logger = logging.getLogger(__name__)
 
 
+_PROPOSAL_LABEL_IDS: dict[str, str] = {
+    "Submit proposal": "submit",
+    "Resubmit proposal": "resubmit",
+    "Request revision": "revise",
+    "Allow revision after rejection": "revise_after_rejection",
+    "Accept proposal": "accept",
+    "Reject proposal": "reject",
+}
+
+
 class ProposalTransition:
     """Data class representing an available or unavailable transition."""
 
     def __init__(
         self,
         action: str,
-        label: str,
+        label_id: str,
         target_status: str,
         enabled: bool,
         disable_reason: str | None = None,
     ):
         self.action = action
-        self.label = label
+        self.label_id = label_id
         self.target_status = target_status
         self.enabled = enabled
         self.disable_reason = disable_reason
@@ -37,7 +47,7 @@ class ProposalTransition:
     def to_dict(self):
         return {
             "action": self.action,
-            "label": self.label,
+            "label_id": self.label_id,
             "target_status": self.target_status,
             "enabled": self.enabled,
             "disable_reason": self.disable_reason,
@@ -208,6 +218,8 @@ class ProposalFlow:
         Evaluate a single transition to determine if it's allowed.
         Uses the FSM transition's conditions and permissions.
         """
+        label_id = _PROPOSAL_LABEL_IDS.get(transition.label, action)
+
         # Check conditions
         conditions_met = transition.conditions_met(self)
         if not conditions_met:
@@ -223,7 +235,7 @@ class ProposalFlow:
                 )
                 return ProposalTransition(
                     action=action,
-                    label=transition.label,
+                    label_id=label_id,
                     target_status=transition.target,
                     enabled=False,
                     disable_reason=f"Incomplete proposal: {missing_str}",
@@ -231,7 +243,7 @@ class ProposalFlow:
             else:
                 return ProposalTransition(
                     action=action,
-                    label=transition.label,
+                    label_id=label_id,
                     target_status=transition.target,
                     enabled=False,
                     disable_reason="Conditions not met for this transition",
@@ -242,16 +254,15 @@ class ProposalFlow:
         if not has_perm:
             return ProposalTransition(
                 action=action,
-                label=transition.label,
+                label_id=label_id,
                 target_status=transition.target,
                 enabled=False,
                 disable_reason="Insufficient permissions for this action",
             )
 
-        # All checks passed
         return ProposalTransition(
             action=action,
-            label=transition.label,
+            label_id=label_id,
             target_status=transition.target,
             enabled=True,
             disable_reason=None,
@@ -288,13 +299,13 @@ class EventTransition:
     def __init__(
         self,
         action: str,
-        label: str,
+        label_id: str,
         target_status: str,
         enabled: bool,
         disable_reason: str | None = None,
     ):
         self.action = action
-        self.label = label
+        self.label_id = label_id
         self.target_status = target_status
         self.enabled = enabled
         self.disable_reason = disable_reason
@@ -302,7 +313,7 @@ class EventTransition:
     def to_dict(self):
         return {
             "action": self.action,
-            "label": self.label,
+            "label_id": self.label_id,
             "target_status": self.target_status,
             "enabled": self.enabled,
             "disable_reason": self.disable_reason,
@@ -559,7 +570,7 @@ class EventFlow:
                 disable_reason = "Conditions not met for this transition"
             return EventTransition(
                 action=action,
-                label=transition.label,
+                label_id=action,
                 target_status=transition.target,
                 enabled=False,
                 disable_reason=disable_reason,
@@ -569,7 +580,7 @@ class EventFlow:
         if not has_perm:
             return EventTransition(
                 action=action,
-                label=transition.label,
+                label_id=action,
                 target_status=transition.target,
                 enabled=False,
                 disable_reason="Insufficient permissions for this action",
@@ -577,7 +588,7 @@ class EventFlow:
 
         return EventTransition(
             action=action,
-            label=transition.label,
+            label_id=action,
             target_status=transition.target,
             enabled=True,
             disable_reason=None,

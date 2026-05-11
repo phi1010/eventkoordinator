@@ -51,6 +51,14 @@
       "rejected": "Rejected",
       "unknown": "Unknown"
     },
+    "transition": {
+      "submit": "Submit Proposal",
+      "resubmit": "Resubmit Proposal",
+      "revise": "Request Revision",
+      "revise_after_rejection": "Allow Revision After Rejection",
+      "accept": "Accept Proposal",
+      "reject": "Reject Proposal"
+    },
     "checklist": {
       "title": "Title (max 30 characters)",
       "abstract": "Abstract (50–250 characters)",
@@ -64,7 +72,7 @@
       "workshopArea": "Workshop area selected",
       "atLeastOneSpeaker": "At least one speaker added",
       "speakersHaveBio": "All speakers have a biography",
-      "photo": "Proposal image uploaded (min. 1080×1440 px)",
+      "photo": "Proposal image uploaded (min. 1440×1080 px)",
       "submissionDeadline": "Within submission deadline"
     },
     "editorTitle": "Proposal Editor",
@@ -72,7 +80,7 @@
     "generalInformation": "General Information",
     "title": "Title (max 30 characters)",
     "proposalImage": "Proposal image",
-    "proposalImageHelp": "Upload a JPG or PNG image up to 10 MB for this proposal. Minimum resolution: 1080×1440 pixels.",
+    "proposalImageHelp": "Upload a JPG or PNG image up to 10 MB for this proposal. Minimum resolution: 1440×1080 pixels.",
     "loading": "Loading...",
     "submissionType": "Submission Type",
     "submissionTypeHint": "Workshop: Fixed booking, fee required, providers receive a remuneration; Open offer: No booking or fee required; takes place in the main building.",
@@ -340,6 +348,16 @@
     "internalTraining": "Internal Training (EUR)",
     "saveCalculatedPrices": "Save Calculated Prices",
     "deleteCalculatedPricesBtn": "Delete Calculated Prices",
+    "transition": {
+      "submit": "Submit Event",
+      "approve": "Approve Event",
+      "reject": "Reject Event",
+      "publish": "Publish Event",
+      "confirm": "Confirm Event",
+      "cancel": "Cancel Event",
+      "complete": "Complete Event",
+      "archive": "Archive Event"
+    },
     "syncSynchronization": "Synchronization Status",
     "loadingSyncStatus": "Loading sync status...",
     "failedToLoadSyncStatus": "Failed to fetch sync status",
@@ -455,7 +473,7 @@
     "proposals.invalidLanguage": "Invalid language",
     "proposals.invalidEditorId": "Invalid editor ID",
     "proposals.invalidImage": "Invalid proposal image",
-    "proposals.imageTooSmall": "The image resolution is too low (minimum 1080×1440 px)",
+    "proposals.imageTooSmall": "The image resolution is too low (minimum 1440×1080 px)",
     "proposals.unknownTransition": "This action is not available",
     "proposals.transitionNotAllowed": "This action cannot be performed right now",
     "proposals.transitionFailed": "Failed to execute the requested action",

@@ -834,7 +834,7 @@ export async function fetchProposalHistory(proposalId: string, days: number = 7)
 
 export interface ProposalTransition {
   action: string  // 'submit', 'accept', 'reject', 'revise'
-  label: string  // human-readable label
+  label_id: string  // stable i18n key, e.g. 'submit', 'resubmit', 'revise_after_rejection'
   target_status: string  // target status
   enabled: boolean  // whether the transition is currently allowed
   disable_reason?: string | null  // reason if disabled
@@ -1269,7 +1269,7 @@ export interface ProposalEventSummary {
 
 export interface EventTransition {
   action: string
-  label: string
+  label_id: string  // stable i18n key, matches action name
   target_status: string
   enabled: boolean
   disable_reason?: string | null

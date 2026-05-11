@@ -51,6 +51,14 @@
       "rejected": "Abgelehnt",
       "unknown": "Unbekannt"
     },
+    "transition": {
+      "submit": "Vorschlag einreichen",
+      "resubmit": "Vorschlag erneut einreichen",
+      "revise": "Überarbeitung anfordern",
+      "revise_after_rejection": "Überarbeitung nach Ablehnung erlauben",
+      "accept": "Vorschlag annehmen",
+      "reject": "Vorschlag ablehnen"
+    },
     "checklist": {
       "title": "Titel (max. 30 Zeichen)",
       "abstract": "Zusammenfassung (50–250 Zeichen)",
@@ -64,7 +72,7 @@
       "workshopArea": "Workshop-Bereich ausgewählt",
       "atLeastOneSpeaker": "Mindestens ein Referent hinzugefügt",
       "speakersHaveBio": "Alle Referenten haben eine Biografie",
-      "photo": "Vorschlagsbild hochgeladen (min. 1080×1440 Px)",
+      "photo": "Vorschlagsbild hochgeladen (min. 1440×1080 Px)",
       "submissionDeadline": "Innerhalb der Einreichungsfrist"
     },
     "editorTitle": "Vorschlagseditor",
@@ -72,7 +80,7 @@
     "generalInformation": "Allgemeine Informationen",
     "title": "Titel (max 30 Zeichen)",
     "proposalImage": "Vorschlagsbild",
-    "proposalImageHelp": "Laden Sie ein JPG- oder PNG-Bild bis zu 10 MB für diesen Vorschlag hoch. Mindestauflösung: 1080×1440 Pixel.",
+    "proposalImageHelp": "Laden Sie ein JPG- oder PNG-Bild bis zu 10 MB für diesen Vorschlag hoch. Mindestauflösung: 1440×1080 Pixel.",
     "loading": "Laden...",
     "submissionType": "Einreichungstyp",
     "submissionTypeHint": "Workshop: Feste Buchung, Gebühr erforderlich, Anbieter erhalten eine Vergütung; Offenes Angebot: Keine Buchung oder Gebühr erforderlich; findet im Hauptgebäude statt.",
@@ -297,7 +305,7 @@
     "proposals.invalidLanguage": "Ungültige Sprache",
     "proposals.invalidEditorId": "Ungültige Redakteur-ID",
     "proposals.invalidImage": "Ungültiges Vorschlagsbild",
-    "proposals.imageTooSmall": "Die Bildauflösung ist zu gering (mindestens 1080×1440 Px erforderlich)",
+    "proposals.imageTooSmall": "Die Bildauflösung ist zu gering (mindestens 1440×1080 Px erforderlich)",
     "proposals.unknownTransition": "Diese Aktion ist nicht verfügbar",
     "proposals.transitionNotAllowed": "Diese Aktion kann gerade nicht ausgeführt werden",
     "proposals.transitionFailed": "Die angeforderte Aktion konnte nicht ausgeführt werden",
@@ -428,6 +436,16 @@
     "internalTraining": "Interne Fortbildung (EUR)",
     "saveCalculatedPrices": "Berechnete Preise speichern",
     "deleteCalculatedPricesBtn": "Berechnete Preise löschen",
+    "transition": {
+      "submit": "Veranstaltung einreichen",
+      "approve": "Veranstaltung genehmigen",
+      "reject": "Veranstaltung ablehnen",
+      "publish": "Veranstaltung veröffentlichen",
+      "confirm": "Veranstaltung bestätigen",
+      "cancel": "Veranstaltung absagen",
+      "complete": "Veranstaltung abschließen",
+      "archive": "Veranstaltung archivieren"
+    },
     "syncSynchronization": "Synchronisierungsstatus",
     "loadingSyncStatus": "Lade Synchronisierungsstatus...",
     "failedToLoadSyncStatus": "Synchronisierungsstatus konnte nicht geladen werden",

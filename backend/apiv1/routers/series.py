@@ -297,7 +297,7 @@ def get_event_transitions(
         transitions=[
             EventTransitionOut(
                 action=t.action,
-                label=t.label,
+                label_id=t.label_id,
                 target_status=t.target_status,
                 enabled=t.enabled,
                 disable_reason=t.disable_reason,

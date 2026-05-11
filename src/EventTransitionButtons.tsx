@@ -125,7 +125,7 @@ export function EventTransitionButtons({
               title={t_item.disable_reason ?? undefined}
               aria-busy={executing === t_item.action}
             >
-              {executing === t_item.action ? t('event.processing') : t_item.label}
+              {executing === t_item.action ? t('event.processing') : t(`event.transition.${t_item.label_id}`, { defaultValue: t_item.label_id })}
             </button>
           ))}
         </div>

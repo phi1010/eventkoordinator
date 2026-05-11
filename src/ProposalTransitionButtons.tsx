@@ -136,7 +136,7 @@ export function ProposalTransitionButtons({
             }}
             title={transition.disable_reason || undefined}
           >
-            {executing === transition.action ? t('common.processing') : transition.label}
+            {executing === transition.action ? t('common.processing') : t(`proposal.transition.${transition.label_id}`, { defaultValue: transition.label_id })}
           </button>
         ))}
       </div>

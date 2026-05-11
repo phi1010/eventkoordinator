@@ -350,7 +350,7 @@ class ProposalTransitionOut(Schema):
     """Information about a single available or unavailable transition."""
 
     action: str  # 'submit', 'accept', 'reject', 'revise'
-    label: str  # human-readable label
+    label_id: str  # stable i18n key, e.g. 'submit', 'resubmit', 'revise_after_rejection'
     target_status: str  # target status
     enabled: bool  # whether the transition is currently allowed
     disable_reason: Optional[str] = None  # reason if disabled
@@ -380,7 +380,7 @@ class EventTransitionOut(Schema):
     """Information about a single available or unavailable event transition."""
 
     action: str
-    label: str
+    label_id: str  # stable i18n key, matches action name
     target_status: str
     enabled: bool
     disable_reason: Optional[str] = None

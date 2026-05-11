@@ -283,10 +283,10 @@ def upload_proposal_photo(
         from PIL import Image as PilImage
         img = PilImage.open(file)
         width, height = img.size
-        if width < 1080 or height < 1440:
+        if width < 1440 or height < 1080:
             return 400, ErrorOut(
                 code="proposals.imageTooSmall",
-                detail=f"Image must be at least 1080×1440 pixels, got {width}×{height}.",
+                detail=f"Image must be at least 1440×1080 pixels (landscape), got {width}×{height}.",
             )
     except Exception:
         return 400, ErrorOut(code="proposals.invalidImage", detail="Could not read image dimensions.")
@@ -592,7 +592,7 @@ def get_proposal_transitions(
     transitions_data = [
         ProposalTransitionOut(
             action=t.action,
-            label=t.label,
+            label_id=t.label_id,
             target_status=t.target_status,
             enabled=t.enabled,
             disable_reason=t.disable_reason,
