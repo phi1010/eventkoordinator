@@ -17,6 +17,15 @@
   font-weight: 600;
 }
 
+.tableLink {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.tableLink:hover {
+  text-decoration: underline;
+}
+
 .speakerList {
   display: flex;
   flex-direction: column;

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { DataTable, type DataTableExpandedRows, type DataTableRowEvent } from 'primereact/datatable'
 import { Column } from 'primereact/column'
@@ -225,7 +226,11 @@ export function ProposalDashboard() {
           {visibleColumns.eventDatetime && (
             <Column
               header={t('proposalDashboard.columns.eventDatetime')}
-              body={(ev: ProposalEventSummary) => formatDatetimeSpan(ev.startTime, ev.endTime)}
+              body={(ev: ProposalEventSummary) => (
+                <Link to={`/proposal/${data.id}/event/${ev.id}`} className={styles.tableLink}>
+                  {formatDatetimeSpan(ev.startTime, ev.endTime)}
+                </Link>
+              )}
             />
           )}
           {visibleColumns.eventStatus && (
@@ -346,7 +351,14 @@ export function ProposalDashboard() {
         dataKey="id"
       >
         <Column expander style={{ width: '3rem' }} />
-        <Column field="title" header={t('proposalDashboard.columns.title')} sortable />
+        <Column
+          field="title"
+          header={t('proposalDashboard.columns.title')}
+          sortable
+          body={(p: ProposalListItem) => (
+            <Link to={`/proposal-editor/${p.id}`} className={styles.tableLink}>{p.title}</Link>
+          )}
+        />
         {visibleColumns.call && (
           <Column
             field="call_title"
