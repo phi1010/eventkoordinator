@@ -130,6 +130,8 @@ export function EventEditor({
     const [canAddCalculatedPrices, setCanAddCalculatedPrices] = useState(false)
     const [canChangeCalculatedPrices, setCanChangeCalculatedPrices] = useState(false)
     const [canDeleteCalculatedPrices, setCanDeleteCalculatedPrices] = useState(false)
+    const [canViewCalculatedPricesSection, setCanViewCalculatedPricesSection] = useState(true)
+    const [canViewSyncSection, setCanViewSyncSection] = useState(true)
 
     // Calendar reference state – calendarRange is driven solely by WeekViewCombined's onWeekRangeChange
     const [calendarRange, setCalendarRange] = useState<{ startUtc: string; endUtc: string } | null>(null)
@@ -255,6 +257,12 @@ export function EventEditor({
         const loadSyncData = async () => {
             try {
                 setLoading(true)
+                const permissions = await getUserPermissions()
+                const canView = permissions.is_superuser || permissions.permissions.includes('viewrestricted_syncbasetarget')
+                if (!canView) {
+                    setCanViewSyncSection(false)
+                    return
+                }
                 const [statusData, targetsData] = await Promise.all([
                     fetchSyncStatus(series.id, event.id),
                     fetchSyncTargets().catch(() => [] as SyncTarget[]),
@@ -302,7 +310,12 @@ export function EventEditor({
 
                 const permissions = await getUserPermissions()
                 const canAdd = permissions.is_superuser || permissions.permissions.includes('add_calculatedprices')
+                const canViewGlobal = permissions.is_superuser || permissions.permissions.includes('view_calculatedprices')
                 if (!isMounted) {
+                    return
+                }
+                if (!canAdd && !canViewGlobal) {
+                    setCanViewCalculatedPricesSection(false)
                     return
                 }
                 setCanAddCalculatedPrices(canAdd)
@@ -848,7 +861,7 @@ export function EventEditor({
                     onTransitionSuccess={(updatedEvent) => onEventUpdate(updatedEvent)}
                 />
             </div>
-            <div className={styles.calculatedPricesSection}>
+            {canViewCalculatedPricesSection && <div className={styles.calculatedPricesSection}>
                 <h3>{t('event.calculatedPrices')}</h3>
 
                 {calculatedPricesLoading && <p className={styles.loading}>{t('event.loadingCalculatedPrices')}</p>}
@@ -1001,11 +1014,11 @@ export function EventEditor({
                         </div>
                     </div>
                 )}
-            </div>
+            </div>}
 
 
             {/* Sync Section */}
-            <div className={styles.syncSection}>
+            {canViewSyncSection && <div className={styles.syncSection}>
                 <h3>{t('event.syncSynchronization')}</h3>
 
                 {loading && <p className={styles.loading}>{t('event.loadingSyncStatus')}</p>}
@@ -1134,13 +1147,13 @@ export function EventEditor({
                         })}
                     </div>
                 )}
-            </div>
+            </div>}
 
-            <div className={styles.footer}>
+            {canViewSyncSection && <div className={styles.footer}>
                 <p className={styles.note}>
                     {t('event.syncNote')}
                 </p>
-            </div>
+            </div>}
         </div>
     )
 }
