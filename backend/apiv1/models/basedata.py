@@ -593,7 +593,16 @@ def check_proposal_required_fields(proposal: Proposal) -> dict[Any, Any]:
     ).exists()
     checklist["speakersHaveBio"] = {"status": "error" if empty_bio_present else "ok"}
 
-    checklist["photo"] = {"status": "ok" if proposal.photo else "error"}
+    if proposal.photo:
+        try:
+            from PIL import Image as PilImage
+            with PilImage.open(proposal.photo) as img:
+                w, h = img.size
+            checklist["photo"] = {"status": "ok" if w >= 1440 and h >= 1080 else "error"}
+        except Exception:
+            checklist["photo"] = {"status": "error"}
+    else:
+        checklist["photo"] = {"status": "error"}
     if proposal.status == Proposal.Status.DRAFT:
         if (proposal.call is not None) and (datetime.now().date() <= proposal.call.submission_deadline):
             checklist["submissionDeadline"] = {"status": "ok"}

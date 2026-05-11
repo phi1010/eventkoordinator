@@ -7,11 +7,11 @@ Handles endpoints for managing event series and individual events within them.
 from datetime import datetime, timedelta
 from uuid import uuid4
 
+import inspect
+
 import django.utils.timezone
-import pydot
-from django.http import HttpResponse
 from ninja import Router
-from viewflow.fsm import chart
+from viewflow.fsm.base import TransitionMethod
 
 import apiv1
 from apiv1.api_utils import (
@@ -33,8 +33,10 @@ from apiv1.schemas import (
     CreateSeriesIn,
     ErrorOut,
     Event,
+    EventFlowDiagram,
     EventTransitionOut,
     EventTransitions,
+    FlowEdge,
     Series,
     SeriesListItem,
     UpdateEventIn,
@@ -44,14 +46,25 @@ from apiv1.schemas import (
 router = Router()
 
 
-@router.get("/event-flow-chart", response={200: bytes, 401: ErrorOut, 403: ErrorOut})
-def event_flow_chart_image(request):
-    """Return an SVG diagram of the event lifecycle state machine."""
-    dot_graph = chart(EventFlow.status)
-    graphs = pydot.graph_from_dot_data(dot_graph)
-    graph = graphs[0]
-    svg_data = graph.create(format="svg")
-    return HttpResponse(svg_data, content_type="image/svg+xml")
+@router.get("/event-flow-diagram", response={200: EventFlowDiagram})
+def event_flow_diagram(request):
+    """Return the event FSM structure as a Pydantic model for frontend diagram rendering."""
+    nodes: set[str] = set()
+    edges: list[FlowEdge] = []
+    for action, method in (
+        (name, obj)
+        for name, obj in inspect.getmembers(EventFlow)
+        if isinstance(obj, TransitionMethod)
+    ):
+        for transition in method.get_transitions():
+            sources = transition.source if isinstance(transition.source, list) else [transition.source]
+            target = transition.target.value
+            for source in sources:
+                source_val = source.value
+                nodes.add(source_val)
+                nodes.add(target)
+                edges.append(FlowEdge(source=source_val, target=target, label_id=action))
+    return EventFlowDiagram(nodes=sorted(nodes), edges=edges)
 
 
 @router.get("", response={200: list[SeriesListItem], 401: ErrorOut, 403: ErrorOut})

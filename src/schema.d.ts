@@ -682,7 +682,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/series/event-flow-chart": {
+    "/api/v1/series/event-flow-diagram": {
         parameters: {
             query?: never;
             header?: never;
@@ -690,10 +690,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Event Flow Chart Image
-         * @description Return an SVG diagram of the event lifecycle state machine.
+         * Event Flow Diagram
+         * @description Return the event FSM structure as a Pydantic model for frontend diagram rendering.
          */
-        get: operations["apiv1_routers_series_event_flow_chart_image"];
+        get: operations["apiv1_routers_series_event_flow_diagram"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1330,6 +1330,16 @@ export interface components {
              */
             useFullDays: boolean;
         };
+        /**
+         * EventFlowDiagram
+         * @description Static structure of the event FSM for frontend diagram rendering.
+         */
+        EventFlowDiagram: {
+            /** Edges */
+            edges: components["schemas"]["FlowEdge"][];
+            /** Nodes */
+            nodes: string[];
+        };
         /** EventSyncInfo */
         EventSyncInfo: {
             /**
@@ -1356,8 +1366,8 @@ export interface components {
             disable_reason?: string | null;
             /** Enabled */
             enabled: boolean;
-            /** Label */
-            label: string;
+            /** Label Id */
+            label_id: string;
             /** Target Status */
             target_status: string;
         };
@@ -1388,6 +1398,15 @@ export interface components {
             startUtc: string;
             /** Title */
             title: string;
+        };
+        /** FlowEdge */
+        FlowEdge: {
+            /** Label Id */
+            label_id: string;
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
         };
         /** LookupOut */
         LookupOut: {
@@ -1707,8 +1726,8 @@ export interface components {
             disable_reason?: string | null;
             /** Enabled */
             enabled: boolean;
-            /** Label */
-            label: string;
+            /** Label Id */
+            label_id: string;
             /** Target Status */
             target_status: string;
         };
@@ -3958,7 +3977,7 @@ export interface operations {
             };
         };
     };
-    apiv1_routers_series_event_flow_chart_image: {
+    apiv1_routers_series_event_flow_diagram: {
         parameters: {
             query?: never;
             header?: never;
@@ -3973,25 +3992,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": string;
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
+                    "application/json": components["schemas"]["EventFlowDiagram"];
                 };
             };
         };

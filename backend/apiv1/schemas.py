@@ -394,6 +394,19 @@ class EventTransitions(Schema):
     transitions: list[EventTransitionOut]
 
 
+class FlowEdge(Schema):
+    source: str
+    target: str
+    label_id: str
+
+
+class EventFlowDiagram(Schema):
+    """Static structure of the event FSM for frontend diagram rendering."""
+
+    nodes: list[str]
+    edges: list[FlowEdge]
+
+
 class CreateCalculatedPricesIn(Schema):
     """Creation mode for calculated prices: default configuration or manual empty values."""
 

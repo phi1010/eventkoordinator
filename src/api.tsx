@@ -1315,16 +1315,25 @@ export async function executeEventTransition(seriesId: string, eventId: string, 
   return toFrontendEvent(data as unknown as ApiEvent)
 }
 
-export async function fetchEventFlowChartSvg(): Promise<string> {
-  const response = await fetch('/api/v1/series/event-flow-chart', {
+export interface FlowEdge {
+  source: string
+  target: string
+  label_id: string
+}
+
+export interface EventFlowDiagram {
+  nodes: string[]
+  edges: FlowEdge[]
+}
+
+export async function fetchEventFlowDiagram(): Promise<EventFlowDiagram> {
+  const response = await fetch('/api/v1/series/event-flow-diagram', {
     credentials: 'include',
   })
-
   if (!response.ok) {
-    throw new Error(`Failed to fetch event flow chart: ${response.statusText}`)
+    throw new Error(`Failed to fetch event flow diagram: ${response.statusText}`)
   }
-
-  return response.text()
+  return response.json() as Promise<EventFlowDiagram>
 }
 
 export async function fetchProposalEvents(proposalId: string): Promise<ProposalEventSummary[]> {

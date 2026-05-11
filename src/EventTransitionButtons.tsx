@@ -1,14 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import mermaid from 'mermaid'
 import {
   fetchEventTransitions,
   executeEventTransition,
-  fetchEventFlowChartSvg,
+  fetchEventFlowDiagram,
+  type EventFlowDiagram,
   type EventTransition,
   type Event,
 } from './api'
 import { EventStatusBadge } from './EventStatusBadge'
 import styles from './EventTransitionButtons.module.css'
+
+mermaid.initialize({ startOnLoad: false, theme: 'default' })
+
+let diagramCounter = 0
 
 interface EventTransitionButtonsProps {
   seriesId: string
@@ -32,11 +38,12 @@ export function EventTransitionButtons({
   const [executing, setExecuting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Flow chart state
   const [flowChartOpen, setFlowChartOpen] = useState(false)
-  const [flowChartSvg, setFlowChartSvg] = useState<string | null>(null)
+  const [flowDiagram, setFlowDiagram] = useState<EventFlowDiagram | null>(null)
   const [flowChartLoading, setFlowChartLoading] = useState(false)
   const [flowChartError, setFlowChartError] = useState<string | null>(null)
+  const [renderedSvg, setRenderedSvg] = useState<string | null>(null)
+  const renderingRef = useRef(false)
 
   const loadTransitions = async () => {
     try {
@@ -59,10 +66,63 @@ export function EventTransitionButtons({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seriesId, eventId])
 
-  // Keep local status in sync if parent passes a new value
   useEffect(() => {
     setStatus(currentStatus)
   }, [currentStatus])
+
+  // Re-render the diagram whenever the status or diagram data changes
+  useEffect(() => {
+    if (!flowDiagram || !flowChartOpen) return
+    void renderMermaid(flowDiagram, status)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, flowDiagram, flowChartOpen])
+
+  const buildMermaidDefinition = (diagram: EventFlowDiagram, activeStatus: string): string => {
+    const lines: string[] = ['flowchart TD']
+    for (const node of diagram.nodes) {
+      const label = t(`event.statusValues.${node}`, { defaultValue: node })
+      const cls = node === activeStatus ? ':::activeState' : ''
+      lines.push(`    ${node}["${label}"]${cls}`)
+    }
+    for (const edge of diagram.edges) {
+      const label = t(`event.transition.${edge.label_id}`, { defaultValue: edge.label_id })
+      lines.push(`    ${edge.source} -->|"${label}"| ${edge.target}`)
+    }
+    lines.push('    classDef activeState fill:#1565c0,stroke:#0d47a1,color:#fff,font-weight:bold')
+    return lines.join('\n')
+  }
+
+  const renderMermaid = async (diagram: EventFlowDiagram, activeStatus: string) => {
+    if (renderingRef.current) return
+    renderingRef.current = true
+    try {
+      const definition = buildMermaidDefinition(diagram, activeStatus)
+      const id = `event-flow-${++diagramCounter}`
+      const { svg } = await mermaid.render(id, definition)
+      setRenderedSvg(svg)
+    } catch (err) {
+      setFlowChartError(err instanceof Error ? err.message : t('event.failedToLoadFlowChart'))
+    } finally {
+      renderingRef.current = false
+    }
+  }
+
+  const handleToggleFlowChart = async () => {
+    const nextOpen = !flowChartOpen
+    setFlowChartOpen(nextOpen)
+    if (nextOpen && flowDiagram === null && !flowChartLoading) {
+      try {
+        setFlowChartLoading(true)
+        setFlowChartError(null)
+        const diagram = await fetchEventFlowDiagram()
+        setFlowDiagram(diagram)
+      } catch (err) {
+        setFlowChartError(err instanceof Error ? err.message : t('event.failedToLoadFlowChart'))
+      } finally {
+        setFlowChartLoading(false)
+      }
+    }
+  }
 
   const handleExecute = async (action: string) => {
     try {
@@ -81,39 +141,19 @@ export function EventTransitionButtons({
     }
   }
 
-  const handleToggleFlowChart = async () => {
-    const nextOpen = !flowChartOpen
-    setFlowChartOpen(nextOpen)
-    if (nextOpen && flowChartSvg === null && !flowChartLoading) {
-      try {
-        setFlowChartLoading(true)
-        setFlowChartError(null)
-        const svg = await fetchEventFlowChartSvg()
-        setFlowChartSvg(svg)
-      } catch (err) {
-        setFlowChartError(err instanceof Error ? err.message : t('event.failedToLoadFlowChart'))
-      } finally {
-        setFlowChartLoading(false)
-      }
-    }
-  }
-
   return (
     <div className={styles.section}>
-      {/* Status row: badge + readonly text field */}
       <div className={styles.statusRow}>
         <span className={styles.statusLabel}>{t('event.status')}:</span>
         <EventStatusBadge status={status} />
       </div>
 
-      {/* Error */}
       {error && (
         <div className={styles.errorBox} role="alert">
           {error}
         </div>
       )}
 
-      {/* Transition buttons */}
       {!loading && transitions.length > 0 && (
         <div className={styles.buttonRow}>
           {transitions.map((t_item) => (
@@ -135,7 +175,6 @@ export function EventTransitionButtons({
         <div className={styles.flowChartLoading}>{t('event.loadingTransitions')}</div>
       )}
 
-      {/* Flow chart toggle */}
       <button
         type="button"
         className={styles.flowChartToggle}
@@ -150,14 +189,12 @@ export function EventTransitionButtons({
         <div className={styles.flowChartContainer} aria-label={t('event.lifecycleDiagramAria')}>
           {flowChartLoading && <p className={styles.flowChartLoading}>{t('event.loadingDiagram')}</p>}
           {flowChartError && <p className={styles.errorBox}>{flowChartError}</p>}
-          {flowChartSvg && (
-            // SVG is served by our own backend – safe to inject
-            <div dangerouslySetInnerHTML={{ __html: flowChartSvg }} />
+          {renderedSvg && (
+            // SVG is generated locally by mermaid – safe to inject
+            <div dangerouslySetInnerHTML={{ __html: renderedSvg }} />
           )}
         </div>
       )}
     </div>
   )
 }
-
-
