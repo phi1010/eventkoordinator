@@ -1166,6 +1166,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Internal Training Eur */
+            internal_training_eur?: string | null;
             /** Member Discounted Gross Eur */
             member_discounted_gross_eur?: string | null;
             /** Member Regular Gross Eur */
@@ -1966,6 +1968,8 @@ export interface components {
             guest_discounted_gross_eur?: string | null;
             /** Guest Regular Gross Eur */
             guest_regular_gross_eur?: string | null;
+            /** Internal Training Eur */
+            internal_training_eur?: string | null;
             /** Member Discounted Gross Eur */
             member_discounted_gross_eur?: string | null;
             /** Member Regular Gross Eur */

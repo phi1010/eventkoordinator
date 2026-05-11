@@ -46,6 +46,9 @@ def _to_schema(instance: CalculatedPrices) -> CalculatedPricesOut:
         business_net_eur=(
             str(instance.business_net_eur) if instance.business_net_eur is not None else None
         ),
+        internal_training_eur=(
+            str(instance.internal_training_eur) if instance.internal_training_eur is not None else None
+        ),
     )
 
 
@@ -162,6 +165,7 @@ def update_calculated_prices(
         "guest_regular_gross_eur",
         "guest_discounted_gross_eur",
         "business_net_eur",
+        "internal_training_eur",
     )
     for field_name in decimal_fields:
         if field_name not in update_data:

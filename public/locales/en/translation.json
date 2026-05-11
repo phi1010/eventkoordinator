@@ -64,7 +64,8 @@
       "workshopArea": "Workshop area selected",
       "atLeastOneSpeaker": "At least one speaker added",
       "speakersHaveBio": "All speakers have a biography",
-      "photo": "Proposal image uploaded (min. 1080×1440 px)"
+      "photo": "Proposal image uploaded (min. 1080×1440 px)",
+      "submissionDeadline": "Within submission deadline"
     },
     "editorTitle": "Proposal Editor",
     "loadingProposal": "Loading proposal...",
@@ -336,6 +337,7 @@
     "guestRegularGross": "Guest Regular Gross (EUR)",
     "guestDiscountedGross": "Guest Discounted Gross (EUR)",
     "businessNet": "Business Net (EUR)",
+    "internalTraining": "Internal Training (EUR)",
     "saveCalculatedPrices": "Save Calculated Prices",
     "deleteCalculatedPricesBtn": "Delete Calculated Prices",
     "syncSynchronization": "Synchronization Status",

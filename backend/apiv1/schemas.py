@@ -409,6 +409,7 @@ class UpdateCalculatedPricesIn(Schema):
     guest_regular_gross_eur: Optional[str] = None
     guest_discounted_gross_eur: Optional[str] = None
     business_net_eur: Optional[str] = None
+    internal_training_eur: Optional[str] = None
 
 
 class CalculatedPricesOut(Schema):
@@ -420,6 +421,7 @@ class CalculatedPricesOut(Schema):
     guest_regular_gross_eur: Optional[str] = None
     guest_discounted_gross_eur: Optional[str] = None
     business_net_eur: Optional[str] = None
+    internal_training_eur: Optional[str] = None
 
 
 class SyncTargetOut(Schema):

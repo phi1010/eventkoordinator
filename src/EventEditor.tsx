@@ -42,6 +42,7 @@ interface CalculatedPricesFormValues {
     guest_regular_gross_eur: string
     guest_discounted_gross_eur: string
     business_net_eur: string
+    internal_training_eur: string
 }
 
 const EMPTY_CALCULATED_PRICES_FORM: CalculatedPricesFormValues = {
@@ -50,6 +51,7 @@ const EMPTY_CALCULATED_PRICES_FORM: CalculatedPricesFormValues = {
     guest_regular_gross_eur: '',
     guest_discounted_gross_eur: '',
     business_net_eur: '',
+    internal_training_eur: '',
 }
 
 function parseLocalDateTimeInput(value: string): Date | null {
@@ -76,6 +78,7 @@ function toCalculatedPricesForm(values: CalculatedPrices): CalculatedPricesFormV
         guest_regular_gross_eur: values.guest_regular_gross_eur ?? '',
         guest_discounted_gross_eur: values.guest_discounted_gross_eur ?? '',
         business_net_eur: values.business_net_eur ?? '',
+        internal_training_eur: values.internal_training_eur ?? '',
     }
 }
 
@@ -607,6 +610,7 @@ export function EventEditor({
                 guest_regular_gross_eur: toNullableDecimal(calculatedPricesForm.guest_regular_gross_eur),
                 guest_discounted_gross_eur: toNullableDecimal(calculatedPricesForm.guest_discounted_gross_eur),
                 business_net_eur: toNullableDecimal(calculatedPricesForm.business_net_eur),
+                internal_training_eur: toNullableDecimal(calculatedPricesForm.internal_training_eur),
             })
 
             setCalculatedPrices(updated)
@@ -952,6 +956,18 @@ export function EventEditor({
                                     type="text"
                                     value={calculatedPricesForm.business_net_eur}
                                     onChange={(e) => handleCalculatedPriceFieldChange('business_net_eur', e.target.value)}
+                                    className={styles.formInput}
+                                    disabled={!canChangeCalculatedPrices || calculatedPricesSaving}
+                                />
+                            </div>
+
+                            <div className={styles.formGroup}>
+                                <label htmlFor="internal-training" className={styles.label}>{t('event.internalTraining')}</label>
+                                <input
+                                    id="internal-training"
+                                    type="text"
+                                    value={calculatedPricesForm.internal_training_eur}
+                                    onChange={(e) => handleCalculatedPriceFieldChange('internal_training_eur', e.target.value)}
                                     className={styles.formInput}
                                     disabled={!canChangeCalculatedPrices || calculatedPricesSaving}
                                 />

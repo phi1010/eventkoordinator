@@ -64,7 +64,8 @@
       "workshopArea": "Workshop-Bereich ausgewählt",
       "atLeastOneSpeaker": "Mindestens ein Referent hinzugefügt",
       "speakersHaveBio": "Alle Referenten haben eine Biografie",
-      "photo": "Vorschlagsbild hochgeladen (min. 1080×1440 Px)"
+      "photo": "Vorschlagsbild hochgeladen (min. 1080×1440 Px)",
+      "submissionDeadline": "Innerhalb der Einreichungsfrist"
     },
     "editorTitle": "Vorschlagseditor",
     "loadingProposal": "Lade Vorschlag...",
@@ -424,6 +425,7 @@
     "guestRegularGross": "Gäste regulärer Bruttopreis (EUR)",
     "guestDiscountedGross": "Gäste reduzierter Bruttopreis (EUR)",
     "businessNet": "Geschäfts-Nettopreis (EUR)",
+    "internalTraining": "Interne Fortbildung (EUR)",
     "saveCalculatedPrices": "Berechnete Preise speichern",
     "deleteCalculatedPricesBtn": "Berechnete Preise löschen",
     "syncSynchronization": "Synchronisierungsstatus",

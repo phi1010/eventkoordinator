@@ -1352,6 +1352,7 @@ export interface CalculatedPrices {
   guest_regular_gross_eur: string | null
   guest_discounted_gross_eur: string | null
   business_net_eur: string | null
+  internal_training_eur: string | null
 }
 
 export interface UpdateCalculatedPricesRequest {
@@ -1363,6 +1364,7 @@ export interface UpdateCalculatedPricesRequest {
   guest_regular_gross_eur?: string | null
   guest_discounted_gross_eur?: string | null
   business_net_eur?: string | null
+  internal_training_eur?: string | null
 }
 
 export async function fetchCalculatedPrices(seriesId: string, eventId: string): Promise<CalculatedPrices | null> {
@@ -1429,6 +1431,7 @@ export async function updateCalculatedPrices(
         guest_regular_gross_eur: request.guest_regular_gross_eur,
         guest_discounted_gross_eur: request.guest_discounted_gross_eur,
         business_net_eur: request.business_net_eur,
+        internal_training_eur: request.internal_training_eur,
       },
     }
   )

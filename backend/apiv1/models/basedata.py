@@ -418,11 +418,7 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
         if perm.endswith(f".reject_{Proposal.__name__.lower()}"):
             return user.has_perm(perm, None)
         if perm.endswith(f".submit_{Proposal.__name__.lower()}"):
-            return (
-                (user == self.owner or user in self.editors.all())
-                and self.call is not None
-                and self.call.submission_deadline <= datetime.now().date()
-            )
+            return user == self.owner or user in self.editors.all()
         if perm.endswith(f".moderate_{Proposal.__name__.lower()}"):
             return user.has_perm(perm, None)
         return False
@@ -598,6 +594,11 @@ def check_proposal_required_fields(proposal: Proposal) -> dict[Any, Any]:
     checklist["speakersHaveBio"] = {"status": "error" if empty_bio_present else "ok"}
 
     checklist["photo"] = {"status": "ok" if proposal.photo else "error"}
+    if proposal.status == Proposal.Status.DRAFT:
+        if (proposal.call is not None) and (datetime.now().date() <= proposal.call.submission_deadline):
+            checklist["submissionDeadline"] = {"status": "ok"}
+        else:
+            checklist["submissionDeadline"] = {"status": "error"}
 
     return checklist
 
