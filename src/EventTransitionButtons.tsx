@@ -31,7 +31,7 @@ export function EventTransitionButtons({
   onTransitionSuccess,
   onTransitionError,
 }: EventTransitionButtonsProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [transitions, setTransitions] = useState<EventTransition[]>([])
   const [status, setStatus] = useState(currentStatus)
   const [loading, setLoading] = useState(false)
@@ -70,12 +70,12 @@ export function EventTransitionButtons({
     setStatus(currentStatus)
   }, [currentStatus])
 
-  // Re-render the diagram whenever the status or diagram data changes
+  // Re-render the diagram whenever the status, language, or diagram data changes
   useEffect(() => {
     if (!flowDiagram || !flowChartOpen) return
     void renderMermaid(flowDiagram, status)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, flowDiagram, flowChartOpen])
+  }, [status, flowDiagram, flowChartOpen, i18n.language])
 
   const buildMermaidDefinition = (diagram: EventFlowDiagram, activeStatus: string): string => {
     const lines: string[] = ['flowchart TD']

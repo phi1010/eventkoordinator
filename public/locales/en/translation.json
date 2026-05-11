@@ -349,9 +349,9 @@
     "saveCalculatedPrices": "Save Calculated Prices",
     "deleteCalculatedPricesBtn": "Delete Calculated Prices",
     "transition": {
-      "submit": "Submit Event",
-      "approve": "Approve Event",
-      "reject": "Reject Event",
+      "submit": "Propose Date",
+      "approve": "Accept Date",
+      "reject": "Decline Date",
       "publish": "Publish Event",
       "confirm": "Confirm Event",
       "cancel": "Cancel Event",

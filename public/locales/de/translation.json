@@ -437,9 +437,9 @@
     "saveCalculatedPrices": "Berechnete Preise speichern",
     "deleteCalculatedPricesBtn": "Berechnete Preise löschen",
     "transition": {
-      "submit": "Veranstaltung einreichen",
-      "approve": "Veranstaltung genehmigen",
-      "reject": "Veranstaltung ablehnen",
+      "submit": "Termin vorschlagen",
+      "approve": "Termin zusagen",
+      "reject": "Termin absagen",
       "publish": "Veranstaltung veröffentlichen",
       "confirm": "Veranstaltung bestätigen",
       "cancel": "Veranstaltung absagen",
