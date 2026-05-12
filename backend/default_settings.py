@@ -138,6 +138,8 @@ AUTHENTICATION_BACKENDS = [
 
 EMAIL_BACKEND = "mailqueue.mailbackend.MailQueueBackend"
 
+FRONTEND_BASE_URL = "https://example.com"
+
 # OIDC defaults. Dynaconf can override any of these values.
 OIDC_RP_CLIENT_ID = ""
 OIDC_RP_CLIENT_SECRET = ""

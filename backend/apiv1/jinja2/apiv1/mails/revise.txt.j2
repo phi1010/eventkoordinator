@@ -1,24 +1,38 @@
+{% set call_title = object.call.title if object.call else '' %}
 [Deutsch]
 
-Sehr geehrte(r) {{object.owner.username | safe}},
+Hi!
 
-Ihr Vorschlag mit dem Titel "{{object.title | safe}}" wurde zur Überarbeitung markiert.
-Bitte überprüfen Sie das Feedback und reichen Sie Ihren Vorschlag erneut ein, wenn Sie bereit sind.
+Wir haben deine Einreichung "{{ object.title }}" für "{{ call_title }}" geprüft und bitten dich, einige Überarbeitungen vorzunehmen.
 
+Kommentar des Teams:
+
+{{ object.moderation_comment }}
+
+Du kannst deine Einreichung unter folgendem Link bearbeiten:
+
+{{ proposal_url }}
+
+Bitte zögere nicht, dich bei uns zu melden, wenn du irgendwelche Fragen hast.
+
+Das {{ call_title }} Team
+
+================================
 
 [English]
 
-Dear {{object.owner.username | safe}},
+Hi!
 
-Your proposal titled "{{object.title | safe}}" has been marked for revision.
-Please review the feedback provided and resubmit your proposal when ready.
+We have reviewed your submission "{{ object.title }}" for "{{ call_title }}" and would like to ask you to make some revisions.
 
+Comment from the team:
 
-================================
-Interne Kommentare / Internal comments:
-================================
-{% filter indent(4, True) %}{% filter textwrap(50) %}{{ object.internal_notes | safe }}{% endfilter %}{% endfilter %}
-================================
+{{ object.moderation_comment }}
 
-Mit freundlichen Grüßen / Best regards,
-The ZAM Program Review Team
+You can edit your submission at the following link:
+
+{{ proposal_url }}
+
+Please don't hesitate to reach out if you have any questions.
+
+The {{ call_title }} Team

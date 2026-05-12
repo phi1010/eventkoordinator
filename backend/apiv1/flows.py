@@ -127,6 +127,25 @@ class ProposalFlow:
     def submit(self):
         logger.info(f"Submitting proposal: {self.object!r}")
         self.object.save()
+        proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{self.object.pk}"
+        try:
+            send_mail(
+                subject=f"Einreichung eingegangen / Submission received: {self.object.title}",
+                message=render_to_string(
+                    "apiv1/mails/submit.txt.j2",
+                    dict(object=self.object, proposal_url=proposal_url),
+                ),
+                html_message=render_to_string(
+                    "apiv1/mails/submit.html.j2",
+                    dict(object=self.object, proposal_url=proposal_url),
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[self.object.owner.email],
+                fail_silently=False,
+            )
+        except BaseException as e:
+            logger.error("Failed to send submission confirmation: " + str(e), exc_info=e)
+            raise
 
     @status.transition(
         source=Proposal.Status.SUBMITTED,
@@ -142,14 +161,17 @@ class ProposalFlow:
     )
     def revise(self):
         logger.info(f"Revising proposal: {self.object}")
+        proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{self.object.pk}"
         try:
             send_mail(
                 subject=f"Überarbeitung angefordert / Revision requested: {self.object.title}",
                 message=render_to_string(
-                    "apiv1/mails/revise.txt.j2", dict(object=self.object)
+                    "apiv1/mails/revise.txt.j2",
+                    dict(object=self.object, proposal_url=proposal_url),
                 ),
                 html_message=render_to_string(
-                    "apiv1/mails/revise.html.j2", dict(object=self.object)
+                    "apiv1/mails/revise.html.j2",
+                    dict(object=self.object, proposal_url=proposal_url),
                 ),
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[self.object.owner.email],
@@ -169,6 +191,25 @@ class ProposalFlow:
     def accept(self):
         logger.info(f"Accepting proposal: {self.object}")
         self.object.save()
+        proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{self.object.pk}"
+        try:
+            send_mail(
+                subject=f"Einreichung angenommen / Submission accepted: {self.object.title}",
+                message=render_to_string(
+                    "apiv1/mails/accept.txt.j2",
+                    dict(object=self.object, proposal_url=proposal_url),
+                ),
+                html_message=render_to_string(
+                    "apiv1/mails/accept.html.j2",
+                    dict(object=self.object, proposal_url=proposal_url),
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[self.object.owner.email],
+                fail_silently=False,
+            )
+        except BaseException as e:
+            logger.error("Failed to send acceptance mail: " + str(e), exc_info=e)
+            raise
 
     @status.transition(
         source=Proposal.Status.SUBMITTED,
@@ -179,6 +220,25 @@ class ProposalFlow:
     def reject(self):
         logger.info(f"Rejecting proposal: {self.object}")
         self.object.save()
+        proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{self.object.pk}"
+        try:
+            send_mail(
+                subject=f"Einreichung abgelehnt / Submission rejected: {self.object.title}",
+                message=render_to_string(
+                    "apiv1/mails/reject.txt.j2",
+                    dict(object=self.object, proposal_url=proposal_url),
+                ),
+                html_message=render_to_string(
+                    "apiv1/mails/reject.html.j2",
+                    dict(object=self.object, proposal_url=proposal_url),
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[self.object.owner.email],
+                fail_silently=False,
+            )
+        except BaseException as e:
+            logger.error("Failed to send rejection mail: " + str(e), exc_info=e)
+            raise
 
     def get_available_transitions(self, user: OpenIDUser) -> list[ProposalTransition]:
         """

@@ -31,6 +31,8 @@ DEBUG = true
 
 PLAYWRIGHT_HEADLESS = false
 
+FRONTEND_BASE_URL = "http://localhost:5173"
+
 PRETIX_API_BASE_URL = "http://localhost:8282/api/v1"
 
 [DATABASES.default]
