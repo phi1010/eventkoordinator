@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { initializeCsrfToken, login as apiLogin } from './api'
+import { initializeCsrfToken, login as apiLogin, fetchSiteConfig, type SiteConfig } from './api'
 import { usePermissions } from './usePermissions'
+import { translateApiError } from './apiError'
+import { useTranslation } from 'react-i18next'
+import i18n from './i18n'
 import type { User } from './api'
 import styles from './Navbar.module.css'
 
@@ -12,13 +15,19 @@ interface NavbarProps {
 }
 
 export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
+  const { t } = useTranslation()
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [loginFormData, setLoginFormData] = useState({ username: '', password: '' })
   const [loginError, setLoginError] = useState<string | null>(null)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
   const { canBrowse, permissions } = usePermissions()
+
+  useEffect(() => {
+    fetchSiteConfig().then(setSiteConfig).catch(() => { /* non-critical */ })
+  }, [])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -39,7 +48,7 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
 
     try {
       if (!loginFormData.username.trim() || !loginFormData.password.trim()) {
-        setLoginError('Username and password are required')
+        setLoginError(t('api.common.invalidRequest'))
         return
       }
 
@@ -48,7 +57,8 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
       setLoginFormData({ username: '', password: '' })
       setIsDropdownOpen(false)
     } catch (error) {
-      setLoginError(error instanceof Error ? error.message : 'Login failed')
+      const code = error instanceof Error ? error.message : 'api.common.internalError'
+      setLoginError(translateApiError(code))
       console.error('Login error:', error)
     } finally {
       setIsLoggingIn(false)
@@ -99,8 +109,8 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
   return (
     <nav className={styles.navbar} aria-label="Main navigation">
       <div className={styles.container}>
-        <Link to="/" className={styles.logo} aria-label="Event Coordinator – go to home">
-          <h1>Event Coordinator</h1>
+        <Link to="/" className={styles.logo} aria-label={`${t('nav.appName')} – ${t('nav.goToHome')}`}>
+          <h1>{t('nav.appName')}</h1>
         </Link>
 
         <div className={styles.navLinks} role="list">
@@ -111,7 +121,7 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
               to="/coordinator"
               aria-current={location.pathname.startsWith('/coordinator') ? 'page' : undefined}
             >
-              Coordinator
+              {t('nav.coordinator')}
             </Link>
           )}
           {canBrowse('proposal') && (
@@ -121,7 +131,17 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
               to="/proposal-editor"
               aria-current={location.pathname === '/proposal-editor' ? 'page' : undefined}
             >
-              Proposal Editor
+              {t('nav.proposalEditor')}
+            </Link>
+          )}
+          {canBrowse('proposal') && (
+            <Link
+              role="listitem"
+              className={location.pathname === '/proposal-dashboard' ? styles.activeNavLink : styles.navLink}
+              to="/proposal-dashboard"
+              aria-current={location.pathname === '/proposal-dashboard' ? 'page' : undefined}
+            >
+              {t('nav.proposalDashboard')}
             </Link>
           )}
           {permissions?.is_staff && (
@@ -129,11 +149,32 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
               role="listitem"
               className={styles.navLink}
               href="/admin/"
-              aria-label="Admin panel"
+              aria-label={t('nav.adminLink')}
             >
-              Admin
+              {t('nav.adminPanel')}
             </a>
           )}
+        </div>
+
+        <div className={styles.langSwitcher} aria-label="Language switcher">
+          <button
+            type="button"
+            className={`${styles.langButton} ${i18n.language.startsWith('en') ? styles.langButtonActive : ''}`}
+            onClick={() => void i18n.changeLanguage('en')}
+            aria-label="Switch to English"
+            aria-pressed={i18n.language.startsWith('en')}
+          >
+            🇬🇧
+          </button>
+          <button
+            type="button"
+            className={`${styles.langButton} ${i18n.language.startsWith('de') ? styles.langButtonActive : ''}`}
+            onClick={() => void i18n.changeLanguage('de')}
+            aria-label="Auf Deutsch wechseln"
+            aria-pressed={i18n.language.startsWith('de')}
+          >
+            🇩🇪
+          </button>
         </div>
 
         <div className={styles.menu} ref={dropdownRef}>
@@ -147,7 +188,7 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
           >
             <span className={styles.userIcon} aria-hidden="true">👤</span>
             <span className={styles.username}>
-              {user ? user.username : 'Guest'}
+              {user ? user.username : t('nav.guest')}
             </span>
             <span className={styles.chevron} aria-hidden="true">▼</span>
           </button>
@@ -157,9 +198,21 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
               {user ? (
                 <>
                   <div className={styles.userInfo}>
-                    <span className={styles.infoLabel}>Logged in as:</span>
+                    <span className={styles.infoLabel}>{t('nav.loggedInAs')}</span>
                     <span className={styles.infoValue}>{user.username}</span>
                   </div>
+                  <hr className={styles.divider} />
+                  {siteConfig && (
+                    <a
+                      href={siteConfig.account_management_url}
+                      className={styles.menuLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      role="menuitem"
+                    >
+                      {t('nav.manageAccount')}
+                    </a>
+                  )}
                   <hr className={styles.divider} />
                   <button
                     type="button"
@@ -167,7 +220,7 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
                     onClick={handleLogout}
                     role="menuitem"
                   >
-                    Logout
+                    {t('common.logout')}
                   </button>
                 </>
               ) : (
@@ -180,23 +233,23 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
                     type="button"
                     className={styles.ssoButton}
                     onClick={handleSsoLogin}
-                    aria-label="Login with Single Sign-On"
+                    aria-label={t('nav.loginWithSso')}
                   >
-                    Login with SSO
+                    {t('nav.loginWithSso')}
                   </button>
-                  <div className={styles.ssoHint} aria-hidden="true">or use username/password</div>
+                  <div className={styles.ssoHint} aria-hidden="true">{t('nav.ssoHint')}</div>
                   {loginError && (
                     <div className={styles.errorMessage} role="alert">{loginError}</div>
                   )}
                   <div className={styles.formGroup}>
                     <label htmlFor="username" className={styles.label}>
-                      Username
+                      {t('nav.username')}
                     </label>
                     <input
                       id="username"
                       type="text"
                       className={styles.input}
-                      placeholder="Enter your username"
+                      placeholder={t('nav.enterUsername')}
                       value={loginFormData.username}
                       onChange={(e) =>
                         setLoginFormData({ ...loginFormData, username: e.target.value })
@@ -208,13 +261,13 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
                   </div>
                   <div className={styles.formGroup}>
                     <label htmlFor="password" className={styles.label}>
-                      Password
+                      {t('nav.password')}
                     </label>
                     <input
                       id="password"
                       type="password"
                       className={styles.input}
-                      placeholder="Enter your password"
+                      placeholder={t('nav.enterPassword')}
                       value={loginFormData.password}
                       onChange={(e) =>
                         setLoginFormData({ ...loginFormData, password: e.target.value })
@@ -229,9 +282,34 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
                     disabled={!loginFormData.username.trim() || !loginFormData.password.trim() || isLoggingIn}
                     aria-busy={isLoggingIn}
                   >
-                    {isLoggingIn ? 'Logging in...' : 'Login'}
+                    {isLoggingIn ? t('nav.loggingIn') : t('common.login')}
                   </button>
                 </form>
+              )}
+              {siteConfig && (
+                <>
+                  <hr className={styles.divider} />
+                  <div className={styles.menuFooterLinks}>
+                    <a
+                      href={siteConfig.imprint_url}
+                      className={styles.menuLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      role="menuitem"
+                    >
+                      {t('nav.imprint')}
+                    </a>
+                    <a
+                      href={siteConfig.privacy_policy_url}
+                      className={styles.menuLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      role="menuitem"
+                    >
+                      {t('nav.privacyPolicy')}
+                    </a>
+                  </div>
+                </>
               )}
             </div>
           )}

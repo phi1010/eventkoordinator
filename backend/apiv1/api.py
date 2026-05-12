@@ -18,6 +18,7 @@ from apiv1.routers import speakers as speakers_router
 from apiv1.routers import sync as sync_router
 from apiv1.routers import calendar as calendar_router
 from apiv1.routers import calculated_prices as calculated_prices_router
+from apiv1.routers import calls as calls_router
 
 # Initialize the main API instance with Django auth as default
 api = NinjaAPI(auth=django_auth)
@@ -30,6 +31,7 @@ api.add_router("/proposals", speakers_router.router, tags=["speakers"])
 api.add_router("/sync", sync_router.router, tags=["sync"])
 api.add_router("/calendar", calendar_router.router, tags=["calendar"])
 api.add_router("/pricing", calculated_prices_router.router, tags=["calculated-prices"])
+api.add_router("/calls", calls_router.router, tags=["calls"])
 api.add_router("/user", openid_user_management_router.router, tags=["user"])
 
 

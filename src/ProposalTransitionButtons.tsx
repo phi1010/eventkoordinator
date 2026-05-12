@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   fetchProposalTransitions,
   submitProposal,
@@ -21,6 +22,7 @@ export function ProposalTransitionButtons({
   onTransitionSuccess,
   onTransitionError,
 }: ProposalTransitionButtonsProps) {
+  const { t } = useTranslation()
   const [transitions, setTransitions] = useState<ProposalTransition[]>([])
   const [loading, setLoading] = useState(false)
   const [executing, setExecuting] = useState<string | null>(null)
@@ -35,7 +37,7 @@ export function ProposalTransitionButtons({
         const data = await fetchProposalTransitions(proposalId)
         setTransitions(data.transitions)
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Failed to load transitions'
+        const errorMsg = err instanceof Error ? err.message : t('common.genericError')
         setError(errorMsg)
         console.error('Failed to load transitions:', err)
       } finally {
@@ -82,13 +84,13 @@ export function ProposalTransitionButtons({
       if (onTransitionSuccess) {
         onTransitionSuccess(result)
       }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Transition failed'
-      setError(errorMsg)
-      if (onTransitionError) {
-        onTransitionError(errorMsg)
-      }
-      console.error(`Failed to execute ${action}:`, err)
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : t('common.genericError')
+        setError(errorMsg)
+        if (onTransitionError) {
+          onTransitionError(errorMsg)
+        }
+        console.error(`Failed to execute ${action}:`, err)
     } finally {
       setExecuting(null)
     }
@@ -97,7 +99,7 @@ export function ProposalTransitionButtons({
   if (loading) {
     return (
       <div style={{ padding: '0.5rem 0', color: '#666', fontSize: '0.9rem' }}>
-        Loading transitions...
+        {t('common.loading')}
       </div>
     )
   }
@@ -110,7 +112,7 @@ export function ProposalTransitionButtons({
     <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       {error && (
         <div className={styles.errorBox}>
-          Error: {error}
+          {t('common.error')}: {error}
         </div>
       )}
 
@@ -121,20 +123,20 @@ export function ProposalTransitionButtons({
             onClick={() => executeTransition(transition.action)}
             disabled={!transition.enabled || executing !== null}
             style={{
-              padding: '0.5rem 1rem',
+              padding: '0.6rem 1.2rem',
               borderRadius: '4px',
               border: '1px solid #ddd',
               backgroundColor: transition.enabled ? '#2196f3' : '#e0e0e0',
               color: transition.enabled ? '#fff' : '#999',
               cursor: transition.enabled && executing === null ? 'pointer' : 'not-allowed',
               fontSize: '0.9rem',
-              fontWeight: 500,
+              fontWeight: 600,
               transition: 'all 0.2s ease',
               opacity: executing !== null && executing !== transition.action ? 0.5 : 1,
             }}
             title={transition.disable_reason || undefined}
           >
-            {executing === transition.action ? 'Processing...' : transition.label}
+            {executing === transition.action ? t('common.processing') : t(`proposal.transition.${transition.label_id}`, { defaultValue: transition.label_id })}
           </button>
         ))}
       </div>

@@ -43,6 +43,14 @@
   flex-shrink: 0;
 }
 
+.speakerImagePlaceholder {
+  width: 84px;
+  height: 84px;
+  border-radius: 8px;
+  background-color: #e0e0e0;
+  flex-shrink: 0;
+}
+
 .speakerName {
   font-weight: bold;
   margin-bottom: 0.25rem;
@@ -144,6 +152,10 @@
     background-color: #1e1e2e;
   }
 
+  .speakerImagePlaceholder {
+    background-color: #3a3a4e;
+  }
+
   .speakerEmail {
     color: #aaa;
   }
@@ -171,6 +183,32 @@
 
   .helpText {
     color: #aaa;
+  }
+}
+
+/* Responsive layout for narrow screens */
+@media (max-width: 600px) {
+  .speakerCard {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .speakerImage,
+  .speakerImagePlaceholder {
+    margin-bottom: 0.75rem;
+  }
+
+  .speakerCard > div:last-child {
+    margin-left: 0;
+    margin-top: 0.75rem;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .speakerCard > div:last-child button {
+    width: 100%;
+    max-width: 160px;
   }
 }
 

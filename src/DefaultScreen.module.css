@@ -1,186 +1,329 @@
+/* ── Page layout ── */
 .container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   min-height: calc(100vh - 70px);
-  background: linear-gradient(135deg, #f5f7fa 0%, #f0f2f5 100%);
-  padding: 2rem;
+  background: #f3f4f6;
+  padding: 2rem 1.5rem;
 }
 
 .content {
-  text-align: center;
   max-width: 900px;
-  width: 100%;
+  margin: 0 auto;
+}
+
+/* ── Page header ── */
+.pageHeader {
+  margin-bottom: 2rem;
 }
 
 .title {
-  font-size: 3rem;
-  font-weight: 700;
-  color: #333;
-  margin: 0 0 0.5rem 0;
-  line-height: 1.2;
+  font-size: 1.625rem;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 0.375rem 0;
+  line-height: 1.25;
 }
 
 .subtitle {
-  font-size: 1.25rem;
-  color: #666;
-  margin: 0 0 3rem 0;
-  font-weight: 400;
+  font-size: 0.9375rem;
+  color: #6b7280;
+  margin: 0;
 }
 
-.buttonsGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
-  margin-top: 2rem;
-}
-
-.button {
+/* ── Call cards ── */
+.callList {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 3rem 2rem;
-  background: white;
-  border: 2px solid #e0e0e0;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  text-decoration: none;
-  min-height: 300px;
   gap: 1rem;
 }
 
-.button:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
-  border-color: #646cff;
-  background: #f9fafb;
+.callCard {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
 }
 
-.button:active {
-  transform: translateY(-4px);
+.callCardBody {
+  padding: 1.25rem 1.5rem 1rem;
+  flex: 1;
 }
 
-.buttonIcon {
-  font-size: 4rem;
-  line-height: 1;
+.callCardTitleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
   margin-bottom: 0.5rem;
 }
 
-.buttonTitle {
-  font-size: 1.75rem;
+.callCardTitle {
+  font-size: 1.0625rem;
   font-weight: 700;
-  color: #333;
+  color: #111827;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.deadlineBadge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.2rem 0.625rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.deadlineBadgeUrgent {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.deadlineBadgeOk {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.deadlineBadgeOverdue {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.callCardDescription {
+  font-size: 0.875rem;
+  color: #4b5563;
+  line-height: 1.55;
+  margin: 0 0 0.875rem 0;
+}
+
+.callMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.callMetaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.callMetaValue {
+  color: #374151;
+  font-weight: 600;
+}
+
+.callMetaValueUrgent {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.callMetaValueNearest {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.callMetaValueExpired {
+  color: #9ca3af;
+  font-weight: 600;
+}
+
+.responsibleLink {
+  color: #374151;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.responsibleLink:hover {
+  text-decoration: underline;
+  color: #646cff;
+}
+
+/* ── Submissions section inside a call card ── */
+.submissionsSection {
+  border-top: 1px solid #f3f4f6;
+  padding: 0.625rem 1.5rem;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.submissionsSectionLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
   margin: 0;
 }
 
-.buttonDescription {
+.submissionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.submissionInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.submissionStatus {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.1875rem 0.5rem;
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.submissionOpenBtn {
+  font-size: 0.8125rem;
+  color: #646cff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+.submissionOpenBtn:hover {
+  background: #eef2ff;
+}
+
+/* ── Call card footer (CTA button) ── */
+.callCardFooter {
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid #f3f4f6;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btnSubmit {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  background: #646cff;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: background 150ms;
+}
+
+.btnSubmit:hover {
+  background: #535bf2;
+}
+
+.btnSubmit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── "Other proposals" section ── */
+.otherSection {
+  margin-top: 2rem;
+}
+
+.otherSectionTitle {
   font-size: 1rem;
-  color: #666;
-  margin: 0;
-  line-height: 1.5;
-  max-width: 280px;
+  font-weight: 700;
+  color: #374151;
+  margin: 0 0 0.75rem 0;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
+.otherList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.otherProposalRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.otherProposalInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-weight: 600;
+  color: #111827;
+  font-size: 0.875rem;
+}
+
+/* ── Coordinator link (for coordinator users) ── */
+.coordinatorLink {
+  margin-top: 2rem;
+  text-align: right;
+}
+
+.coordinatorLinkBtn {
+  font-size: 0.875rem;
+  color: #646cff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+  font-weight: 500;
+  font-family: inherit;
+  text-decoration: none;
+}
+
+.coordinatorLinkBtn:hover {
+  background: #eef2ff;
+}
+
+/* ── Loading / empty states ── */
+.stateBox {
+  padding: 2rem;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.9375rem;
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
   .container {
-    min-height: auto;
     padding: 1rem;
   }
 
   .title {
-    font-size: 2rem;
-  }
-
-  .subtitle {
-    font-size: 1rem;
-    margin-bottom: 2rem;
-  }
-
-  .buttonsGrid {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
-
-  .button {
-    padding: 2rem 1.5rem;
-    min-height: 250px;
-  }
-
-  .buttonIcon {
-    font-size: 3rem;
-  }
-
-  .buttonTitle {
-    font-size: 1.5rem;
-  }
-
-  .buttonDescription {
-    font-size: 0.9rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .title {
-    font-size: 1.5rem;
-  }
-
-  .subtitle {
-    font-size: 0.9rem;
-  }
-
-  .button {
-    padding: 1.5rem 1rem;
-    min-height: 200px;
-  }
-
-  .buttonIcon {
-    font-size: 2.5rem;
-  }
-
-  .buttonTitle {
     font-size: 1.25rem;
   }
 
-  .buttonDescription {
-    font-size: 0.85rem;
+  .callCardBody {
+    padding: 1rem;
+  }
+
+  .callCardFooter {
+    padding: 0.625rem 1rem;
+  }
+
+  .submissionsSection {
+    padding: 0.5rem 1rem;
+  }
+
+  .callMetaRow {
+    flex-direction: column;
+    gap: 0.25rem;
   }
 }
-
-/* Dark Mode */
-@media (prefers-color-scheme: dark) {
-  .container {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  }
-
-  .title {
-    color: #e0e0e0;
-  }
-
-  .subtitle {
-    color: #aaa;
-  }
-
-  .button {
-    background: #2a2a3e;
-    border-color: #444;
-    color: #e0e0e0;
-  }
-
-  .button:hover {
-    background: #333350;
-    border-color: #646cff;
-  }
-
-  .buttonTitle {
-    color: #e0e0e0;
-  }
-
-  .buttonDescription {
-    color: #aaa;
-  }
-}
-

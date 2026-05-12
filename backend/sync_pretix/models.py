@@ -146,6 +146,13 @@ class PretixSyncTargetAreaAssociation(HistoricalMetaBase):
         blank=True,
         verbose_name="ID of Ticket Product for Businesses",
     )
+    ticket_product_internal_training_id = models.CharField(
+        max_length=255,
+        default="Interne Fortbildung",
+        null=True,
+        blank=True,
+        verbose_name="ID or Name of Ticket Product for Internal Training",
+    )
 
 
 class PretixSyncItem(SyncBaseItem):
@@ -602,6 +609,7 @@ class PretixSyncItem(SyncBaseItem):
                         association.ticket_product_guest_regular_id,
                         association.ticket_product_guest_discounted_id,
                         association.ticket_product_business_id,
+                        association.ticket_product_internal_training_id,
                     ],
                     [(i.get("id"), i.get("name")) for i in items],
                 )
@@ -697,6 +705,7 @@ class PretixSyncItem(SyncBaseItem):
                 (prices.guest_regular_gross_eur, "price_guest_regular"),
                 (prices.guest_discounted_gross_eur, "price_guest_discounted"),
                 (prices.business_net_eur, "price_business"),
+                (prices.internal_training_eur, "price_internal_training"),
             ]
             for price, property_name in price_mapping:
                 if price is not None:
@@ -763,6 +772,8 @@ class PretixSyncItem(SyncBaseItem):
              prices.guest_discounted_gross_eur, "price_guest_discounted"),
             (association.ticket_product_business_id,
              prices.business_net_eur, "price_business"),
+            (association.ticket_product_internal_training_id,
+             prices.internal_training_eur, "price_internal_training"),
         ]
 
         diffs: list[PropertyDiff] = []
@@ -852,6 +863,7 @@ class PretixSyncItem(SyncBaseItem):
             association.ticket_product_guest_regular_id,
             association.ticket_product_guest_discounted_id,
             association.ticket_product_business_id,
+            association.ticket_product_internal_training_id,
         ]
         return [
             item_id
@@ -891,6 +903,7 @@ class PretixSyncItem(SyncBaseItem):
             (association.ticket_product_guest_regular_id, prices.guest_regular_gross_eur),
             (association.ticket_product_guest_discounted_id, prices.guest_discounted_gross_eur),
             (association.ticket_product_business_id, prices.business_net_eur),
+            (association.ticket_product_internal_training_id, prices.internal_training_eur),
         ]
         overrides = []
         for name_or_id, price in price_mapping:
@@ -1153,6 +1166,13 @@ class PretixPricingConfiguration(HistoricalMetaBase):
         )
         return self._roundup_euro(price)
 
+    def get_internal_training_price(
+        self,
+        *,
+        material_cost: int | float | Decimal,
+    ) -> Decimal:
+        return self._to_decimal(material_cost)
+
     def get_calculated_prices(
         self,
         *,
@@ -1193,6 +1213,9 @@ class PretixPricingConfiguration(HistoricalMetaBase):
                 max_participants=max_participants,
                 is_basic_course=is_basic_course,
             ),
+            internal_training_eur=self.get_internal_training_price(
+                material_cost=material_cost,
+            ),
         )
 
 
@@ -1205,6 +1228,7 @@ class CalculatedPriceValues:
     guest_regular_gross_eur: Decimal
     guest_discounted_gross_eur: Decimal
     business_net_eur: Decimal
+    internal_training_eur: Decimal
 
 
 class CalculatedPrices(HistoricalMetaBase):
@@ -1257,6 +1281,14 @@ class CalculatedPrices(HistoricalMetaBase):
         null=True,
         blank=True,
         default=None,
+    )
+    internal_training_eur = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        default=None,
+        verbose_name="Interne Fortbildung (EUR)",
     )
 
     class Meta:
@@ -1339,6 +1371,8 @@ class CalculatedPrices(HistoricalMetaBase):
             self.guest_discounted_gross_eur = calculated.guest_discounted_gross_eur
         if self.business_net_eur is None:
             self.business_net_eur = calculated.business_net_eur
+        if self.internal_training_eur is None:
+            self.internal_training_eur = calculated.internal_training_eur
 
     def save(self, *args, **kwargs):
         self.full_clean()

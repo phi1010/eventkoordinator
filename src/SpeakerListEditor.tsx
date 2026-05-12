@@ -1,11 +1,11 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   addSpeakerToProposal,
   removeSpeaker,
   uploadSpeakerImage,
   updateSpeaker,
   type ProposalSpeakerOut,
-  type SpeakerIn,
 } from './api'
 import { ImageUploadField } from './ImageUploadField'
 import styles from './SpeakerListEditor.module.css'
@@ -22,13 +22,13 @@ interface EditingSpeaker {
   email: string
   display_name: string
   biography: string
-  use_gravatar: boolean
 }
 
 interface UploadState {
   isUploading: boolean
   progress: number | null
   error: string | null
+  copyrightChecked: boolean
 }
 
 function getSpeakerFieldId(prefix: string, speakerId: string, fieldName: string) {
@@ -41,12 +41,7 @@ export function SpeakerListEditor({
   onSpeakersChange,
   disabled = false,
 }: SpeakerListEditorProps) {
-  const [newSpeaker, setNewSpeaker] = useState<SpeakerIn>({
-    email: '',
-    display_name: '',
-    biography: '',
-    use_gravatar: false,
-  })
+  const { t } = useTranslation()
   const [editingSpeaker, setEditingSpeaker] = useState<EditingSpeaker | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -57,6 +52,7 @@ export function SpeakerListEditor({
       isUploading: false,
       progress: null,
       error: null,
+      copyrightChecked: false,
     }
   )
 
@@ -68,6 +64,7 @@ export function SpeakerListEditor({
           isUploading: false,
           progress: null,
           error: null,
+          copyrightChecked: false,
         }),
         ...updates,
       },
@@ -75,27 +72,19 @@ export function SpeakerListEditor({
   }
 
   const handleAddSpeaker = async () => {
-    if (!newSpeaker.display_name?.trim() && !newSpeaker.email?.trim()) {
-      setError('At least a display name or email is required')
-      return
-    }
-
     try {
       setIsSaving(true)
       setError(null)
 
-      const addedSpeaker = await addSpeakerToProposal(proposalId, newSpeaker)
-      onSpeakersChange([...speakers, addedSpeaker])
-
-      // Reset form
-      setNewSpeaker({
+      const addedSpeaker = await addSpeakerToProposal(proposalId, {
         email: '',
         display_name: '',
         biography: '',
-        use_gravatar: false,
       })
+      onSpeakersChange([...speakers, addedSpeaker])
+      handleEditSpeaker(addedSpeaker)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add speaker')
+      setError(t('speakers.failedToAdd'))
     } finally {
       setIsSaving(false)
     }
@@ -107,7 +96,6 @@ export function SpeakerListEditor({
       email: speaker.speaker.email,
       display_name: speaker.speaker.display_name,
       biography: speaker.speaker.biography,
-      use_gravatar: speaker.speaker.use_gravatar,
     })
     setError(null)
   }
@@ -123,7 +111,6 @@ export function SpeakerListEditor({
         email: editingSpeaker.email,
         display_name: editingSpeaker.display_name,
         biography: editingSpeaker.biography,
-        use_gravatar: editingSpeaker.use_gravatar,
       })
 
       onSpeakersChange(
@@ -131,7 +118,7 @@ export function SpeakerListEditor({
       )
       setEditingSpeaker(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update speaker')
+      setError(t('speakers.failedToUpdate'))
     } finally {
       setIsSaving(false)
     }
@@ -145,7 +132,7 @@ export function SpeakerListEditor({
       await removeSpeaker(proposalId, speakerId)
       onSpeakersChange(speakers.filter((s) => s.id !== speakerId))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove speaker')
+      setError(t('speakers.failedToRemove'))
     } finally {
       setIsSaving(false)
     }
@@ -173,7 +160,7 @@ export function SpeakerListEditor({
       )
     } catch (err) {
       updateUploadState(speaker.id, {
-        error: err instanceof Error ? err.message : 'Failed to upload speaker image',
+        error: t('speakers.failedToUploadImage'),
       })
     } finally {
       updateUploadState(speaker.id, {
@@ -185,7 +172,7 @@ export function SpeakerListEditor({
 
   return (
     <div style={{ marginBottom: '2rem' }}>
-      <h3 className={styles.title}>Speakers</h3>
+      <h3 className={styles.title}>{t('speakers.title')}</h3>
 
       {error && (
         <div className={styles.errorBox}>
@@ -197,7 +184,7 @@ export function SpeakerListEditor({
       {speakers.length > 0 && (
         <div style={{ marginBottom: '1.5rem' }}>
           <h4 className={styles.speakerListHeader}>
-            Added Speakers ({speakers.length})
+            {t('speakers.addedSpeakers', { count: speakers.length })}
           </h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {speakers.map((speaker) =>
@@ -206,7 +193,7 @@ export function SpeakerListEditor({
                 <div key={speaker.id} className={styles.editCard}>
                   <div style={{ marginBottom: '1rem' }}>
                     <ImageUploadField
-                      label="Speaker image"
+                      label={t('speakers.speakerImage')}
                       inputId={`speaker-image-${speaker.id}`}
                       previewAlt={`Speaker image preview for ${speaker.speaker.display_name || speaker.speaker.email}`}
                       currentImageUrl={speaker.speaker.profile_picture || null}
@@ -214,9 +201,20 @@ export function SpeakerListEditor({
                       isUploading={getUploadState(speaker.id).isUploading}
                       uploadProgress={getUploadState(speaker.id).progress}
                       error={getUploadState(speaker.id).error}
-                      helpText="Upload a JPG or PNG image up to 10 MB for this speaker."
+                      helpText={t('speakers.speakerImageHelp')}
+                      uploadEnabled={getUploadState(speaker.id).copyrightChecked}
                       onFileSelected={(file) => handleSpeakerImageUpload(speaker, file)}
-                    />
+                    >
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={getUploadState(speaker.id).copyrightChecked}
+                          onChange={(e) => updateUploadState(speaker.id, { copyrightChecked: e.target.checked })}
+                          disabled={disabled || isSaving}
+                        />
+                        {t('common.imageUploadCopyrightConsent')}
+                      </label>
+                    </ImageUploadField>
                   </div>
 
                   <div style={{ marginBottom: '0.75rem' }}>
@@ -224,7 +222,7 @@ export function SpeakerListEditor({
                       htmlFor={getSpeakerFieldId('edit-speaker', speaker.id, 'email')}
                       style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}
                     >
-                      Email:
+                      {t('speakers.email')}:
                     </label>
                     <input
                       id={getSpeakerFieldId('edit-speaker', speaker.id, 'email')}
@@ -243,7 +241,7 @@ export function SpeakerListEditor({
                       htmlFor={getSpeakerFieldId('edit-speaker', speaker.id, 'display-name')}
                       style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}
                     >
-                      Display Name:
+                      {t('speakers.displayName')}:
                     </label>
                     <input
                       id={getSpeakerFieldId('edit-speaker', speaker.id, 'display-name')}
@@ -256,7 +254,7 @@ export function SpeakerListEditor({
                       className={styles.formInput}
                     />
                     <small className={styles.helpText}>
-                      e.g., John Doe
+                      {t('speakers.placeholderName')}
                     </small>
                   </div>
 
@@ -265,7 +263,7 @@ export function SpeakerListEditor({
                       htmlFor={getSpeakerFieldId('edit-speaker', speaker.id, 'biography')}
                       style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}
                     >
-                      Biography:
+                      {t('speakers.biography')}:
                     </label>
                     <textarea
                       id={getSpeakerFieldId('edit-speaker', speaker.id, 'biography')}
@@ -279,25 +277,9 @@ export function SpeakerListEditor({
                       style={{ overflow: 'auto', wordBreak: 'break-word', overflowWrap: 'break-word' }}
                     />
                     <small className={styles.helpText}>
-                      Brief speaker biography (minimum 50 characters recommended)
+                      {t('speakers.biographyHint')}
                     </small>
                   </div>
-
-                  <label
-                    htmlFor={getSpeakerFieldId('edit-speaker', speaker.id, 'use-gravatar')}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}
-                  >
-                    <input
-                      id={getSpeakerFieldId('edit-speaker', speaker.id, 'use-gravatar')}
-                      type="checkbox"
-                      checked={editingSpeaker.use_gravatar}
-                      onChange={(e) =>
-                        setEditingSpeaker({ ...editingSpeaker, use_gravatar: e.target.checked })
-                      }
-                      disabled={disabled || isSaving}
-                    />
-                    Use Gravatar for profile picture
-                  </label>
 
                   <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
                     <button
@@ -314,7 +296,7 @@ export function SpeakerListEditor({
                         fontSize: '0.9rem',
                       }}
                     >
-                      {isSaving ? 'Saving...' : 'Save'}
+                      {isSaving ? t('speakers.saving') : t('speakers.save')}
                     </button>
                     <button
                       type="button"
@@ -330,19 +312,24 @@ export function SpeakerListEditor({
                         fontSize: '0.9rem',
                       }}
                     >
-                      Cancel
+                      {t('common.cancel')}
                     </button>
                   </div>
                 </div>
               ) : (
                 // Display Mode
                 <div key={speaker.id} className={styles.speakerCard}>
-                  {speaker.speaker.profile_picture && (
+                  {speaker.speaker.profile_picture ? (
                     <img
                       src={speaker.speaker.profile_picture}
                       alt={`Speaker image preview for ${speaker.speaker.display_name || speaker.speaker.email}`}
                       className={styles.speakerImage}
                     />
+                  ) : (
+                      <div
+                        className={styles.speakerImagePlaceholder}
+                        title={t('common.noImageUploaded')}
+                      />
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className={styles.speakerName}>
@@ -371,8 +358,8 @@ export function SpeakerListEditor({
                         flexShrink: 0,
                         opacity: disabled || isSaving ? 0.7 : 1,
                       }}
-                    >
-                      Edit
+                     >
+                      {t('speakers.edit')}
                     </button>
                     <button
                       type="button"
@@ -390,7 +377,7 @@ export function SpeakerListEditor({
                         opacity: disabled || isSaving ? 0.7 : 1,
                       }}
                     >
-                      Remove
+                      {t('speakers.remove')}
                     </button>
                   </div>
                 </div>
@@ -400,82 +387,8 @@ export function SpeakerListEditor({
         </div>
       )}
 
-      {/* Add New Speaker Form */}
-      {!editingSpeaker && (
-        <div className={styles.addForm}>
-          <h4 className={styles.addFormHeader}>
-            Add New Speaker
-          </h4>
-          <small className={styles.helpText}>
-            You can upload or change a speaker image after adding the speaker via Edit.
-          </small>
-
-          <div style={{ marginBottom: '0.75rem' }}>
-            <label htmlFor="new-speaker-email" style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-              Email (required):
-            </label>
-            <input
-              id="new-speaker-email"
-              type="email"
-              value={newSpeaker.email || ''}
-              onChange={(e) => setNewSpeaker({ ...newSpeaker, email: e.target.value })}
-              disabled={disabled || isSaving}
-              className={styles.formInput}
-            />
-            <small className={styles.helpText}>
-              e.g., john@example.com
-            </small>
-          </div>
-
-          <div style={{ marginBottom: '0.75rem' }}>
-            <label htmlFor="new-speaker-display-name" style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-              Display Name:
-            </label>
-            <input
-              id="new-speaker-display-name"
-              type="text"
-              value={newSpeaker.display_name || ''}
-              onChange={(e) => setNewSpeaker({ ...newSpeaker, display_name: e.target.value })}
-              disabled={disabled || isSaving}
-              className={styles.formInput}
-            />
-            <small className={styles.helpText}>
-              e.g., John Doe
-            </small>
-          </div>
-
-          <div style={{ marginBottom: '0.75rem' }}>
-            <label htmlFor="new-speaker-biography" style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-              Biography:
-            </label>
-            <textarea
-              id="new-speaker-biography"
-              value={newSpeaker.biography || ''}
-              onChange={(e) => setNewSpeaker({ ...newSpeaker, biography: e.target.value })}
-              disabled={disabled || isSaving}
-              rows={3}
-              className={styles.formInput}
-              style={{ overflow: 'auto', wordBreak: 'break-word', overflowWrap: 'break-word' }}
-            />
-            <small className={styles.helpText}>
-              Brief speaker biography (minimum 50 characters recommended)
-            </small>
-          </div>
-
-          <label
-            htmlFor="new-speaker-use-gravatar"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', fontSize: '0.9rem' }}
-          >
-            <input
-              id="new-speaker-use-gravatar"
-              type="checkbox"
-              checked={newSpeaker.use_gravatar || false}
-              onChange={(e) => setNewSpeaker({ ...newSpeaker, use_gravatar: e.target.checked })}
-              disabled={disabled || isSaving}
-            />
-            Use Gravatar for profile picture
-          </label>
-
+        {/* Add New Speaker Button */}
+        {!editingSpeaker && (
           <button
             type="button"
             onClick={handleAddSpeaker}
@@ -492,10 +405,9 @@ export function SpeakerListEditor({
               opacity: disabled || isSaving ? 0.7 : 1,
             }}
           >
-            {isSaving ? 'Adding...' : '+ Add Speaker'}
+            {isSaving ? t('speakers.adding') : t('speakers.addSpeaker')}
           </button>
-        </div>
-      )}
+        )}
     </div>
   )
 }

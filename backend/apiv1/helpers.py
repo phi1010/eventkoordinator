@@ -62,6 +62,7 @@ def model_proposal_to_schema(proposal_model: ProposalModel) -> ProposalSummary:
         id=proposal_model.id,
         title=proposal_model.title,
         submission_type=submission_type_label,
+        call_id=proposal_model.call_id,
     )
 
 

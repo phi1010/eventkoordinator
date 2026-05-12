@@ -48,12 +48,10 @@ def get_external_calendar_events(
         start_dt = parse_utc(start_utc)
         end_dt = parse_utc(end_utc)
     except ValueError:
-        return 400, ErrorOut(
-            error="Invalid ISO datetime format for start_utc or end_utc"
-        )
+        return 400, ErrorOut(code="calendar.invalidDatetimeFormat")
 
     if end_dt <= start_dt:
-        return 400, ErrorOut(error="end_utc must be greater than start_utc")
+        return 400, ErrorOut(code="calendar.endBeforeStart")
 
     results: list[ExternalCalendarEvent] = []
 

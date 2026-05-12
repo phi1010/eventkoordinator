@@ -3,13 +3,24 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
+import sys
+import unittest
 
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.models import Permission
+from django.test import tag
+from dotenv.cli import unset
 from playwright.sync_api import Page, sync_playwright, expect
 
-from apiv1.models.basedata import Proposal, ProposalArea, ProposalLanguage, SubmissionType
+from apiv1.models.basedata import (
+    Proposal,
+    ProposalArea,
+    ProposalLanguage,
+    SubmissionType,
+)
+from openid_user_management.models import OpenIDUser
 from project.test_utils import (
     SnapshotMixin,
     ViteStaticLiveServerTestCase,
@@ -21,8 +32,133 @@ from project.test_utils import (
 
 logger = logging.getLogger(__name__)
 
+class ProposalNavigationMixin:
 
-class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
+    def wait_some_more(self, page: Page, delay=100):
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(delay)
+
+    def wait_for_proposal_dropdowns_enabled(self, page: Page):
+        expect(page.get_by_label("Submission Type")).to_be_enabled()
+        expect(page.get_by_label("Area (optional)")).to_be_enabled()
+        expect(page.get_by_label("Language", exact=True)).to_be_enabled()
+
+    def navigate_from_proposaleditor_last_tab_to_submit_proposal(self, page: Page):
+        page.get_by_role("button", name="Submit proposal").click()
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+
+    def navigate_save_a_proposal(self, page: Page):
+        page.get_by_role("button", name="Save Proposal").click()
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_some_more(page)
+
+    def navigate_fill_a_proposal(self, page: Page):
+        with self.snapshotted_stage(page, "modify-page1"):
+            page.get_by_role(
+                "textbox", name="Title (max 30 characters)"
+            ).click()
+
+            page.get_by_role(
+                "textbox", name="Title (max 30 characters)"
+            ).fill("My Title")
+
+            page.get_by_label("Submission Type").select_option("workshop")
+
+            page.get_by_label("Area (optional)").select_option(
+                "woodworking"
+            )
+
+            page.get_by_label("Language", exact=True).select_option("de")
+
+            page.get_by_role(
+                "textbox", name="Abstract (50-250 characters)"
+            ).fill("Some Abstract " * 4)
+
+            page.get_by_role("textbox", name="Description (50-1000").fill(
+                "Some Description " * 8
+            )
+
+        with self.snapshotted_stage(page, "modify-page2"):
+            page.get_by_role("button", name="Next →").click()
+
+            page.get_by_text("This workshop is a basic").click()
+
+            page.get_by_role(
+                "spinbutton", name="Max. number of participants"
+            ).fill("20")
+
+            page.get_by_role(
+                "spinbutton", name="Material cost per participant"
+            ).fill("24")
+
+        with self.snapshotted_stage(page, "modify-page3"):
+            page.get_by_role("button", name="Next →").click()
+
+            page.get_by_role("spinbutton", name="Number of Days").fill("5")
+
+            page.get_by_role("textbox", name="Time per day (HH:MM or").fill(
+                "1:30"
+            )
+
+            page.get_by_role(
+                "spinbutton", name="How often would you offer"
+            ).fill("2")
+
+            page.get_by_role("textbox", name="Preferred Dates and").fill(
+                "Always"
+            )
+        with self.snapshotted_stage(page, "modify-page4"):
+            page.get_by_role("button", name="Next →").click()
+
+            page.get_by_text("Are you a regular member?").click()
+
+            page.get_by_text("At least one speaker has access to the ZAM building").click()
+
+            page.get_by_role("button", name="Edit").click()
+
+            page.get_by_role("textbox", name="Display Name:").fill(
+                "proposalux-user Name"
+            )
+
+            page.get_by_role("textbox", name="Biography:").fill("Bio")
+        with self.snapshotted_stage(page, "modify-page4b"):
+            page.get_by_role("button", name="Save", exact=True).click()
+
+            page.get_by_role(
+                "textbox", name="Internal Notes (optional)"
+            ).click()
+            page.get_by_role(
+                "textbox", name="Internal Notes (optional)"
+            ).fill("Internal Notes")
+
+        with self.snapshotted_stage(page, "modify-page5"):
+            page.get_by_role("button", name="Next →").click()
+
+    def navigate_create_new_proposal(self, page: Page):
+        page.get_by_role("button", name="Create New Proposal").click()
+
+        self.wait_some_more(page)
+        wait_for_loading_indicators_to_disappear(page)
+        self.wait_for_proposal_dropdowns_enabled(page)
+        self.wait_some_more(page)
+
+    def navigate_from_home_to_proposaleditor(self, page: Page):
+        page.get_by_role(
+            "button", name="🎤 Create a Proposal Submit"
+        ).click()
+
+class ProposalUxPlaywrightTest(ProposalNavigationMixin, SnapshotMixin, ViteStaticLiveServerTestCase):
     """Covers create -> save -> submit proposal flow with stage snapshots."""
 
     vite_force_rebuild = True
@@ -33,7 +169,7 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
         self.username = "proposalux-user"
         self.password = "password123"
 
-        User = get_user_model()
+        User = OpenIDUser
         User.objects.filter(username=self.username).delete()
         user, _ = User.objects.get_or_create(
             username=self.username,
@@ -42,7 +178,10 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
         user.set_password(self.password)
         user.save(update_fields=["password"])
         logger.debug(f"Created user: {user}, {user.__dict__!r}")
-        self.assertIsNotNone(authenticate(username=self.username, password=self.password))
+        self.assertIsNotNone(
+            authenticate(username=self.username, password=self.password)
+        )
+        logger.debug(f"Authentication succeeds with pass {self.password}")
         required_permission_codenames = [
             "add_proposal",
             "change_proposal",
@@ -70,6 +209,7 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
     def tearDown(self) -> None:
         User = get_user_model()
         User.objects.filter(username=self.username).delete()
+        logger.debug(f"Deleted user {self.username}")
         super().tearDown()
 
     def _login_via_navbar(self, page: Page, base_url: str) -> None:
@@ -79,7 +219,9 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
         page.get_by_label("Username").fill(self.username)
         page.get_by_label("Password").fill(self.password)
         with page.expect_response(
-            lambda response: response.url.endswith("/api/v1/authenticate") and response.status == 200,
+            lambda response: (
+                response.url.endswith("/api/v1/authenticate") and response.status == 200
+            ),
             timeout=5000,
         ):
             page.get_by_role("button", name="Login", exact=True).click()
@@ -96,10 +238,33 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
     def _log_field_step(self, label: str) -> None:
         logger.info("Proposal form step: %s", label)
 
+    @unittest.skipUnless("--tag=manual_record" in sys.argv, "Test generation utility")
+    @tag("manual_record")
+    def test_manual_record(self):
+        pwdebug_prev = os.environ.get("PWDEBUG")
+        os.environ["PWDEBUG"] = "1"
+        try:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(**playwright_launch_options())
+                page = browser.new_page()
+                self._login_via_navbar(page, self.live_server_url)
+                try:
+                    with print_aria_on_timeout(page):
+                        self.wait_some_more(page)
+                        page.pause()
+                finally:
+                    browser.close()
+        finally:
+            if pwdebug_prev is not None:
+                os.environ["PWDEBUG"] = pwdebug_prev
+            else:
+                os.environ.pop("PWDEBUG")
+
     def test_create_save_submit_proposal(self) -> None:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(**playwright_launch_options())
             page = browser.new_page()
+            page.set_viewport_size({"width": 1080, "height": 1920})
             try:
                 with print_aria_on_timeout(page):
                     base_url = self.live_server_url
@@ -107,116 +272,25 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         base_url = base_url()
 
                     self._login_via_navbar(page, base_url)
-                    page.get_by_role("button", name="Create a Proposal").click()
 
-                    page.get_by_role("main", name="Proposals content").wait_for(timeout=5000)
-                    page.get_by_role("button", name="Create New Proposal").click()
-                    page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
+                    with self.snapshotted_stage(page, "create"):
+                        self.navigate_from_home_to_proposaleditor(page)
+                        self.navigate_create_new_proposal(page)
 
-                    page.wait_for_load_state("networkidle")
-                    wait_for_loading_indicators_to_disappear(page)
-                    expect(page.get_by_label("Submission Type")).to_be_enabled()
-                    expect(page.get_by_label("Area (optional)")).to_be_enabled()
-                    expect(page.get_by_label("Language")).to_be_enabled()
-                    page.wait_for_load_state("networkidle")
-                    page.wait_for_timeout(100)
+                    self.navigate_fill_a_proposal(page)
 
+                    with self.snapshotted_stage(page, "save"):
+                        self.navigate_save_a_proposal(page)
 
-                    with self.subTest(stage="create"):
-                        self._log_field_step("submission type")
-                        expect(page.get_by_label("Submission Type")).to_be_enabled()
-                        self._log_field_step("area")
-                        expect(page.get_by_label("Area (optional)")).to_be_enabled()
-                        self._log_field_step("language")
-                        expect(page.get_by_label("Language")).to_be_enabled()
-                        self.assert_snapshot(page.locator("body").aria_snapshot())
-                    with self.subTest(stage="save"):
-                        self._log_field_step("title")
-                        page.get_by_label("Title (max 30 characters)").fill("Intro to wood joints")
-                        page.locator("body").screenshot(path=self._snapshot_path().with_suffix(".create.png"))
-                        self._log_field_step("submission type")
-                        page.get_by_label("Submission Type").select_option("workshop")
-                        self._log_field_step("area")
-                        page.get_by_label("Area (optional)").select_option("woodworking")
-                        self._log_field_step("language")
-                        page.get_by_label("Language").select_option("de")
-                        self._log_field_step("abstract")
-                        page.get_by_label("Abstract (50-250 characters)").fill(
-                            "A hands-on workshop introducing simple woodworking joints for beginners."
-                        )
-                        self._log_field_step("description")
-                        page.get_by_label("Description (50-1000 characters)").fill(
-                            "Participants learn safe tool handling and build sample joints with guided practice and feedback."
-                        )
-                        self._log_field_step("Number of Days")
-                        page.get_by_label("Number of Days").fill("1")
-                        self._log_field_step("Time per Day")
-                        page.get_by_label("Time per Day (HH:MM or minutes)").fill("02:00")
-                        self._log_field_step("How often")
-                        page.get_by_label("How often would you offer this event?").fill("1")
+                    with self.snapshotted_stage(page, "submit"):
+                        self.navigate_from_proposaleditor_last_tab_to_submit_proposal(page)
 
-                        self._log_field_step("Additional Information")
-                        page.locator("summary", has_text="Additional Information").click()
-
-                        self._log_field_step("max participants")
-                        page.get_by_label("Max. Number of Participants").fill("10")
-                        self._log_field_step("preferred dates")
-                        page.get_by_label("Preferred Date and Alternatives").fill("2026-08-10 to 2026-08-11")
-
-                        self._log_field_step("About Yourself")
-                        page.locator("summary", has_text="About Yourself").click()
-
-                        self._log_field_step("speaker email")
-                        page.get_by_label("Email (required):").fill("speaker@example.com")
-                        self._log_field_step("speaker display name")
-                        page.get_by_label("Display Name:").fill("Sample Speaker")
-                        self._log_field_step("speaker biography")
-                        page.get_by_label("Biography:").fill(
-                            "Sample Speaker has many years of workshop facilitation and practical making experience."
-                        )
-                        self._log_field_step("add speaker")
-                        page.get_by_role("button", name="+ Add Speaker").click()
-                        page.get_by_text("Added Speakers (1)").wait_for(timeout=5000)
-
-                        page.wait_for_timeout(500)
-                        self._log_field_step("save proposal")
-                        page.get_by_role("button", name="Save Proposal").click()
-                        page.wait_for_load_state("networkidle")
-                        page.wait_for_timeout(500)
-                        wait_for_loading_indicators_to_disappear(page)
-                        expect(page.get_by_label("Submission Type")).to_be_enabled()
-                        expect(page.get_by_label("Area (optional)")).to_be_enabled()
-                        expect(page.get_by_label("Language")).to_be_enabled()
-                        page.wait_for_load_state("networkidle")
-                        page.wait_for_timeout(100)
-
-                        page.locator("body").screenshot(path=self._snapshot_path().with_suffix(".save.png"))
-                        self.assert_snapshot(page.locator("body").aria_snapshot())
-
-                    with self.subTest(stage="submit"):
-                        submit_button = page.get_by_role(
-                            "button", name=re.compile(r"^(Submit proposal|Resubmit proposal)$", re.IGNORECASE)
-                        )
-                        submit_button.wait_for(timeout=5000)
-                        self.assertTrue(submit_button.is_enabled(), "Submit button is disabled after save")
-                        submit_button.click()
-                        page.wait_for_load_state("networkidle")
-                        page.wait_for_timeout(500)
-                        wait_for_loading_indicators_to_disappear(page)
-                        page.wait_for_load_state("networkidle")
-                        expect(page.get_by_label("Submission Type")).to_be_enabled()
-                        expect(page.get_by_label("Area (optional)")).to_be_enabled()
-                        expect(page.get_by_label("Language")).to_be_enabled()
-                        page.wait_for_load_state("networkidle")
-                        page.wait_for_timeout(100)
-
-                        page.locator("body").screenshot(path=self._snapshot_path().with_suffix(".submit.png"))
-                        self.assert_snapshot(page.locator("body").aria_snapshot())
             finally:
                 browser.close()
 
+
     def test_delete_proposal_via_ui(self) -> None:
-        user = get_user_model().objects.get(username=self.username)
+        user = OpenIDUser.objects.get(username=self.username)
         draft_proposal = Proposal.objects.create(
             title="Delete Me Proposal",
             submission_type=SubmissionType.objects.get(code="workshop"),
@@ -232,7 +306,6 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
             max_participants=8,
             material_cost_eur="0.00",
             preferred_dates="2026-09-10",
-            is_regular_member=False,
             has_building_access=False,
             owner=user,
         )
@@ -248,11 +321,15 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
 
                     self._login_via_navbar(page, base_url)
                     page.get_by_role("button", name="Create a Proposal").click()
-                    page.get_by_role("main", name="Proposals content").wait_for(timeout=5000)
+                    page.get_by_role("main", name="Proposals content").wait_for(
+                        timeout=5000
+                    )
                     page.get_by_role("listbox", name="Proposals").get_by_role(
                         "option", name=re.compile(r"^Delete Me Proposal\b")
                     ).click()
-                    page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
+                    page.get_by_role("form", name="Proposal editor").wait_for(
+                        timeout=5000
+                    )
 
                     with self.subTest(stage="before_delete"):
                         wait_for_loading_indicators_to_disappear(page)
@@ -267,8 +344,7 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
 
                         page.once("dialog", _handle_delete_proposal_dialog)
                         page.get_by_role("button", name="Delete Proposal").click()
-                        page.wait_for_load_state("networkidle")
-                        page.wait_for_timeout(300)
+                        self.wait_some_more(page)
                         page.get_by_role("main", name="Proposals content").get_by_text(
                             "No proposals yet"
                         ).wait_for(timeout=1000)
@@ -276,7 +352,7 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                             delete_proposal_msgs,
                             "No dialog was shown for delete proposal",
                         )
-                        self.assertIn("Delete the proposal", delete_proposal_msgs[0])
+                        self.assertIn("Delete proposal", delete_proposal_msgs[0])
                         self.assert_snapshot(page.locator("body").aria_snapshot())
             finally:
                 browser.close()
@@ -285,4 +361,3 @@ class ProposalUxPlaywrightTest(SnapshotMixin, ViteStaticLiveServerTestCase):
             Proposal.objects.filter(pk=draft_proposal.pk).exists(),
             "Proposal should be deleted after accepting the confirmation dialog",
         )
-

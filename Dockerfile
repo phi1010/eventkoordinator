@@ -28,8 +28,8 @@ ENV DJANGO_SECRET_KEY=collectstatic-build-key
 ENV DJANGO_OIDC_DISCOVERY_URL=""
 
 WORKDIR /app/backend
-RUN uv run python manage.py render_nginx_conf
-RUN mkdir -p /app/staticfiles && uv run python manage.py collectstatic --noinput
+RUN uv run --no-group dev python manage.py render_nginx_conf
+RUN mkdir -p /app/staticfiles && uv run --no-group dev python manage.py collectstatic --noinput
 
 # =============================================================================
 # Stage 2: Build the Vite / React frontend
@@ -88,7 +88,7 @@ WORKDIR /app/backend
 
 EXPOSE 8000
 
-CMD ["uv", "run", "gunicorn", "project.wsgi:application", \
+CMD ["uv", "run", "--no-group", "dev", "gunicorn", "project.wsgi:application", \
      "--bind", "0.0.0.0:8000", \
      "--workers", "4", \
      "--timeout", "120"]

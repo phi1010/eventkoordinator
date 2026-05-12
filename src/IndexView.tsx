@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Navbar } from './Navbar'
 import { DefaultScreen } from './DefaultScreen'
 import { MainView } from './MainView'
-import { ProposalSelectionPanel } from './SelectionPanel'
 import { ProposalEventView } from './ProposalEventView'
 import { SyncDiff } from './SyncDiff'
 import { getCurrentUser, initializeCsrfToken, type User } from './api'
 import { usePermissions, notifyAuthChanged } from './usePermissions'
+import i18n from './i18n'
 import styles from './IndexView.module.css'
+import {ProposalSelectionPanel} from "./ProposalSelectionPanel.tsx";
+import { ProposalDashboard } from './ProposalDashboard'
 
 export function IndexView() {
+  const { t } = useTranslation()
   const [user, setUser] = useState<User | null>(null)
   const { canBrowse, loading: permissionsLoading } = usePermissions()
 
@@ -20,6 +24,9 @@ export function IndexView() {
       try {
         const currentUser = await getCurrentUser()
         setUser(currentUser)
+        // Set locale from user profile
+        const locale = navigator.language.split('-')[0]
+        i18n.changeLanguage(locale)
       } catch {
         console.log('User not authenticated')
       }
@@ -30,6 +37,9 @@ export function IndexView() {
   const handleLogin = (authenticatedUser: User) => {
     setUser(authenticatedUser)
     notifyAuthChanged()
+    // Set locale from user profile
+    const locale = navigator.language.split('-')[0]
+    i18n.changeLanguage(locale)
   }
 
   const handleLogout = () => {
@@ -48,8 +58,19 @@ export function IndexView() {
             element={
               permissionsLoading ? null : canBrowse('series') ? <MainView /> : (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Access Denied</p>
-                  <p>You don't have permission to browse series</p>
+                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common.accessDenied')}</p>
+                  <p>{t('common.noPermissionBrowseSeries')}</p>
+                </div>
+              )
+            }
+          />
+          <Route
+            path="/proposal-dashboard"
+            element={
+              permissionsLoading ? null : canBrowse('proposal') ? <ProposalDashboard /> : (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common.accessDenied')}</p>
+                  <p>{t('common.noPermissionBrowseProposal')}</p>
                 </div>
               )
             }
@@ -59,8 +80,8 @@ export function IndexView() {
             element={
               permissionsLoading ? null : canBrowse('proposal') ? <ProposalSelectionPanel /> : (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Access Denied</p>
-                  <p>You don't have permission to browse proposals</p>
+                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common.accessDenied')}</p>
+                  <p>{t('common.noPermissionBrowseProposal')}</p>
                 </div>
               )
             }
@@ -74,8 +95,8 @@ export function IndexView() {
             element={
               permissionsLoading ? null : canBrowse('proposal') ? <ProposalEventView /> : (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Access Denied</p>
-                  <p>You don't have permission to browse proposals</p>
+                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common.accessDenied')}</p>
+                  <p>{t('common.noPermissionBrowseProposal')}</p>
                 </div>
               )
             }

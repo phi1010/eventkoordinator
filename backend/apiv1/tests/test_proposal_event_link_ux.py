@@ -15,6 +15,7 @@ from apiv1.models.basedata import (
     Series,
     SubmissionType,
 )
+from apiv1.tests.test_proposal_ux import ProposalNavigationMixin
 from project.test_utils import (
     SnapshotMixin,
     ViteStaticLiveServerTestCase,
@@ -26,7 +27,7 @@ from project.test_utils import (
 logger = logging.getLogger(__name__)
 
 
-class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
+class ProposalEventLinkUxTest(ProposalNavigationMixin, SnapshotMixin, ViteStaticLiveServerTestCase):
     """Covers the flow: accept a proposal -> create event from proposal -> verify linked events."""
 
     vite_force_rebuild = True
@@ -111,82 +112,32 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
 
     def _create_and_accept_proposal(self, page: Page, base_url: str) -> None:
         """Create a proposal, fill required fields, save, submit, and accept it."""
-        page.get_by_role("button", name="Create a Proposal").click()
-        page.get_by_role("main", name="Proposals content").wait_for(timeout=5000)
-        page.get_by_role("button", name="Create New Proposal").click()
-        page.get_by_role("form", name="Proposal editor").wait_for(timeout=5000)
-        page.wait_for_load_state("networkidle")
-        wait_for_loading_indicators_to_disappear(page)
-        expect(page.get_by_label("Submission Type")).to_be_enabled()
-        expect(page.get_by_label("Area (optional)")).to_be_enabled()
-        expect(page.get_by_label("Language")).to_be_enabled()
 
-        # Fill required fields
-        page.get_by_label("Title (max 30 characters)").fill("Test Event Link")
-        page.get_by_label("Submission Type").select_option("workshop")
-        page.get_by_label("Area (optional)").select_option("woodworking")
-        page.get_by_label("Language").select_option("de")
-        page.get_by_label("Abstract (50-250 characters)").fill(
-            "A hands-on workshop introducing simple woodworking joints for beginners."
-        )
-        page.get_by_label("Description (50-1000 characters)").fill(
-            "Participants learn safe tool handling and build sample joints with guided practice and feedback."
-        )
-        page.get_by_label("Number of Days").fill("1")
-        page.get_by_label("Time per Day (HH:MM or minutes)").fill("02:00")
-        page.get_by_label("How often would you offer this event?").fill("1")
+        with self.snapshotted_stage(page, "create"):
+            self.navigate_from_home_to_proposaleditor(page)
+            self.navigate_create_new_proposal(page)
+            self.navigate_fill_a_proposal(page)
 
-        # Open additional information
-        page.locator("summary", has_text="Additional Information").click()
-        page.get_by_label("Max. Number of Participants").fill("10")
-        page.get_by_label("Preferred Date and Alternatives").fill(
-            "2026-08-10 to 2026-08-11"
-        )
+        with self.snapshotted_stage(page, "save"):
+            self.navigate_save_a_proposal(page)
 
-        # Open about yourself section and add a speaker
-        page.locator("summary", has_text="About Yourself").click()
-        page.get_by_label("Email (required):").fill("speaker@example.com")
-        page.get_by_label("Display Name:").fill("Sample Speaker")
-        page.get_by_label("Biography:").fill(
-            "Sample Speaker has many years of workshop facilitation and practical making experience."
-        )
-        page.get_by_role("button", name="+ Add Speaker").click()
-        page.get_by_text("Added Speakers (1)").wait_for(timeout=5000)
+        with self.snapshotted_stage(page, "submit"):
+            self.navigate_from_proposaleditor_last_tab_to_submit_proposal(page)
 
-        # Save
-        page.wait_for_timeout(500)
-        page.get_by_role("button", name="Save Proposal").click()
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(500)
-        wait_for_loading_indicators_to_disappear(page)
-
-        # Submit
-        page.locator("body").screenshot(
-            path=self._snapshot_path().with_suffix(".before-submit.png")
-        )
-        submit_button = page.get_by_role(
-            "button",
-            name=re.compile(r"^(Submit proposal|Resubmit proposal)$", re.IGNORECASE),
-        )
-        submit_button.wait_for(timeout=5000)
-        submit_button.click()
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(500)
-        wait_for_loading_indicators_to_disappear(page)
-
-        # Accept
-        page.locator("body").screenshot(
-            path=self._snapshot_path().with_suffix(".before-accept.png")
-        )
-        accept_button = page.get_by_role(
-            "button",
-            name=re.compile(r"^Accept proposal$", re.IGNORECASE),
-        )
-        accept_button.wait_for(timeout=5000)
-        accept_button.click()
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(500)
-        wait_for_loading_indicators_to_disappear(page)
+        with self.snapshotted_stage(page, "accept"):
+            accept_button = page.get_by_role(
+                "button",
+                name=re.compile(r"^Accept proposal$", re.IGNORECASE),
+            )
+            accept_button.wait_for(timeout=5000)
+            accept_button.click()
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(500)
+            wait_for_loading_indicators_to_disappear(page)
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(500)
+            wait_for_loading_indicators_to_disappear(page)
+            page.get_by_role("button", name="Next →").click()
 
     def test_proposal_event_link_flow(self) -> None:
         """Test the complete flow: accept proposal, create event, verify linked events list."""
@@ -202,7 +153,7 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                     self._login_via_navbar(page, base_url)
                     self._create_and_accept_proposal(page, base_url)
 
-                    with self.subTest(stage="accepted_with_linked_events_section"):
+                    with self.snapshotted_stage(page, "accepted_with_linked_events_section"):
                         # After acceptance, linked events section should appear
                         wait_for_loading_indicators_to_disappear(page)
                         page.get_by_text("Linked Events (0)").wait_for(timeout=5000)
@@ -213,7 +164,7 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                             page.locator("body").aria_snapshot()
                         )
 
-                    with self.subTest(stage="create_event_from_proposal"):
+                    with self.snapshotted_stage(page,"create_event_from_proposal"):
                         # Select the series from the dropdown
                         wait_for_loading_indicators_to_disappear(page)
                         page.get_by_role("combobox", name="Series").select_option(
@@ -230,11 +181,11 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                         page.get_by_text("Edit Event").wait_for(timeout=5000)
                         # Should show proposal info on the left
                         page.get_by_role(
-                            "heading", name="Test Event Link", exact=True
+                            "heading", name="My Title", exact=True
                         ).wait_for(timeout=5000)
-                        page.get_by_text("Duration Days").wait_for(timeout=5000)
+                        page.get_by_text("Number of Days").wait_for(timeout=5000)
                         page.locator(
-                            '[aria-label="Status of Test Event Link Session: draft"]'
+                            '[aria-label="Status of My Title Session: draft"]'
                         ).first.wait_for(timeout=5000)
                         page.wait_for_load_state("networkidle")
                         wait_for_loading_indicators_to_disappear(page)
@@ -245,14 +196,15 @@ class ProposalEventLinkUxTest(SnapshotMixin, ViteStaticLiveServerTestCase):
                             page.locator("body").aria_snapshot()
                         )
 
-                    with self.subTest(stage="verify_linked_event_in_proposal"):
+                    with self.snapshotted_stage(page, "verify_linked_event_in_proposal"):
                         # Go back to proposal
-                        page.get_by_role("link", name="Back to Proposal").click()
+                        page.get_by_role("link", name="← Back").click()
                         page.wait_for_load_state("networkidle")
                         page.wait_for_timeout(500)
 
                         # Should show 1 linked event
                         wait_for_loading_indicators_to_disappear(page)
+                        page.get_by_role("tab", name="Date Arrangement").click()
                         page.get_by_text("Linked Events (1)").wait_for(
                             timeout=5000
                         )

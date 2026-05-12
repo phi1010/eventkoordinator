@@ -227,3 +227,7 @@ CELERY_BEAT_SCHEDULE = {
 CELERY_TASK_ROUTES = {
     "sync_ical.tasks.import_ical_task": {"queue": "default"},
 }
+
+IMPRINT_URL = "https://www.zam.haus/impressum/"
+PRIVACY_POLICY_URL = "https://www.zam.haus/datenschutzerklaerung-2/"
+ACCOUNT_MANAGEMENT_URL = "https://sso.zam.haus/realms/ZAM/account/"

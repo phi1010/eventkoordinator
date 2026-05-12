@@ -1,0 +1,156 @@
+.container {
+  padding: 1.5rem;
+  height: 100%;
+  overflow: auto;
+}
+
+.tableHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.tableTitle {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.tableLink {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.tableLink:hover {
+  text-decoration: underline;
+}
+
+.speakerList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  line-height: 1.4;
+}
+
+/* Proposal status badges */
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge--draft     { background: #e5e7eb; color: #374151; }
+.badge--submitted { background: #dbeafe; color: #1d4ed8; }
+.badge--revise    { background: #fef3c7; color: #92400e; }
+.badge--accepted  { background: #dcfce7; color: #15803d; }
+.badge--rejected  { background: #fee2e2; color: #b91c1c; }
+.badge--unknown   { background: #e5e7eb; color: #374151; }
+
+/* Event status badges */
+.badge--event-draft     { background: #e5e7eb; color: #374151; }
+.badge--event-proposed  { background: #ede9fe; color: #6d28d9; }
+.badge--event-planned   { background: #dbeafe; color: #1d4ed8; }
+.badge--event-published { background: #cffafe; color: #0e7490; }
+.badge--event-confirmed { background: #dcfce7; color: #15803d; }
+.badge--event-canceled  { background: #fee2e2; color: #b91c1c; }
+.badge--event-completed { background: #d1fae5; color: #065f46; }
+.badge--event-archived  { background: #f3f4f6; color: #6b7280; }
+.badge--event-rejected  { background: #fee2e2; color: #b91c1c; }
+
+/* Sync status badges */
+.syncBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.syncBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.syncBadge--up-to-date      { background: #dcfce7; color: #15803d; }
+.syncBadge--differs         { background: #fef3c7; color: #92400e; }
+.syncBadge--creation-pending { background: #dbeafe; color: #1d4ed8; }
+.syncBadge--no-entry        { background: #e5e7eb; color: #374151; }
+.syncBadge--unknown         { background: #e5e7eb; color: #374151; }
+
+/* Progress bar for agreed dates */
+.progressCell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.progressBar {
+  flex: 1;
+  height: 7px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 4rem;
+}
+
+.progressFill {
+  height: 100%;
+  background: #16a34a;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progressLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #374151;
+  min-width: 2.2rem;
+  text-align: right;
+}
+
+/* Filterable column header */
+.filterableHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.colFilter {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  width: auto !important;
+  min-width: 0 !important;
+  flex-shrink: 0;
+}
+
+.colFilterTrigger {
+  padding: 0.15rem 0.3rem !important;
+  color: #9ca3af;
+  border-radius: 4px;
+  width: auto !important;
+}
+
+.colFilterActive {
+  color: #2563eb !important;
+}
+
+.expandedSection {
+  padding: 0.5rem 1rem 1rem;
+}
+
+.noEvents {
+  color: #6b7280;
+  font-style: italic;
+  padding: 0.5rem 0;
+}

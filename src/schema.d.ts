@@ -44,6 +44,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/calls/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Calls
+         * @description List calls. Requires browse_proposal (submitters) or view_call (managers).
+         *     Submitters always see active-only calls; managers respect the active_only param.
+         */
+        get: operations["apiv1_routers_calls_list_calls"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calls/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Call
+         * @description Create a new call. Requires add_call permission.
+         */
+        post: operations["apiv1_routers_calls_create_call"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calls/{call_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Call
+         * @description Get a single call by ID. Requires browse_proposal or view_call.
+         */
+        get: operations["apiv1_routers_calls_get_call"];
+        /**
+         * Update Call
+         * @description Update an existing call. Requires change_call permission.
+         */
+        put: operations["apiv1_routers_calls_update_call"];
+        post?: never;
+        /**
+         * Delete Call
+         * @description Delete a call. Requires delete_call permission.
+         */
+        delete: operations["apiv1_routers_calls_delete_call"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Site Config
+         * @description Return public site configuration (links for imprint, privacy policy, account management).
+         */
+        get: operations["apiv1_routers_lookups_get_site_config"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/csrf": {
         parameters: {
             query?: never;
@@ -212,6 +301,26 @@ export interface paths {
          * @description Return all active proposal languages
          */
         get: operations["apiv1_routers_lookups_get_proposal_languages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/proposals/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Proposals
+         * @description List all proposals visible to the current user.
+         */
+        get: operations["apiv1_routers_proposals_list_proposals"];
         put?: never;
         post?: never;
         delete?: never;
@@ -593,7 +702,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/series/event-flow-chart": {
+    "/api/v1/series/event-flow-diagram": {
         parameters: {
             query?: never;
             header?: never;
@@ -601,10 +710,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Event Flow Chart Image
-         * @description Return an SVG diagram of the event lifecycle state machine.
+         * Event Flow Diagram
+         * @description Return the event FSM structure as a Pydantic model for frontend diagram rendering.
          */
-        get: operations["apiv1_routers_series_event_flow_chart_image"];
+        get: operations["apiv1_routers_series_event_flow_diagram"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1077,12 +1186,88 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Internal Training Eur */
+            internal_training_eur?: string | null;
             /** Member Discounted Gross Eur */
             member_discounted_gross_eur?: string | null;
             /** Member Regular Gross Eur */
             member_regular_gross_eur?: string | null;
             /** Pricing Configuration Id */
             pricing_configuration_id?: string | null;
+        };
+        /** CallCreateIn */
+        CallCreateIn: {
+            /**
+             * Description
+             * @default
+             */
+            description: string | null;
+            /** Execution Period End */
+            execution_period_end: string;
+            /** Execution Period Start */
+            execution_period_start: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean | null;
+            /** Print Deadline */
+            print_deadline: string;
+            /** Responsible Email */
+            responsible_email: string;
+            /** Responsible Name */
+            responsible_name: string;
+            /** Submission Deadline */
+            submission_deadline: string;
+            /** Title */
+            title: string;
+        };
+        /** CallOut */
+        CallOut: {
+            /** Description */
+            description: string;
+            /** Execution Period End */
+            execution_period_end: string;
+            /** Execution Period Start */
+            execution_period_start: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Print Deadline */
+            print_deadline: string;
+            /** Responsible Email */
+            responsible_email: string;
+            /** Responsible Name */
+            responsible_name: string;
+            /** Submission Deadline */
+            submission_deadline: string;
+            /** Title */
+            title: string;
+        };
+        /** CallUpdateIn */
+        CallUpdateIn: {
+            /** Description */
+            description?: string | null;
+            /** Execution Period End */
+            execution_period_end?: string | null;
+            /** Execution Period Start */
+            execution_period_start?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Print Deadline */
+            print_deadline?: string | null;
+            /** Responsible Email */
+            responsible_email?: string | null;
+            /** Responsible Name */
+            responsible_name?: string | null;
+            /** Submission Deadline */
+            submission_deadline?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /**
          * CreateCalculatedPricesIn
@@ -1128,10 +1313,10 @@ export interface components {
         };
         /** ErrorOut */
         ErrorOut: {
+            /** Code */
+            code: string;
             /** Detail */
             detail?: string | null;
-            /** Error */
-            error: string;
         };
         /** Event */
         Event: {
@@ -1165,6 +1350,16 @@ export interface components {
              */
             useFullDays: boolean;
         };
+        /**
+         * EventFlowDiagram
+         * @description Static structure of the event FSM for frontend diagram rendering.
+         */
+        EventFlowDiagram: {
+            /** Edges */
+            edges: components["schemas"]["FlowEdge"][];
+            /** Nodes */
+            nodes: string[];
+        };
         /** EventSyncInfo */
         EventSyncInfo: {
             /**
@@ -1191,8 +1386,8 @@ export interface components {
             disable_reason?: string | null;
             /** Enabled */
             enabled: boolean;
-            /** Label */
-            label: string;
+            /** Label Id */
+            label_id: string;
             /** Target Status */
             target_status: string;
         };
@@ -1223,6 +1418,15 @@ export interface components {
             startUtc: string;
             /** Title */
             title: string;
+        };
+        /** FlowEdge */
+        FlowEdge: {
+            /** Label Id */
+            label_id: string;
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
         };
         /** LookupOut */
         LookupOut: {
@@ -1363,6 +1567,8 @@ export interface components {
             abstract?: string | null;
             /** Area */
             area?: string | null;
+            /** Call Id */
+            call_id?: string | null;
             /** Description */
             description?: string | null;
             /** Duration Days */
@@ -1375,8 +1581,6 @@ export interface components {
             internal_notes?: string | null;
             /** Is Basic Course */
             is_basic_course?: boolean | null;
-            /** Is Regular Member */
-            is_regular_member?: boolean | null;
             /** Language */
             language?: string | null;
             /** Material Cost Eur */
@@ -1398,6 +1602,8 @@ export interface components {
             abstract: string;
             /** Area */
             area?: string | null;
+            /** Call Id */
+            call_id?: string | null;
             /** Description */
             description: string;
             /** Duration Days */
@@ -1420,14 +1626,17 @@ export interface components {
             internal_notes: string;
             /** Is Basic Course */
             is_basic_course: boolean;
-            /** Is Regular Member */
-            is_regular_member: boolean;
             /** Language */
             language?: string | null;
             /** Material Cost Eur */
             material_cost_eur: string;
             /** Max Participants */
             max_participants: number;
+            /**
+             * Moderation Comment
+             * @default
+             */
+            moderation_comment: string;
             /** Occurrence Count */
             occurrence_count: number;
             owner?: components["schemas"]["UserBasic"] | null;
@@ -1499,6 +1708,29 @@ export interface components {
             /** Timestamp */
             timestamp: string;
         };
+        /** ProposalListItem */
+        ProposalListItem: {
+            /** Accepted Event Count */
+            accepted_event_count: number;
+            /** Call Title */
+            call_title?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Occurrence Count */
+            occurrence_count: number;
+            owner?: components["schemas"]["UserBasic"] | null;
+            /** Speakers */
+            speakers: string[];
+            /** Status */
+            status: string;
+            /** Submission Type */
+            submission_type?: string | null;
+            /** Title */
+            title: string;
+        };
         /** ProposalSpeakerOut */
         ProposalSpeakerOut: {
             /**
@@ -1514,6 +1746,8 @@ export interface components {
         };
         /** ProposalSummary */
         ProposalSummary: {
+            /** Call Id */
+            call_id?: string | null;
             /**
              * Id
              * Format: uuid
@@ -1535,8 +1769,8 @@ export interface components {
             disable_reason?: string | null;
             /** Enabled */
             enabled: boolean;
-            /** Label */
-            label: string;
+            /** Label Id */
+            label_id: string;
             /** Target Status */
             target_status: string;
         };
@@ -1561,6 +1795,8 @@ export interface components {
             abstract?: string | null;
             /** Area */
             area?: string | null;
+            /** Call Id */
+            call_id?: string | null;
             /** Description */
             description?: string | null;
             /** Duration Days */
@@ -1575,14 +1811,14 @@ export interface components {
             internal_notes?: string | null;
             /** Is Basic Course */
             is_basic_course?: boolean | null;
-            /** Is Regular Member */
-            is_regular_member?: boolean | null;
             /** Language */
             language?: string | null;
             /** Material Cost Eur */
             material_cost_eur?: string | null;
             /** Max Participants */
             max_participants?: number | null;
+            /** Moderation Comment */
+            moderation_comment?: string | null;
             /** Occurrence Count */
             occurrence_count?: number | null;
             /** Preferred Dates */
@@ -1618,6 +1854,15 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** SiteConfigOut */
+        SiteConfigOut: {
+            /** Account Management Url */
+            account_management_url: string;
+            /** Imprint Url */
+            imprint_url: string;
+            /** Privacy Policy Url */
+            privacy_policy_url: string;
+        };
         /** SpeakerIn */
         SpeakerIn: {
             /** Biography */
@@ -1626,8 +1871,6 @@ export interface components {
             display_name?: string | null;
             /** Email */
             email?: string | null;
-            /** Use Gravatar */
-            use_gravatar?: boolean | null;
         };
         /** SpeakerOut */
         SpeakerOut: {
@@ -1647,8 +1890,6 @@ export interface components {
             id: string;
             /** Profile Picture */
             profile_picture?: string | null;
-            /** Use Gravatar */
-            use_gravatar: boolean;
         };
         /** SyncDeleteResult */
         SyncDeleteResult: {
@@ -1789,6 +2030,8 @@ export interface components {
             guest_discounted_gross_eur?: string | null;
             /** Guest Regular Gross Eur */
             guest_regular_gross_eur?: string | null;
+            /** Internal Training Eur */
+            internal_training_eur?: string | null;
             /** Member Discounted Gross Eur */
             member_discounted_gross_eur?: string | null;
             /** Member Regular Gross Eur */
@@ -1932,6 +2175,275 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calls_list_calls: {
+        parameters: {
+            query?: {
+                active_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallOut"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calls_create_call: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CallCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calls_get_call: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calls_update_call: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CallUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_calls_delete_call: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_lookups_get_site_config: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteConfigOut"];
                 };
             };
         };
@@ -2324,6 +2836,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LookupOut"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apiv1_routers_proposals_list_proposals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalListItem"][];
                 };
             };
             /** @description Unauthorized */
@@ -3508,7 +4058,7 @@ export interface operations {
             };
         };
     };
-    apiv1_routers_series_event_flow_chart_image: {
+    apiv1_routers_series_event_flow_diagram: {
         parameters: {
             query?: never;
             header?: never;
@@ -3523,25 +4073,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": string;
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
+                    "application/json": components["schemas"]["EventFlowDiagram"];
                 };
             };
         };

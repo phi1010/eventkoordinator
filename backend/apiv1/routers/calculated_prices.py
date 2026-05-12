@@ -46,6 +46,9 @@ def _to_schema(instance: CalculatedPrices) -> CalculatedPricesOut:
         business_net_eur=(
             str(instance.business_net_eur) if instance.business_net_eur is not None else None
         ),
+        internal_training_eur=(
+            str(instance.internal_training_eur) if instance.internal_training_eur is not None else None
+        ),
     )
 
 
@@ -60,7 +63,7 @@ def _parse_decimal_or_none(raw_value: str | None, field_name: str) -> tuple[Deci
     try:
         return Decimal(raw_value), None
     except (InvalidOperation, TypeError):
-        return None, ErrorOut(error=f"Invalid decimal value for {field_name}")
+        return None, ErrorOut(code="prices.invalidDecimal", detail=f"Invalid decimal value for {field_name}")
 
 
 @router.get(
@@ -71,15 +74,15 @@ def _parse_decimal_or_none(raw_value: str | None, field_name: str) -> tuple[Deci
 def get_calculated_prices(request, series_id: UUID, event_id: UUID):
     event = _get_event(series_id=series_id, event_id=event_id)
     if event is None:
-        return 404, ErrorOut(error="Event not found")
+        return 404, ErrorOut(code="events.notFound")
 
     try:
         instance = CalculatedPrices.objects.get(event=event)
     except CalculatedPrices.DoesNotExist:
-        return 404, ErrorOut(error="Calculated prices not found")
+        return 404, ErrorOut(code="prices.notFound")
 
     if not request.user.has_perm((sync_pretix, "view", CalculatedPrices), instance):
-        return 401, ErrorOut(error="Unauthorized to view calculated prices")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     return 200, _to_schema(instance)
 
@@ -97,13 +100,13 @@ def create_calculated_prices(
 ):
     event = _get_event(series_id=series_id, event_id=event_id)
     if event is None:
-        return 404, ErrorOut(error="Event not found")
+        return 404, ErrorOut(code="events.notFound")
 
     if not request.user.has_perm("sync_pretix.add_calculatedprices"):
-        return 401, ErrorOut(error="Unauthorized to add calculated prices")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     if CalculatedPrices.objects.filter(event=event).exists():
-        return 409, ErrorOut(error="Calculated prices already exist for this event")
+        return 409, ErrorOut(code="prices.alreadyExists")
 
     instance = CalculatedPrices(event=event)
     if payload.use_default_pricing_configuration:
@@ -132,15 +135,15 @@ def update_calculated_prices(
 ):
     event = _get_event(series_id=series_id, event_id=event_id)
     if event is None:
-        return 404, ErrorOut(error="Event not found")
+        return 404, ErrorOut(code="events.notFound")
 
     try:
         instance = CalculatedPrices.objects.get(event=event)
     except CalculatedPrices.DoesNotExist:
-        return 404, ErrorOut(error="Calculated prices not found")
+        return 404, ErrorOut(code="prices.notFound")
 
     if not request.user.has_perm((sync_pretix, "change", CalculatedPrices), instance):
-        return 401, ErrorOut(error="Unauthorized to change calculated prices")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     update_data = payload.model_dump(exclude_unset=True)
 
@@ -154,7 +157,7 @@ def update_calculated_prices(
                     pk=pricing_configuration_id
                 )
             except PretixPricingConfiguration.DoesNotExist:
-                return 400, ErrorOut(error="Pricing configuration not found")
+                return 400, ErrorOut(code="prices.configNotFound")
 
     decimal_fields = (
         "member_regular_gross_eur",
@@ -162,6 +165,7 @@ def update_calculated_prices(
         "guest_regular_gross_eur",
         "guest_discounted_gross_eur",
         "business_net_eur",
+        "internal_training_eur",
     )
     for field_name in decimal_fields:
         if field_name not in update_data:
@@ -190,15 +194,15 @@ def update_calculated_prices(
 def delete_calculated_prices(request, series_id: UUID, event_id: UUID):
     event = _get_event(series_id=series_id, event_id=event_id)
     if event is None:
-        return 404, ErrorOut(error="Event not found")
+        return 404, ErrorOut(code="events.notFound")
 
     try:
         instance = CalculatedPrices.objects.get(event=event)
     except CalculatedPrices.DoesNotExist:
-        return 404, ErrorOut(error="Calculated prices not found")
+        return 404, ErrorOut(code="prices.notFound")
 
     if not request.user.has_perm((sync_pretix, "delete", CalculatedPrices), instance):
-        return 401, ErrorOut(error="Unauthorized to delete calculated prices")
+        return 401, ErrorOut(code="auth.permissionDenied")
 
     instance.delete()
     return 204, None

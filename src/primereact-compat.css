@@ -1,0 +1,28 @@
+/*
+ * Reset global button/a styles that interfere with PrimeReact components.
+ * Imported after index.css so these rules have the final say.
+ */
+
+/* Strip padding, backgrounds and borders injected by the global button rule */
+button.p-link,
+button.p-button,
+button.p-datatable-sort-icon,
+.p-datatable button,
+.p-multiselect button,
+.p-dropdown button,
+.p-paginator button,
+.p-inputnumber button,
+.p-colorpicker button {
+  padding: 0;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  transition: none;
+}
+
+/* Ensure the row-toggler SVG icon is never clipped */
+.p-row-toggler {
+  overflow: visible !important;
+}

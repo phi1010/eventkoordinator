@@ -54,7 +54,7 @@ export async function getCsrfToken(): Promise<string> {
 function parseUploadError(responseText: string, fallbackMessage: string): Error {
   try {
     const payload = responseText ? JSON.parse(responseText) : null
-    const errorMessage = payload?.detail ? `${payload.error}: ${payload.detail}` : payload?.error
+    const errorMessage = payload?.detail ? `${payload.code}: ${payload.detail}` : payload?.code
     return new Error(errorMessage || fallbackMessage)
   } catch {
     return new Error(fallbackMessage)
@@ -160,7 +160,7 @@ export interface UserBasic {
 }
 
 export interface AuthError {
-  error: string
+  code: string
 }
 
 export interface UserPermissions {
@@ -358,6 +358,7 @@ export interface ProposalSummary {
   id: string
   title: string
   submission_type: string
+  call_id?: string | null
 }
 
 export async function fetchSyncTargets(): Promise<SyncTarget[]> {
@@ -505,7 +506,7 @@ export async function login(username: string, password: string): Promise<User> {
 
   if (error || !response.ok) {
     const errorData = data as unknown as AuthError
-    throw new Error(errorData?.error || `Login failed: ${response.statusText}`)
+    throw new Error(errorData?.code || `Login failed: ${response.statusText}`)
   }
 
   // Ensure subsequent state-changing requests use the post-login CSRF token.
@@ -522,7 +523,7 @@ export async function getCurrentUser(): Promise<User> {
       return null as unknown as User
     }
 
-    throw new Error(error?.error || 'Failed to get current user')
+    throw new Error(error?.code || 'Failed to get current user')
   }
 
   return data as unknown as User
@@ -542,7 +543,7 @@ export async function getUserPermissions(): Promise<UserPermissions> {
       }
     }
 
-    throw new Error(error?.error || 'Failed to get user permissions')
+    throw new Error(error?.code || 'Failed to get user permissions')
   }
 
   return data as unknown as UserPermissions
@@ -667,7 +668,7 @@ export async function deleteSeries(seriesId: string): Promise<void> {
   })
 
   if (error || !response.ok) {
-    throw new Error(error?.error || `Failed to delete series: ${response.statusText}`)
+    throw new Error(error?.code || `Failed to delete series: ${response.statusText}`)
   }
 }
 
@@ -720,7 +721,7 @@ export async function deleteEvent(seriesId: string, eventId: string): Promise<vo
   })
 
   if (error || !response.ok) {
-    throw new Error(error?.error || `Failed to delete event: ${response.statusText}`)
+    throw new Error(error?.code || `Failed to delete event: ${response.statusText}`)
   }
 }
 
@@ -833,7 +834,7 @@ export async function fetchProposalHistory(proposalId: string, days: number = 7)
 
 export interface ProposalTransition {
   action: string  // 'submit', 'accept', 'reject', 'revise'
-  label: string  // human-readable label
+  label_id: string  // stable i18n key, e.g. 'submit', 'resubmit', 'revise_after_rejection'
   target_status: string  // target status
   enabled: boolean  // whether the transition is currently allowed
   disable_reason?: string | null  // reason if disabled
@@ -940,8 +941,8 @@ export async function createProposal(formData?: {
   max_participants?: number
   material_cost_eur?: string
   preferred_dates?: string
-  is_regular_member?: boolean
   has_building_access?: boolean
+  call_id?: string | null
 }): Promise<ProposalSummary> {
   const { data, error, response } = await client.POST('/api/v1/proposals/create', {
     body: formData || {},
@@ -964,7 +965,7 @@ export async function deleteProposal(proposalId: string): Promise<void> {
   })
 
   if (error || !response.ok) {
-    throw new Error(error?.error || `Failed to delete proposal: ${response.statusText}`)
+    throw new Error(error?.code || `Failed to delete proposal: ${response.statusText}`)
   }
 }
 
@@ -991,7 +992,26 @@ export interface SpeakerIn {
   email?: string
   display_name?: string
   biography?: string
-  use_gravatar?: boolean
+}
+
+export interface ProposalListItem {
+  id: string
+  title: string
+  status: string
+  submission_type?: string | null
+  owner?: UserBasic | null
+  speakers: string[]
+  occurrence_count: number
+  accepted_event_count: number
+  call_title?: string | null
+}
+
+export async function fetchProposalsList(): Promise<ProposalListItem[]> {
+  const { data, error, response } = await client.GET('/api/v1/proposals/' as never, undefined as never)
+  if (error || !response.ok) {
+    throw new Error(`Failed to fetch proposals: ${response.statusText}`)
+  }
+  return (data as unknown as ProposalListItem[]) || []
 }
 
 export interface ProposalDetail {
@@ -1010,11 +1030,12 @@ export interface ProposalDetail {
   max_participants: number
   material_cost_eur: string
   preferred_dates: string
-  is_regular_member: boolean
   has_building_access: boolean
   photo?: string | null
   owner?: UserBasic | null
   editors?: UserBasic[]
+  moderation_comment?: string
+  call_id?: string | null
 }
 
 export async function fetchProposal(proposalId: string): Promise<ProposalDetail> {
@@ -1048,10 +1069,11 @@ export async function updateProposal(proposalId: string, formData: {
   max_participants?: number
   material_cost_eur?: string
   preferred_dates?: string
-  is_regular_member?: boolean
   has_building_access?: boolean
   // owner_id removed - owner is set on creation and cannot be changed
   editor_ids?: string[]
+  moderation_comment?: string
+  call_id?: string | null
 }): Promise<ProposalDetail> {
   const { data, error, response } = await client.PUT('/api/v1/proposals/{proposal_id}', {
     params: {
@@ -1077,7 +1099,6 @@ export interface SpeakerOut {
   display_name: string
   biography: string
   profile_picture?: string | null
-  use_gravatar: boolean
 }
 
 export interface ProposalSpeakerOut {
@@ -1268,7 +1289,7 @@ export interface ProposalEventSummary {
 
 export interface EventTransition {
   action: string
-  label: string
+  label_id: string  // stable i18n key, matches action name
   target_status: string
   enabled: boolean
   disable_reason?: string | null
@@ -1314,16 +1335,25 @@ export async function executeEventTransition(seriesId: string, eventId: string, 
   return toFrontendEvent(data as unknown as ApiEvent)
 }
 
-export async function fetchEventFlowChartSvg(): Promise<string> {
-  const response = await fetch('/api/v1/series/event-flow-chart', {
+export interface FlowEdge {
+  source: string
+  target: string
+  label_id: string
+}
+
+export interface EventFlowDiagram {
+  nodes: string[]
+  edges: FlowEdge[]
+}
+
+export async function fetchEventFlowDiagram(): Promise<EventFlowDiagram> {
+  const response = await fetch('/api/v1/series/event-flow-diagram', {
     credentials: 'include',
   })
-
   if (!response.ok) {
-    throw new Error(`Failed to fetch event flow chart: ${response.statusText}`)
+    throw new Error(`Failed to fetch event flow diagram: ${response.statusText}`)
   }
-
-  return response.text()
+  return response.json() as Promise<EventFlowDiagram>
 }
 
 export async function fetchProposalEvents(proposalId: string): Promise<ProposalEventSummary[]> {
@@ -1351,6 +1381,7 @@ export interface CalculatedPrices {
   guest_regular_gross_eur: string | null
   guest_discounted_gross_eur: string | null
   business_net_eur: string | null
+  internal_training_eur: string | null
 }
 
 export interface UpdateCalculatedPricesRequest {
@@ -1362,6 +1393,7 @@ export interface UpdateCalculatedPricesRequest {
   guest_regular_gross_eur?: string | null
   guest_discounted_gross_eur?: string | null
   business_net_eur?: string | null
+  internal_training_eur?: string | null
 }
 
 export async function fetchCalculatedPrices(seriesId: string, eventId: string): Promise<CalculatedPrices | null> {
@@ -1428,6 +1460,7 @@ export async function updateCalculatedPrices(
         guest_regular_gross_eur: request.guest_regular_gross_eur,
         guest_discounted_gross_eur: request.guest_discounted_gross_eur,
         business_net_eur: request.business_net_eur,
+        internal_training_eur: request.internal_training_eur,
       },
     }
   )
@@ -1452,5 +1485,46 @@ export async function deleteCalculatedPrices(seriesId: string, eventId: string):
   if (error || !response.ok) {
     throw new Error(`Failed to delete calculated prices: ${response.statusText}`)
   }
+}
+
+export interface SiteConfig {
+  imprint_url: string
+  privacy_policy_url: string
+  account_management_url: string
+}
+
+export async function fetchSiteConfig(): Promise<SiteConfig> {
+  const response = await fetch('/api/v1/config')
+  if (!response.ok) throw new Error('Failed to fetch site config')
+  return response.json() as Promise<SiteConfig>
+}
+
+export interface CallOut {
+  id: string
+  title: string
+  description: string
+  execution_period_start: string  // ISO date string
+  execution_period_end: string    // ISO date string
+  submission_deadline: string     // ISO datetime string
+  print_deadline: string          // ISO date string
+  responsible_name: string
+  responsible_email: string
+  is_active: boolean
+}
+
+export async function fetchCalls(activeOnly = true): Promise<CallOut[]> {
+  const response = await fetch(`/api/v1/calls/?active_only=${activeOnly}`, {
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`Failed to fetch calls: ${response.statusText}`)
+  return response.json() as Promise<CallOut[]>
+}
+
+export async function fetchCall(callId: string): Promise<CallOut> {
+  const response = await fetch(`/api/v1/calls/${callId}`, {
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`Failed to fetch call: ${response.statusText}`)
+  return response.json() as Promise<CallOut>
 }
 

@@ -82,10 +82,10 @@ def create_sync_item(request, series_id: UUID, event_id: UUID, target_id: UUID):
         item = target.get_real_instance().create_new_sync_item(event)
     except NotImplementedError as exc:
         logger.warning(f"Failed to create sync item: {exc}")
-        return 400, ErrorOut(error="Not implemented")
+        return 400, ErrorOut(code="sync.notImplemented")
     except ValueError as exc:
         logger.warning(f"Failed to create sync item: {exc}")
-        return 400, ErrorOut(error="Value error")
+        return 400, ErrorOut(code="sync.failed")
     return 200, SyncItemOut(
         id=item.pk,
         target_id=target.pk,
@@ -200,7 +200,7 @@ def delete_remote_sync_item(
     ``delete_syncbaseitem`` on each real instance before deletion.
     """
     if not request.user.has_perm("apiv1.view_event"):
-        return 403, ErrorOut(error="Permission denied")
+        return 403, ErrorOut(code="auth.permissionDenied")
 
     event = get_object_or_404(Event, pk=event_id, series_id=series_id)
     target = get_object_or_404(SyncBaseTarget, pk=target_id)
@@ -209,7 +209,7 @@ def delete_remote_sync_item(
     for item in matching:
         real = item.get_real_instance()
         if not request.user.has_perm("apiv1.delete_syncbaseitem", real):
-            return 403, ErrorOut(error="Permission denied")
+            return 403, ErrorOut(code="auth.permissionDenied")
     for item in matching:
         item.get_real_instance().delete_remote()
         item.get_real_instance().delete()
@@ -242,7 +242,7 @@ def push_to_platform(
     ``push_syncbaseitem`` on each real instance before pushing.
     """
     if not request.user.has_perm("apiv1.view_event"):
-        return 403, ErrorOut(error="Permission denied")
+        return 403, ErrorOut(code="auth.permissionDenied")
     event = get_object_or_404(Event, pk=event_id, series_id=series_id)
     target = get_object_or_404(SyncBaseTarget, pk=target_id)
     matching = _items_for_target_and_event(target, event)
@@ -250,7 +250,7 @@ def push_to_platform(
     for item in matching:
         real = item.get_real_instance()
         if not request.user.has_perm("apiv1.push_syncbaseitem", real):
-            return 403, ErrorOut(error="Permission denied")
+            return 403, ErrorOut(code="auth.permissionDenied")
     for item in matching:
         item.push_update()
     pushed = len(matching) > 0

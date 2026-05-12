@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import styles from './EventStatusBadge.module.css'
 import { getEventStatusColor, getEventStatusDisplayLabel } from './eventStatus'
 
@@ -8,18 +9,22 @@ interface EventStatusBadgeProps {
 }
 
 export function EventStatusBadge({ status, ariaLabel, className }: EventStatusBadgeProps) {
+  const { t } = useTranslation()
+
   if (!status) {
     return null
   }
+
+  const label = t(`event.statusValues.${status}`, { defaultValue: getEventStatusDisplayLabel(status) })
 
   return (
     <span
       className={[styles.statusBadge, className].filter(Boolean).join(' ')}
       style={{ backgroundColor: getEventStatusColor(status) }}
-      aria-label={ariaLabel ?? `Event status: ${status}`}
-      title={getEventStatusDisplayLabel(status)}
+      aria-label={ariaLabel ?? t('event.statusLabel', { status: label })}
+      title={label}
     >
-      {getEventStatusDisplayLabel(status)}
+      {label}
     </span>
   )
 }

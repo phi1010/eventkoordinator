@@ -1,5 +1,6 @@
 import {useState, useEffect, useMemo} from 'react'
 import {useNavigate} from 'react-router-dom'
+import {useTranslation} from 'react-i18next'
 import type {Event, Series, ExternalCalendarEvent} from './api'
 import {
     fetchSyncStatus,
@@ -41,6 +42,7 @@ interface CalculatedPricesFormValues {
     guest_regular_gross_eur: string
     guest_discounted_gross_eur: string
     business_net_eur: string
+    internal_training_eur: string
 }
 
 const EMPTY_CALCULATED_PRICES_FORM: CalculatedPricesFormValues = {
@@ -49,6 +51,7 @@ const EMPTY_CALCULATED_PRICES_FORM: CalculatedPricesFormValues = {
     guest_regular_gross_eur: '',
     guest_discounted_gross_eur: '',
     business_net_eur: '',
+    internal_training_eur: '',
 }
 
 function parseLocalDateTimeInput(value: string): Date | null {
@@ -75,6 +78,7 @@ function toCalculatedPricesForm(values: CalculatedPrices): CalculatedPricesFormV
         guest_regular_gross_eur: values.guest_regular_gross_eur ?? '',
         guest_discounted_gross_eur: values.guest_discounted_gross_eur ?? '',
         business_net_eur: values.business_net_eur ?? '',
+        internal_training_eur: values.internal_training_eur ?? '',
     }
 }
 
@@ -92,6 +96,7 @@ export function EventEditor({
                                 disabled = false,
                                 canDelete = false
                             }: EventEditorProps) {
+    const {t} = useTranslation()
     const navigate = useNavigate()
     const [syncInfo, setSyncInfo] = useState<EventSyncInfo | null>(null)
     const [loading, setLoading] = useState(true)
@@ -125,6 +130,8 @@ export function EventEditor({
     const [canAddCalculatedPrices, setCanAddCalculatedPrices] = useState(false)
     const [canChangeCalculatedPrices, setCanChangeCalculatedPrices] = useState(false)
     const [canDeleteCalculatedPrices, setCanDeleteCalculatedPrices] = useState(false)
+    const [canViewCalculatedPricesSection, setCanViewCalculatedPricesSection] = useState(true)
+    const [canViewSyncSection, setCanViewSyncSection] = useState(true)
 
     // Calendar reference state – calendarRange is driven solely by WeekViewCombined's onWeekRangeChange
     const [calendarRange, setCalendarRange] = useState<{ startUtc: string; endUtc: string } | null>(null)
@@ -139,10 +146,10 @@ export function EventEditor({
     const calendarResources = useMemo<Resource[]>(() => [
         {
             id: 'event-editor-resource',
-            name: 'Event Schedule',
+            name: t('event.EventSchedule'),
             color: '#2e7d32',
         },
-    ], [])
+    ], [t])
 
     const calendarEvents = useMemo<CalendarEvent[]>(() => {
         const referenceEvents: CalendarEvent[] = externalEvents.map((reference) => ({
@@ -250,6 +257,12 @@ export function EventEditor({
         const loadSyncData = async () => {
             try {
                 setLoading(true)
+                const permissions = await getUserPermissions()
+                const canView = permissions.is_superuser || permissions.permissions.includes('viewrestricted_syncbasetarget')
+                if (!canView) {
+                    setCanViewSyncSection(false)
+                    return
+                }
                 const [statusData, targetsData] = await Promise.all([
                     fetchSyncStatus(series.id, event.id),
                     fetchSyncTargets().catch(() => [] as SyncTarget[]),
@@ -258,7 +271,7 @@ export function EventEditor({
                 setSyncTargets(targetsData)
                 setError(null)
             } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to fetch sync status')
+                setError(err instanceof Error ? err.message : t('event.failedToLoadSyncStatus'))
             } finally {
                 setLoading(false)
             }
@@ -277,7 +290,7 @@ export function EventEditor({
                 setExternalEvents(data)
                 setCalendarError(null)
             } catch (err) {
-                setCalendarError(err instanceof Error ? err.message : 'Failed to fetch calendar references')
+                setCalendarError(err instanceof Error ? err.message : t('event.loadingReferenceEvents'))
             } finally {
                 setCalendarLoading(false)
             }
@@ -297,7 +310,12 @@ export function EventEditor({
 
                 const permissions = await getUserPermissions()
                 const canAdd = permissions.is_superuser || permissions.permissions.includes('add_calculatedprices')
+                const canViewGlobal = permissions.is_superuser || permissions.permissions.includes('view_calculatedprices')
                 if (!isMounted) {
+                    return
+                }
+                if (!canAdd && !canViewGlobal) {
+                    setCanViewCalculatedPricesSection(false)
                     return
                 }
                 setCanAddCalculatedPrices(canAdd)
@@ -351,7 +369,7 @@ export function EventEditor({
                 if (!isMounted) {
                     return
                 }
-                setCalculatedPricesError(err instanceof Error ? err.message : 'Failed to load calculated prices')
+                setCalculatedPricesError(err instanceof Error ? err.message : t('event.failedToLoadCalculatedPrices'))
                 setCalculatedPrices(null)
                 setCalculatedPricesForm(EMPTY_CALCULATED_PRICES_FORM)
                 setCanViewCalculatedPrices(false)
@@ -452,7 +470,7 @@ export function EventEditor({
             setUseFullDays(updated.useFullDays || false)
             setChangedFields(new Set())
         } catch (err) {
-            setEditError(err instanceof Error ? err.message : 'Failed to save event')
+            setEditError(err instanceof Error ? err.message : t('event.failedToSave'))
         } finally {
             setIsSaving(false)
         }
@@ -470,7 +488,7 @@ export function EventEditor({
 
     const handleDelete = async () => {
         const confirmed = window.confirm(
-            `Delete the event "${event.name}"? This cannot be undone.`
+            t('event.deleteConfirm', {name: event.name})
         )
         if (!confirmed) {
             return
@@ -481,7 +499,7 @@ export function EventEditor({
             setEditError(null)
             await onDeleteEvent?.()
         } catch (err) {
-            setEditError(err instanceof Error ? err.message : 'Failed to delete event')
+            setEditError(err instanceof Error ? err.message : t('event.failedToDelete'))
         } finally {
             setIsDeleting(false)
         }
@@ -496,7 +514,7 @@ export function EventEditor({
             const data = await fetchSyncStatus(series.id, event.id)
             setSyncInfo(data)
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to create sync entry')
+            setError(err instanceof Error ? err.message : t('event.failedToCreateSync'))
         } finally {
             setCreatingSyncItem(null)
         }
@@ -511,7 +529,7 @@ export function EventEditor({
             const data = await fetchSyncStatus(series.id, event.id)
             setSyncInfo(data)
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to push data')
+            setError(err instanceof Error ? err.message : t('event.failedToPush'))
         } finally {
             setPushing(null)
         }
@@ -523,7 +541,7 @@ export function EventEditor({
 
     const handleDeleteRemote = async (targetId: string, platform: string) => {
         const confirmed = window.confirm(
-            `Delete the remote entry for "${event.name}" on ${platform}? This cannot be undone.`
+            t('event.deleteRemoteConfirm', {name: event.name, platform})
         )
         if (!confirmed) return
 
@@ -535,7 +553,7 @@ export function EventEditor({
             const data = await fetchSyncStatus(series.id, event.id)
             setSyncInfo(data)
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to delete remote sync item')
+            setError(err instanceof Error ? err.message : t('event.failedToDeleteRemote'))
         } finally {
             setDeletingRemote(null)
         }
@@ -582,7 +600,7 @@ export function EventEditor({
             setCanChangeCalculatedPrices(canChange)
             setCanDeleteCalculatedPrices(canDelete)
         } catch (err) {
-            setCalculatedPricesError(err instanceof Error ? err.message : 'Failed to create calculated prices')
+            setCalculatedPricesError(err instanceof Error ? err.message : t('event.failedToCreateCalculatedPrices'))
         } finally {
             setCalculatedPricesCreateMode(null)
         }
@@ -605,13 +623,14 @@ export function EventEditor({
                 guest_regular_gross_eur: toNullableDecimal(calculatedPricesForm.guest_regular_gross_eur),
                 guest_discounted_gross_eur: toNullableDecimal(calculatedPricesForm.guest_discounted_gross_eur),
                 business_net_eur: toNullableDecimal(calculatedPricesForm.business_net_eur),
+                internal_training_eur: toNullableDecimal(calculatedPricesForm.internal_training_eur),
             })
 
             setCalculatedPrices(updated)
             setCalculatedPricesForm(toCalculatedPricesForm(updated))
             setCalculatedPricesDirty(false)
         } catch (err) {
-            setCalculatedPricesError(err instanceof Error ? err.message : 'Failed to save calculated prices')
+            setCalculatedPricesError(err instanceof Error ? err.message : t('event.failedToSaveCalculatedPrices'))
         } finally {
             setCalculatedPricesSaving(false)
         }
@@ -622,7 +641,7 @@ export function EventEditor({
             return
         }
 
-        const confirmed = window.confirm('Delete calculated prices for this event? This cannot be undone.')
+        const confirmed = window.confirm(t('event.deleteCalculatedPrices'))
         if (!confirmed) {
             return
         }
@@ -638,7 +657,7 @@ export function EventEditor({
             setCanChangeCalculatedPrices(false)
             setCanDeleteCalculatedPrices(false)
         } catch (err) {
-            setCalculatedPricesError(err instanceof Error ? err.message : 'Failed to delete calculated prices')
+            setCalculatedPricesError(err instanceof Error ? err.message : t('event.failedToDeleteCalculatedPrices'))
         } finally {
             setCalculatedPricesDeleting(false)
         }
@@ -664,15 +683,15 @@ export function EventEditor({
     const getStatusLabel = (status: string): string => {
         switch (status) {
             case 'entry up-to-date':
-                return '✓ Up to date'
+                return t('event.upToDate')
             case 'entry differs':
-                return '⚠ Differs'
+                return t('event.differs')
             case 'no entry exists':
-                return '⊘ No entry'
+                return t('event.noEntry')
             case 'creation pending':
-                return '⏳ Creation pending'
+                return t('event.creationPending')
             case 'status unknown':
-                return '? Status unknown'
+                return t('event.statusUnknown')
             default:
                 return status
         }
@@ -681,19 +700,19 @@ export function EventEditor({
     return (
         <div className={styles.container}>
             <div className={styles.header}>
-                <h2>Edit Event</h2>
+                <h2>{t('event.editEvent')}</h2>
                 <p className={styles.eventName}>{event.name}</p>
             </div>
 
             {/* Edit Form */}
             <div className={styles.editSection}>
-                <h3>Event Details</h3>
+                <h3>{t('event.eventDetails')}</h3>
                 <form className={styles.editForm} aria-label="Edit event details">
                     <div className={styles.formGroup}>
                         <label htmlFor="event-name" className={styles.label}>
-                            Name
+                            {t('event.name')}
                             {changedFields.has('name') &&
-                                <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+                                <span className={styles.changedIndicator} aria-label={t('event.unsavedChange')}>●</span>}
                         </label>
                         <input
                             id="event-name"
@@ -708,9 +727,9 @@ export function EventEditor({
                     <div className={styles.formRow}>
                         <div className={styles.formGroup}>
                             <label htmlFor="event-start-time" className={styles.label}>
-                                Start Time
+                                {t('event.startTime')}
                                 {changedFields.has('startTime') &&
-                                    <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+                                    <span className={styles.changedIndicator} aria-label={t('event.unsavedChange')}>●</span>}
                             </label>
                             <input
                                 id="event-start-time"
@@ -724,9 +743,9 @@ export function EventEditor({
 
                         <div className={styles.formGroup}>
                             <label htmlFor="event-end-time" className={styles.label}>
-                                End Time
+                                {t('event.endTime')}
                                 {changedFields.has('endTime') &&
-                                    <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+                                    <span className={styles.changedIndicator} aria-label={t('event.unsavedChange')}>●</span>}
                             </label>
                             <input
                                 id="event-end-time"
@@ -741,16 +760,16 @@ export function EventEditor({
 
                     <div className={styles.formGroup}>
                         <label htmlFor="event-tag" className={styles.label}>
-                            Tag
+                            {t('event.tag')}
                             {changedFields.has('tag') &&
-                                <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+                                <span className={styles.changedIndicator} aria-label={t('event.unsavedChange')}>●</span>}
                         </label>
                         <input
                             id="event-tag"
                             type="text"
                             value={tag}
                             onChange={(e) => handleTagChange(e.target.value)}
-                            placeholder="e.g., workshop, keynote, break"
+                            placeholder={t('event.tagPlaceholder')}
                             className={`${styles.formInput} ${changedFields.has('tag') ? styles.changed : ''}`}
                             disabled={isSaving || disabled}
                         />
@@ -767,22 +786,19 @@ export function EventEditor({
                                 aria-describedby="event-use-full-days-desc"
                             />
                             <span>
-                Span full days
+                {t('event.spanFullDays')}
                                 {changedFields.has('useFullDays') &&
-                                    <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
+                                    <span className={styles.changedIndicator} aria-label={t('event.unsavedChange')}>●</span>}
               </span>
                         </label>
                         <p id="event-use-full-days-desc" className={styles.fieldDescription}>
-                            When checked, the event spans continuously over midnight (e.g. Mon 08:00 → Tue 16:00
-                            shows as one block). When unchecked, multi-day events are split into daily blocks
-                            using the same daily start/end hours (e.g. Mon 08:00–16:00 and Tue 08:00–16:00).
+                            {t('event.useFullDaysDesc')}
                         </p>
                     </div>
                     <label>
-                        Displayed in local time. Stored in
-                        UTC. {disabled ? 'View only - no edit permission.' : 'Drag on the calendar to update start and end.'}
+                        {disabled ? t('event.viewOnlyNoPermission') : t('event.dragToUpdate')}
                     </label>
-                    {calendarLoading && <p className={styles.loading}>Loading reference calendar events...</p>}
+                    {calendarLoading && <p className={styles.loading}>{t('event.loading')}</p>}
                     {calendarError && <p className={styles.error}>{calendarError}</p>}
                     <div className={styles.calendarWrapper}
                          style={disabled ? {opacity: 0.6, pointerEvents: 'none'} : undefined}>
@@ -806,7 +822,7 @@ export function EventEditor({
                             className={styles.saveButton}
                             aria-busy={isSaving}
                         >
-                            {isSaving ? 'Saving...' : 'Save Changes'}
+                            {isSaving ? t('event.saving') : t('event.saveChanges')}
                         </button>
                         {hasChanges && (
                             <button
@@ -815,7 +831,7 @@ export function EventEditor({
                                 disabled={isSaving || disabled}
                                 className={styles.cancelButton}
                             >
-                                Cancel
+                                {t('event.cancel')}
                             </button>
                         )}
                         {canDelete && onDeleteEvent && (
@@ -825,7 +841,7 @@ export function EventEditor({
                                 disabled={isSaving || isDeleting}
                                 className={styles.deleteButton}
                             >
-                                {isDeleting ? 'Deleting...' : 'Delete Event'}
+                                {isDeleting ? t('event.deleting') : t('event.deleteEvent')}
                             </button>
                         )}
                     </div>
@@ -836,7 +852,7 @@ export function EventEditor({
 
             {/* Calendar Time Picker */}
             <div className={styles.workflowSection}>
-                <h3>Workflow Status and Transitions</h3>
+                <h3>{t('event.workflowStatus')}</h3>
                 {/* Workflow status & transition buttons */}
                 <EventTransitionButtons
                     seriesId={series.id}
@@ -845,16 +861,16 @@ export function EventEditor({
                     onTransitionSuccess={(updatedEvent) => onEventUpdate(updatedEvent)}
                 />
             </div>
-            <div className={styles.calculatedPricesSection}>
-                <h3>Calculated Prices</h3>
+            {canViewCalculatedPricesSection && <div className={styles.calculatedPricesSection}>
+                <h3>{t('event.calculatedPrices')}</h3>
 
-                {calculatedPricesLoading && <p className={styles.loading}>Loading calculated prices...</p>}
+                {calculatedPricesLoading && <p className={styles.loading}>{t('event.loadingCalculatedPrices')}</p>}
                 {!calculatedPricesLoading && calculatedPricesError &&
                     <p className={styles.error}>{calculatedPricesError}</p>}
 
                 {!calculatedPricesLoading && !calculatedPrices && !calculatedPricesError && (
                     <div className={styles.calculatedPricesEmptyState}>
-                        <p className={styles.note}>No calculated prices exist for this event yet.</p>
+                        <p className={styles.note}>{t('event.noCalculatedPrices')}</p>
                         {canAddCalculatedPrices ? (
                             <div className={styles.buttonGroup}>
                                 <button
@@ -863,7 +879,7 @@ export function EventEditor({
                                     onClick={() => void handleCreateCalculatedPrices(true)}
                                     disabled={calculatedPricesCreateMode !== null}
                                 >
-                                    {calculatedPricesCreateMode === 'default' ? 'Generating...' : 'Generate with Default Config'}
+                                    {calculatedPricesCreateMode === 'default' ? t('event.generating') : t('event.generateWithDefault')}
                                 </button>
                                 <button
                                     type="button"
@@ -871,23 +887,23 @@ export function EventEditor({
                                     onClick={() => void handleCreateCalculatedPrices(false)}
                                     disabled={calculatedPricesCreateMode !== null}
                                 >
-                                    {calculatedPricesCreateMode === 'blank' ? 'Creating...' : 'Create Blank Values'}
+                                    {calculatedPricesCreateMode === 'blank' ? t('event.creating') : t('event.createBlankValues')}
                                 </button>
                             </div>
                         ) : (
-                            <p className={styles.note}>You do not have permission to create calculated prices.</p>
+                            <p className={styles.note}>{t('event.noPermissionCreateCalculatedPrices')}</p>
                         )}
                     </div>
                 )}
 
                 {!calculatedPricesLoading && calculatedPrices && !canViewCalculatedPrices && (
-                    <p className={styles.note}>You do not have permission to view calculated prices for this event.</p>
+                    <p className={styles.note}>{t('event.noPermissionViewCalculatedPrices')}</p>
                 )}
 
                 {!calculatedPricesLoading && calculatedPrices && canViewCalculatedPrices && (
                     <div className={styles.calculatedPricesForm}>
                         <div className={styles.formGroup}>
-                            <label htmlFor="pricing-config-id" className={styles.label}>Pricing Configuration</label>
+                            <label htmlFor="pricing-config-id" className={styles.label}>{t('event.pricingConfiguration')}</label>
                             <input
                                 id="pricing-config-id"
                                 type="text"
@@ -899,8 +915,7 @@ export function EventEditor({
 
                         <div className={styles.calculatedPricesGrid}>
                             <div className={styles.formGroup}>
-                                <label htmlFor="member-regular-gross" className={styles.label}>Member Regular Gross
-                                    (EUR)</label>
+                                <label htmlFor="member-regular-gross" className={styles.label}>{t('event.memberRegularGross')}</label>
                                 <input
                                     id="member-regular-gross"
                                     type="text"
@@ -912,8 +927,7 @@ export function EventEditor({
                             </div>
 
                             <div className={styles.formGroup}>
-                                <label htmlFor="member-discounted-gross" className={styles.label}>Member Discounted
-                                    Gross (EUR)</label>
+                                <label htmlFor="member-discounted-gross" className={styles.label}>{t('event.memberDiscountedGross')}</label>
                                 <input
                                     id="member-discounted-gross"
                                     type="text"
@@ -925,8 +939,7 @@ export function EventEditor({
                             </div>
 
                             <div className={styles.formGroup}>
-                                <label htmlFor="guest-regular-gross" className={styles.label}>Guest Regular Gross
-                                    (EUR)</label>
+                                <label htmlFor="guest-regular-gross" className={styles.label}>{t('event.guestRegularGross')}</label>
                                 <input
                                     id="guest-regular-gross"
                                     type="text"
@@ -938,8 +951,7 @@ export function EventEditor({
                             </div>
 
                             <div className={styles.formGroup}>
-                                <label htmlFor="guest-discounted-gross" className={styles.label}>Guest Discounted Gross
-                                    (EUR)</label>
+                                <label htmlFor="guest-discounted-gross" className={styles.label}>{t('event.guestDiscountedGross')}</label>
                                 <input
                                     id="guest-discounted-gross"
                                     type="text"
@@ -951,12 +963,24 @@ export function EventEditor({
                             </div>
 
                             <div className={styles.formGroup}>
-                                <label htmlFor="business-net" className={styles.label}>Business Net (EUR)</label>
+                                <label htmlFor="business-net" className={styles.label}>{t('event.businessNet')}</label>
                                 <input
                                     id="business-net"
                                     type="text"
                                     value={calculatedPricesForm.business_net_eur}
                                     onChange={(e) => handleCalculatedPriceFieldChange('business_net_eur', e.target.value)}
+                                    className={styles.formInput}
+                                    disabled={!canChangeCalculatedPrices || calculatedPricesSaving}
+                                />
+                            </div>
+
+                            <div className={styles.formGroup}>
+                                <label htmlFor="internal-training" className={styles.label}>{t('event.internalTraining')}</label>
+                                <input
+                                    id="internal-training"
+                                    type="text"
+                                    value={calculatedPricesForm.internal_training_eur}
+                                    onChange={(e) => handleCalculatedPriceFieldChange('internal_training_eur', e.target.value)}
                                     className={styles.formInput}
                                     disabled={!canChangeCalculatedPrices || calculatedPricesSaving}
                                 />
@@ -971,10 +995,10 @@ export function EventEditor({
                                     onClick={() => void handleSaveCalculatedPrices()}
                                     disabled={!calculatedPricesDirty || calculatedPricesSaving || calculatedPricesDeleting}
                                 >
-                                    {calculatedPricesSaving ? 'Saving...' : 'Save Calculated Prices'}
+                                    {calculatedPricesSaving ? t('event.saving') : t('event.saveCalculatedPrices')}
                                 </button>
                             ) : (
-                                <p className={styles.note}>You do not have permission to change calculated prices.</p>
+                                <p className={styles.note}>{t('event.noPermissionChangeCalculatedPrices')}</p>
                             )}
 
                             {canDeleteCalculatedPrices && (
@@ -984,20 +1008,20 @@ export function EventEditor({
                                     onClick={() => void handleDeleteCalculatedPrices()}
                                     disabled={calculatedPricesDeleting || calculatedPricesSaving}
                                 >
-                                    {calculatedPricesDeleting ? 'Deleting...' : 'Delete Calculated Prices'}
+                                    {calculatedPricesDeleting ? t('event.deleting') : t('event.deleteCalculatedPricesBtn')}
                                 </button>
                             )}
                         </div>
                     </div>
                 )}
-            </div>
+            </div>}
 
 
             {/* Sync Section */}
-            <div className={styles.syncSection}>
-                <h3>Synchronization Status</h3>
+            {canViewSyncSection && <div className={styles.syncSection}>
+                <h3>{t('event.syncSynchronization')}</h3>
 
-                {loading && <p className={styles.loading}>Loading sync status...</p>}
+                {loading && <p className={styles.loading}>{t('event.loadingSyncStatus')}</p>}
                 {error && <p className={styles.error}>{error}</p>}
 
                 {syncInfo && (
@@ -1022,7 +1046,7 @@ export function EventEditor({
                                         <div className={styles.cardBody}>
                                             {Object.entries(matchingTarget.public_properties).map(([key, value]) => (
                                                 <div key={key} className={styles.info}>
-                                                    <span className={styles.infoLabel}>{key}:</span>
+                                                    <span className={styles.infoLabel}>{t(`syncTarget.${key}`, key)}:</span>
                                                     <span className={styles.infoValue}>{value}</span>
                                                 </div>
                                             ))}
@@ -1032,7 +1056,7 @@ export function EventEditor({
                                     <div className={styles.cardBody}>
                                         {sync.last_synced && (
                                             <div className={styles.info}>
-                                                <span className={styles.infoLabel}>Last synced:</span>
+                                                <span className={styles.infoLabel}>{t('event.lastSynced')}</span>
                                                 <span className={styles.infoValue}>
                           {new Date(sync.last_synced).toLocaleDateString('de-DE', {
                               month: 'short',
@@ -1046,15 +1070,15 @@ export function EventEditor({
 
                                         {sync.item_url && (
                                             <div className={styles.info}>
-                                                <span className={styles.infoLabel}>Remote entry:</span>
+                                                <span className={styles.infoLabel}>{t('event.remoteEntry')}</span>
                                                 <span className={styles.infoValue}>
                           <a
                               href={sync.item_url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              aria-label={`Open remote entry for ${sync.platform} in a new tab`}
+                              aria-label={t('event.openInPlatform', {platform: sync.platform})}
                           >
-                            Open in {sync.platform}
+                            {t('event.openInPlatform', {platform: sync.platform})}
                           </a>
                         </span>
                                             </div>
@@ -1062,7 +1086,7 @@ export function EventEditor({
 
                                         {sync.last_error && (
                                             <div className={styles.error}>
-                                                <span className={styles.infoLabel}>Error:</span>
+                                                <span className={styles.infoLabel}>{t('event.error')}</span>
                                                 <span className={styles.infoValue}>{sync.last_error}</span>
                                             </div>
                                         )}
@@ -1075,9 +1099,9 @@ export function EventEditor({
                                             className={styles.pushButton}
                                             onClick={() => handleCreateSyncItem(matchingTarget.id)}
                                             disabled={creatingSyncItem === matchingTarget.id || !sync.can_push}
-                                            aria-label={`Create sync entry for ${sync.platform}`}
+                                            aria-label={t('event.createSyncEntry')}
                                         >
-                                            {creatingSyncItem === matchingTarget.id ? 'Creating...' : 'Create Sync Entry'}
+                                            {creatingSyncItem === matchingTarget.id ? t('event.creatingSync') : t('event.createSyncEntry')}
                                         </button>
                                     ) : (
                                         // Sync item exists (pending, unknown, up-to-date, or differs) →
@@ -1088,13 +1112,13 @@ export function EventEditor({
                                                 className={styles.pushButton}
                                                 onClick={() => handlePush(sync.target_id)}
                                                 disabled={pushing === sync.target_id || deletingRemote === sync.target_id || !sync.can_push}
-                                                aria-label={`Push or update event to ${sync.platform}`}
+                                                aria-label={t('event.pushUpdate')}
                                             >
                                                 {pushing === sync.target_id
-                                                    ? 'Pushing...'
+                                                    ? t('event.pushing')
                                                     : sync.status === 'creation pending'
-                                                        ? 'Create in Pretix'
-                                                        : 'Push/Update'}
+                                                        ? t('event.createInPretix')
+                                                        : t('event.pushUpdate')}
                                             </button>
 
                                             <button
@@ -1102,9 +1126,9 @@ export function EventEditor({
                                                 className={styles.diffButton}
                                                 onClick={() => handleViewDiff(sync.target_id)}
                                                 disabled={pushing === sync.target_id || deletingRemote === sync.target_id}
-                                                aria-label={`View differences for ${sync.platform}`}
+                                                aria-label={t('event.viewDiff')}
                                             >
-                                                {sync.status === 'creation pending' ? 'Preview' : 'View Diff'}
+                                                {sync.status === 'creation pending' ? t('event.preview') : t('event.viewDiff')}
                                             </button>
 
                                             <button
@@ -1112,9 +1136,9 @@ export function EventEditor({
                                                 className={styles.deleteSyncButton}
                                                 onClick={() => void handleDeleteRemote(sync.target_id, sync.platform)}
                                                 disabled={pushing === sync.target_id || deletingRemote === sync.target_id || !sync.can_delete}
-                                                aria-label={`Delete remote entry for ${sync.platform}`}
+                                                aria-label={t('event.deleteRemote')}
                                             >
-                                                {deletingRemote === sync.target_id ? 'Deleting...' : 'Delete Remote'}
+                                                {deletingRemote === sync.target_id ? t('event.deletingRemote') : t('event.deleteRemote')}
                                             </button>
                                         </>
                                     )}
@@ -1123,13 +1147,13 @@ export function EventEditor({
                         })}
                     </div>
                 )}
-            </div>
+            </div>}
 
-            <div className={styles.footer}>
+            {canViewSyncSection && <div className={styles.footer}>
                 <p className={styles.note}>
-                    Changes to this event will be synchronized across all platforms.
+                    {t('event.syncNote')}
                 </p>
-            </div>
+            </div>}
         </div>
     )
 }

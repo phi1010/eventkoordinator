@@ -8,6 +8,7 @@ user searches, and global search functionality.
 from typing import Optional
 
 import openid_user_management
+from django.conf import settings
 from django.http import HttpRequest
 from ninja import Router
 from openid_user_management.models import OpenIDUser
@@ -28,9 +29,19 @@ from apiv1.models import (
     SubmissionType,
     Series as SeriesModel,
 )
-from apiv1.schemas import ErrorOut, Event, LookupOut, Series, UserBasic
+from apiv1.schemas import ErrorOut, Event, LookupOut, Series, SiteConfigOut, UserBasic
 
 router = Router()
+
+
+@router.get("/config", auth=None, response=SiteConfigOut)
+def get_site_config(request):
+    """Return public site configuration (links for imprint, privacy policy, account management)."""
+    return SiteConfigOut(
+        imprint_url=settings.IMPRINT_URL,
+        privacy_policy_url=settings.PRIVACY_POLICY_URL,
+        account_management_url=settings.ACCOUNT_MANAGEMENT_URL,
+    )
 
 
 @router.get(
@@ -130,7 +141,7 @@ def search_users(request: HttpRequest, q: str = ""):
 @api_permission_required((apiv1, "view", SeriesModel))
 def search_series(request, q: str = ""):
     """Search series by name for autocomplete dropdowns."""
-    series_list = SeriesModel.objects.filter(name__icontains=q).order_by("name")[:20]
+    series_list = SeriesModel.objects.filter(name__icontains=q).order_by("name")
     return [model_series_to_schema(s) for s in series_list]
 
 

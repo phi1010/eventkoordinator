@@ -29,14 +29,14 @@ def api_permission_required(
                 logging.warning(
                     f"Unauthorized access attempt to {request.path} by anonymous user"
                 )
-                return 401, ErrorOut(error="Not authenticated")
+                return 401, ErrorOut(code="auth.notAuthenticated")
 
             for perm in perms:
                 if not request.user.has_perm(perm):
                     logging.warning(
                         f"Unauthorized access attempt to {request.path} by unprivileged user"
                     )
-                    return 403, ErrorOut(error="Permission denied")
+                    return 403, ErrorOut(code="auth.permissionDenied")
 
             return func(request, *args, **kwargs)
 
@@ -127,7 +127,7 @@ def api_permission_todo():
                 logger.getChild("authorization_checks").error(
                     f"TODO: Implement permission checks for {request.path} - Access denied in production"
                 )
-                return 403, ErrorOut(error="Permission denied")
+                return 403, ErrorOut(code="auth.permissionDenied")
 
         return wrapper
 

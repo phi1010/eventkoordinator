@@ -29,7 +29,7 @@ class SpeakerInline(admin.TabularInline):
     model = models.Speaker
     extra = 1
     ordering = ("sort_order",)
-    fields = ("display_name", "email", "role", "sort_order", "use_gravatar")
+    fields = ("display_name", "email", "role", "sort_order")
 
 
 class PretixSyncTargetAreaAssociationInline(admin.TabularInline):
@@ -131,12 +131,12 @@ class SpeakerAdmin(SimpleHistoryAdmin):
         "email",
         "proposal",
         "role",
-        "use_gravatar",
+
         "created_at",
     )
     search_fields = ("display_name", "email", "proposal__title")
     readonly_fields = ("created_at", "updated_at")
-    list_filter = ("use_gravatar", "role")
+    list_filter = ("role",)
     raw_id_fields = ("proposal",)
 
 
@@ -192,6 +192,28 @@ class ProposalAdmin(fsm.FlowAdminMixin, SimpleHistoryAdmin):
         ),
         ("People", {"fields": ("owner", "editors")}),
         ("Status", {"fields": ("status",)}),
+    )
+
+
+@admin.register(models.Call)
+class CallAdmin(SimpleHistoryAdmin):
+    list_display = ("id", "title", "submission_deadline", "is_active", "responsible_name")
+    list_filter = ("is_active",)
+    search_fields = ("title", "responsible_name", "responsible_email")
+    list_editable = ("is_active",)
+    fieldsets = (
+        (
+            "Allgemein",
+            {"fields": ("title", "description", "is_active")},
+        ),
+        (
+            "Zeitraum",
+            {"fields": ("execution_period_start", "execution_period_end", "submission_deadline", "print_deadline")},
+        ),
+        (
+            "Verantwortlich",
+            {"fields": ("responsible_name", "responsible_email")},
+        ),
     )
 
 

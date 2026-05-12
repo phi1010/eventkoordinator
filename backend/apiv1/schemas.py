@@ -12,6 +12,12 @@ from typing import Optional, Literal
 from pydantic import Field
 
 
+class SiteConfigOut(Schema):
+    imprint_url: str
+    privacy_policy_url: str
+    account_management_url: str
+
+
 class UserIn(Schema):
     username: str
     password: str
@@ -28,7 +34,7 @@ class UserOut(Schema):
 
 
 class ErrorOut(Schema):
-    error: str
+    code: str
     detail: Optional[str] = None
 
 
@@ -139,6 +145,19 @@ class ProposalSummary(Schema):
     id: uuid.UUID
     title: str
     submission_type: str
+    call_id: Optional[uuid.UUID] = None
+
+
+class ProposalListItem(Schema):
+    id: uuid.UUID
+    title: str
+    status: str
+    submission_type: Optional[str] = None
+    owner: Optional[UserBasic] = None
+    speakers: list[str]
+    occurrence_count: int
+    accepted_event_count: int
+    call_title: Optional[str] = None
 
 
 class ProposalChecklistItem(Schema):
@@ -164,8 +183,8 @@ class ProposalCreateIn(Schema):
     max_participants: Optional[int] = None
     material_cost_eur: Optional[str] = None
     preferred_dates: Optional[str] = None
-    is_regular_member: Optional[bool] = None
     has_building_access: Optional[bool] = None
+    call_id: Optional[uuid.UUID] = None
 
 
 class ProposalUpdateIn(Schema):
@@ -183,10 +202,48 @@ class ProposalUpdateIn(Schema):
     max_participants: Optional[int] = None
     material_cost_eur: Optional[str] = None
     preferred_dates: Optional[str] = None
-    is_regular_member: Optional[bool] = None
     has_building_access: Optional[bool] = None
     # owner_id removed - owner is set on creation and cannot be changed
     editor_ids: Optional[list[str]] = None
+    moderation_comment: Optional[str] = None
+    call_id: Optional[uuid.UUID] = None
+
+
+class CallOut(Schema):
+    id: uuid.UUID
+    title: str
+    description: str
+    execution_period_start: str  # ISO date string
+    execution_period_end: str    # ISO date string
+    submission_deadline: str     # ISO date string
+    print_deadline: str          # ISO date string
+    responsible_name: str
+    responsible_email: str
+    is_active: bool
+
+
+class CallCreateIn(Schema):
+    title: str
+    description: Optional[str] = ""
+    execution_period_start: str
+    execution_period_end: str
+    submission_deadline: str
+    print_deadline: str
+    responsible_name: str
+    responsible_email: str
+    is_active: Optional[bool] = True
+
+
+class CallUpdateIn(Schema):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    execution_period_start: Optional[str] = None
+    execution_period_end: Optional[str] = None
+    submission_deadline: Optional[str] = None
+    print_deadline: Optional[str] = None
+    responsible_name: Optional[str] = None
+    responsible_email: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class ProposalDetail(Schema):
@@ -205,11 +262,12 @@ class ProposalDetail(Schema):
     max_participants: int
     material_cost_eur: str
     preferred_dates: str
-    is_regular_member: bool
     has_building_access: bool
     photo: Optional[str] = None
     owner: Optional[UserBasic] = None
     editors: list[UserBasic] = []
+    moderation_comment: str = ""
+    call_id: Optional[uuid.UUID] = None
 
 
 class SpeakerOut(Schema):
@@ -218,21 +276,18 @@ class SpeakerOut(Schema):
     display_name: str
     biography: str
     profile_picture: Optional[str] = None
-    use_gravatar: bool
 
 
 class SpeakerCreateIn(Schema):
     email: str
     display_name: str
     biography: str
-    use_gravatar: bool = False
 
 
 class SpeakerUpdateIn(Schema):
     email: Optional[str] = None
     display_name: Optional[str] = None
     biography: Optional[str] = None
-    use_gravatar: Optional[bool] = None
 
 
 class ProposalSpeakerOut(Schema):
@@ -245,28 +300,26 @@ class ProposalSpeakerOut(Schema):
 # Unified schemas with all optional fields
 class ProposalIn(Schema):
     title: Optional[str] = Field(default=None, max_length=30)
-    submission_type: Optional[str] = None
-    area: Optional[str] = None
-    language: Optional[str] = None
-    abstract: Optional[str] = None
-    description: Optional[str] = None
-    internal_notes: Optional[str] = None
-    occurrence_count: Optional[int] = None
-    duration_days: Optional[int] = None
-    duration_time_per_day: Optional[str] = None
-    is_basic_course: Optional[bool] = None
-    max_participants: Optional[int] = None
-    material_cost_eur: Optional[str] = None
-    preferred_dates: Optional[str] = None
-    is_regular_member: Optional[bool] = None
-    has_building_access: Optional[bool] = None
+    submission_type: Optional[str] = Field(default=None, max_length=1000)
+    area: Optional[str] = Field(default=None, max_length=1000)
+    language: Optional[str] = Field(default=None, max_length=1000)
+    abstract: Optional[str] = Field(default=None, max_length=1000)
+    description: Optional[str] = Field(default=None, max_length=5000)
+    internal_notes: Optional[str] = Field(default=None, max_length=5000)
+    occurrence_count: Optional[int] = Field(default=None)
+    duration_days: Optional[int] = Field(default=None, max_length=1000)
+    duration_time_per_day: Optional[str] = Field(default=None, max_length=1000)
+    is_basic_course: Optional[bool] = Field(default=None)
+    max_participants: Optional[int] = Field(default=None)
+    material_cost_eur: Optional[str] = Field(default=None, max_length=1000)
+    preferred_dates: Optional[str] = Field(default=None, max_length=1000)
+    has_building_access: Optional[bool] = Field(default=None)
 
 
 class SpeakerIn(Schema):
     email: Optional[str] = None
     display_name: Optional[str] = None
     biography: Optional[str] = None
-    use_gravatar: Optional[bool] = None
 
 
 # Lookup table schema
@@ -309,7 +362,7 @@ class ProposalTransitionOut(Schema):
     """Information about a single available or unavailable transition."""
 
     action: str  # 'submit', 'accept', 'reject', 'revise'
-    label: str  # human-readable label
+    label_id: str  # stable i18n key, e.g. 'submit', 'resubmit', 'revise_after_rejection'
     target_status: str  # target status
     enabled: bool  # whether the transition is currently allowed
     disable_reason: Optional[str] = None  # reason if disabled
@@ -339,7 +392,7 @@ class EventTransitionOut(Schema):
     """Information about a single available or unavailable event transition."""
 
     action: str
-    label: str
+    label_id: str  # stable i18n key, matches action name
     target_status: str
     enabled: bool
     disable_reason: Optional[str] = None
@@ -351,6 +404,19 @@ class EventTransitions(Schema):
     event_id: uuid.UUID
     current_status: str
     transitions: list[EventTransitionOut]
+
+
+class FlowEdge(Schema):
+    source: str
+    target: str
+    label_id: str
+
+
+class EventFlowDiagram(Schema):
+    """Static structure of the event FSM for frontend diagram rendering."""
+
+    nodes: list[str]
+    edges: list[FlowEdge]
 
 
 class CreateCalculatedPricesIn(Schema):
@@ -368,6 +434,7 @@ class UpdateCalculatedPricesIn(Schema):
     guest_regular_gross_eur: Optional[str] = None
     guest_discounted_gross_eur: Optional[str] = None
     business_net_eur: Optional[str] = None
+    internal_training_eur: Optional[str] = None
 
 
 class CalculatedPricesOut(Schema):
@@ -379,6 +446,7 @@ class CalculatedPricesOut(Schema):
     guest_regular_gross_eur: Optional[str] = None
     guest_discounted_gross_eur: Optional[str] = None
     business_net_eur: Optional[str] = None
+    internal_training_eur: Optional[str] = None
 
 
 class SyncTargetOut(Schema):
