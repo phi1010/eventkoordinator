@@ -23,6 +23,7 @@ from django.conf.global_settings import (
     EMAIL_BACKEND,
 )
 from jwt import PyJWT
+from celery.schedules import crontab
 
 logging.info(f"Loading {__name__}")
 
@@ -101,8 +102,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "project.wsgi.application"
 AUTH_USER_MODEL = "openid_user_management.OpenIDUser"
 
-DATABASES = {
-}
+DATABASES = {}
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -214,7 +214,6 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB limit for file uploads
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 # Celery Beat scheduled tasks
-from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
     "import-ical-every-hour": {
@@ -227,6 +226,10 @@ CELERY_BEAT_SCHEDULE = {
 CELERY_TASK_ROUTES = {
     "sync_ical.tasks.import_ical_task": {"queue": "default"},
 }
+
+
+CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"
+CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/0"
 
 IMPRINT_URL = "https://www.zam.haus/impressum/"
 PRIVACY_POLICY_URL = "https://www.zam.haus/datenschutzerklaerung-2/"
