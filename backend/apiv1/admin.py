@@ -1,5 +1,11 @@
-from django.contrib import admin
+import os
+import uuid
+
+from django.contrib import admin, messages
 from django.contrib.admin import ModelAdmin
+from django.core.files.base import ContentFile
+from django.http import Http404, HttpResponseRedirect
+from django.urls import path, reverse
 from polymorphic.admin import PolymorphicInlineSupportMixin, PolymorphicParentModelAdmin, StackedPolymorphicInline
 from simple_history.admin import SimpleHistoryAdmin
 from viewflow import fsm
@@ -9,6 +15,21 @@ from . import models
 from .flows import ProposalFlow
 from sync_pretix.models import PretixSyncTargetAreaAssociation, PretixSyncTarget, PretixSyncItem
 from .models import SyncBaseTarget, SyncBaseItem
+
+
+def _copy_imagefield(field):
+    """Read an ImageField and return (new_filename, ContentFile) for copying, or (None, None)."""
+    if not field or not field.name:
+        return None, None
+    try:
+        ext = os.path.splitext(field.name)[1]
+        new_name = f"{uuid.uuid4()}{ext}"
+        field.open("rb")
+        content = ContentFile(field.read())
+        field.close()
+        return new_name, content
+    except Exception:
+        return None, None
 
 
 class LinkedEventsInline(admin.TabularInline):
@@ -146,6 +167,69 @@ class ProposalAdmin(fsm.FlowAdminMixin, SimpleHistoryAdmin):
 
     def get_object_flow(self, request, obj):
         return ProposalFlow(obj)
+
+    def get_urls(self):
+        return [
+            path(
+                "<path:object_id>/copy/",
+                self.admin_site.admin_view(self.copy_view),
+                name="apiv1_proposal_copy",
+            ),
+        ] + super().get_urls()
+
+    def _do_copy(self, original):
+        editors = list(original.editors.all())
+        speakers = list(original.speakers.all())
+        photo_name, photo_content = _copy_imagefield(original.photo)
+
+        copy = models.Proposal.objects.get(pk=original.pk)
+        copy.pk = None
+        copy._state.adding = True
+        copy.status = models.Proposal.Status.DRAFT
+        copy.moderation_comment = ""
+        copy.photo = None
+        copy.save()
+
+        if photo_content:
+            copy.photo.save(photo_name, photo_content, save=True)
+
+        copy.editors.set(editors)
+
+        for spk in speakers:
+            spk_photo_name, spk_photo_content = _copy_imagefield(spk.profile_picture)
+            spk.pk = None
+            spk._state.adding = True
+            spk.proposal = copy
+            spk.profile_picture = None
+            spk.save()
+            if spk_photo_content:
+                spk.profile_picture.save(spk_photo_name, spk_photo_content, save=True)
+
+        return copy
+
+    def copy_view(self, request, object_id):
+        original = self.get_object(request, object_id)
+        if original is None:
+            raise Http404
+        copy = self._do_copy(original)
+        self.message_user(
+            request,
+            f"Proposal '{original.title}' was copied successfully.",
+            messages.SUCCESS,
+        )
+        return HttpResponseRedirect(
+            reverse("admin:apiv1_proposal_change", args=[copy.pk])
+        )
+
+    @admin.action(description="Copy selected proposals")
+    def copy_proposals(self, request, queryset):
+        count = 0
+        for proposal in queryset:
+            self._do_copy(proposal)
+            count += 1
+        self.message_user(request, f"Copied {count} proposal(s).", messages.SUCCESS)
+
+    actions = ["copy_proposals"]
 
     list_display = (
         "id",
