@@ -6,6 +6,8 @@ proposals, events, and event prices — scoped to what the current user can acce
 """
 
 import io
+import os
+import zipfile
 from datetime import datetime
 
 import polars as pl
@@ -213,4 +215,38 @@ def export_excel(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response["Content-Disposition"] = 'attachment; filename="export.xlsx"'
+    return response
+
+
+@router.get(
+    "/images",
+    response={200: bytes, 401: ErrorOut, 403: ErrorOut},
+)
+@api_permission_required((apiv1, "browse", ProposalModel))
+def export_images(request):
+    """Download a ZIP archive of proposal photos, named by proposal ID."""
+    proposals_qs = (
+        ProposalModel.objects.select_related("owner")
+        .exclude(photo="")
+        .order_by("title")
+    )
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for p in proposals_qs:
+            if not request.user.has_perm((apiv1, "view", ProposalModel), p):
+                continue
+            if not p.photo:
+                continue
+            try:
+                ext = os.path.splitext(p.photo.name)[1].lower()
+                arcname = f"{p.id}{ext}"
+                with p.photo.open("rb") as fh:
+                    zf.writestr(arcname, fh.read())
+            except (OSError, FileNotFoundError):
+                continue
+
+    buf.seek(0)
+    response = HttpResponse(buf.read(), content_type="application/zip")
+    response["Content-Disposition"] = 'attachment; filename="proposal_images.zip"'
     return response

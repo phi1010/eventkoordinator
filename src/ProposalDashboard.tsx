@@ -341,6 +341,14 @@ export function ProposalDashboard() {
         <i className="pi pi-download" style={{ marginRight: '0.4rem' }} />
         {t('proposalDashboard.downloadExcel', 'Excel')}
       </a>
+      <a
+        href="/api/v1/export/images"
+        download="proposal_images.zip"
+        className={styles.downloadButton}
+      >
+        <i className="pi pi-images" style={{ marginRight: '0.4rem' }} />
+        {t('proposalDashboard.downloadImages', 'Images')}
+      </a>
     </div>
   )
 
