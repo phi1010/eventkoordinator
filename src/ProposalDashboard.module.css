@@ -149,6 +149,24 @@
   color: #2563eb !important;
 }
 
+.downloadButton {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.4rem;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.downloadButton:hover {
+  background: #1d4ed8;
+}
+
 .expandedSection {
   padding: 0.5rem 1rem 1rem;
 }

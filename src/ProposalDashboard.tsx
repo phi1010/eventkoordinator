@@ -333,6 +333,14 @@ export function ProposalDashboard() {
         display="chip"
         style={{ maxWidth: '32rem' }}
       />
+      <a
+        href="/api/v1/export/excel"
+        download="export.xlsx"
+        className={styles.downloadButton}
+      >
+        <i className="pi pi-download" style={{ marginRight: '0.4rem' }} />
+        {t('proposalDashboard.downloadExcel', 'Excel')}
+      </a>
     </div>
   )
 
