@@ -1,4 +1,4 @@
-import {useState, useEffect, useRef} from 'react'
+import React, {useState, useEffect, useRef} from 'react'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 import {
     fetchProposal,
@@ -245,6 +245,9 @@ export function ProposalEditor({
     const [editors, setEditors] = useState<UserBasic[]>([])
     const [participantSearchQuery, setParticipantSearchQuery] = useState('')
     const [participantSearchResults, setParticipantSearchResults] = useState<UserBasic[]>([])
+    const [participantDropdownOpen, setParticipantDropdownOpen] = useState(false)
+    const [participantHighlightedIndex, setParticipantHighlightedIndex] = useState(-1)
+    const participantDropdownRef = useRef<HTMLDivElement>(null)
     const [linkedEvents, setLinkedEvents] = useState<ProposalEventSummary[]>([])
     const [linkedEventsLoading, setLinkedEventsLoading] = useState(false)
     const [currentStatus, setCurrentStatus] = useState<string>('')
@@ -596,6 +599,52 @@ export function ProposalEditor({
         markFieldAsChanged('editors')
         setError(null)
     }
+
+    const handleAddEditor = (user: UserBasic) => {
+        if (!editors.find((p) => p.id === user.id)) {
+            setEditors((prev) => [...prev, user])
+            markFieldAsChanged('editors')
+            setError(null)
+        }
+        setParticipantSearchQuery('')
+        setParticipantDropdownOpen(false)
+        setParticipantHighlightedIndex(-1)
+    }
+
+    const handleParticipantKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        const filteredResults = participantSearchResults.filter((u) => !editors.find((p) => p.id === u.id))
+        if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            setParticipantHighlightedIndex((prev) => Math.min(prev + 1, filteredResults.length - 1))
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            setParticipantHighlightedIndex((prev) => Math.max(prev - 1, -1))
+        } else if (e.key === 'Enter') {
+            e.preventDefault()
+            if (participantHighlightedIndex >= 0 && filteredResults[participantHighlightedIndex]) {
+                handleAddEditor(filteredResults[participantHighlightedIndex])
+            } else if (filteredResults.length === 1) {
+                handleAddEditor(filteredResults[0])
+            }
+        } else if (e.key === 'Escape') {
+            setParticipantDropdownOpen(false)
+            setParticipantHighlightedIndex(-1)
+        }
+    }
+
+    useEffect(() => {
+        setParticipantHighlightedIndex(-1)
+    }, [participantSearchResults])
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (participantDropdownRef.current && !participantDropdownRef.current.contains(e.target as Node)) {
+                setParticipantDropdownOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
 
     const handleProposalImageUpload = async (file: File) => {
         if (!_proposalId || !_proposalId.trim()) {
@@ -1266,33 +1315,60 @@ export function ProposalEditor({
                                         <span className={styles.changedIndicator} aria-label="unsaved change">●</span>}
                                 </label>
                                 <div style={{display: 'flex', flexDirection: 'column', gap: '0.5rem'}}>
+                                    <div ref={participantDropdownRef} style={{position: 'relative'}}>
                                     <input
                                         id="proposal-editors-search"
                                         type="text"
-                                        list="proposal-editor-list"
+                                        autoComplete="off"
                                         placeholder={t('proposal.searchEditors')}
                                         value={participantSearchQuery}
                                         onChange={(e) => {
-                                            const newValue = e.target.value
-                                            setParticipantSearchQuery(newValue)
-                                            const selectedUser = participantSearchResults.find((u) => u.username === newValue)
-                                            if (selectedUser && !editors.find((p) => p.id === selectedUser.id)) {
-                                                setEditors((prev) => [...prev, selectedUser])
-                                                markFieldAsChanged('editors')
-                                                setError(null)
-                                                setParticipantSearchQuery('')
-                                            }
+                                            setParticipantSearchQuery(e.target.value)
+                                            setParticipantDropdownOpen(true)
                                         }}
+                                        onKeyDown={handleParticipantKeyDown}
                                         className={`${styles.input} ${changedFields.has('editors') ? styles.changed : ''}`}
                                         disabled={isSaving || !canEdit}
                                     />
-                                    <datalist id="proposal-editor-list">
-                                        {participantSearchResults
-                                            .filter((u) => !editors.find((p) => p.id === u.id))
-                                            .map((user) => (
-                                                <option key={user.id} value={user.username}/>
-                                            ))}
-                                    </datalist>
+                                    {participantDropdownOpen && participantSearchResults.filter((u) => !editors.find((p) => p.id === u.id)).length > 0 && (
+                                        <ul style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: 0,
+                                            right: 0,
+                                            zIndex: 100,
+                                            background: 'white',
+                                            border: '1px solid #ccc',
+                                            borderRadius: '4px',
+                                            margin: 0,
+                                            padding: 0,
+                                            listStyle: 'none',
+                                            maxHeight: '200px',
+                                            overflowY: 'auto',
+                                            boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
+                                        }}>
+                                            {participantSearchResults
+                                                .filter((u) => !editors.find((p) => p.id === u.id))
+                                                .map((user, index) => (
+                                                    <li
+                                                        key={user.id}
+                                                        onMouseDown={(e) => {
+                                                            e.preventDefault()
+                                                            handleAddEditor(user)
+                                                        }}
+                                                        onMouseEnter={() => setParticipantHighlightedIndex(index)}
+                                                        style={{
+                                                            padding: '0.5rem 0.75rem',
+                                                            cursor: 'pointer',
+                                                            background: index === participantHighlightedIndex ? '#e3f2fd' : 'white',
+                                                        }}
+                                                    >
+                                                        {user.username}
+                                                    </li>
+                                                ))}
+                                        </ul>
+                                    )}
+                                    </div>
 
                                     {editors.length > 0 && (
                                         <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>

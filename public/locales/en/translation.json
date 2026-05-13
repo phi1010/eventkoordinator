@@ -119,7 +119,7 @@
     "ownerWillBeSet": "The creator will be automatically set when the proposal is created",
     "ownerHint": "The creator is automatically set to the user who creates the proposal and cannot be changed.",
     "editors": "Editors",
-    "editorsHint": "Editors can view and edit this proposal. Add users who can edit the proposal.",
+    "editorsHint": "If you want to create and edit this proposal together with others, please enter their usernames here. They must have registered an account beforehand.",
     "searchEditors": "Search and add editors...",
     "removeEditor": "Remove {{username}}",
     "submissionChecklist": "Submission Checklist",
