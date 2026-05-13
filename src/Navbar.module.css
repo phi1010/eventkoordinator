@@ -341,8 +341,24 @@
   border-color: rgba(255, 255, 255, 0.25);
 }
 
+/* Nav links in dropdown – hidden on wide screens, shown on narrow */
+.dropdownNavSection {
+  display: none;
+}
+
+.dropdownNavLinkActive {
+  display: block;
+  padding: 0.6rem 1rem;
+  color: #2563eb;
+  background-color: #eff6ff;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 4px;
+}
+
 /* Responsive design */
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .container {
     padding: 1rem;
     gap: 1rem;
@@ -354,6 +370,10 @@
 
   .navLinks {
     display: none;
+  }
+
+  .dropdownNavSection {
+    display: block;
   }
 
   .dropdown {
@@ -415,6 +435,11 @@
   .menuLink:hover {
     background-color: #3a3a4e;
     color: #fff;
+  }
+
+  .dropdownNavLinkActive {
+    color: #93c5fd;
+    background-color: #1e2a3a;
   }
 }
 

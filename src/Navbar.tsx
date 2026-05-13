@@ -24,6 +24,7 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
   const { canBrowse, permissions } = usePermissions()
+  const hasNavLinks = canBrowse('series') || canBrowse('proposal') || !!permissions?.is_staff
 
   useEffect(() => {
     fetchSiteConfig().then(setSiteConfig).catch(() => { /* non-critical */ })
@@ -195,6 +196,55 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
 
           {isDropdownOpen && (
             <div className={styles.dropdown} role="menu" aria-label="User options">
+              {hasNavLinks && (
+                <div className={styles.dropdownNavSection}>
+                  {canBrowse('series') && (
+                    <Link
+                      to="/coordinator"
+                      className={location.pathname.startsWith('/coordinator') ? styles.dropdownNavLinkActive : styles.menuLink}
+                      onClick={() => setIsDropdownOpen(false)}
+                      role="menuitem"
+                      aria-current={location.pathname.startsWith('/coordinator') ? 'page' : undefined}
+                    >
+                      {t('nav.coordinator')}
+                    </Link>
+                  )}
+                  {canBrowse('proposal') && (
+                    <Link
+                      to="/proposal-editor"
+                      className={location.pathname === '/proposal-editor' ? styles.dropdownNavLinkActive : styles.menuLink}
+                      onClick={() => setIsDropdownOpen(false)}
+                      role="menuitem"
+                      aria-current={location.pathname === '/proposal-editor' ? 'page' : undefined}
+                    >
+                      {t('nav.proposalEditor')}
+                    </Link>
+                  )}
+                  {canBrowse('proposal') && (
+                    <Link
+                      to="/proposal-dashboard"
+                      className={location.pathname === '/proposal-dashboard' ? styles.dropdownNavLinkActive : styles.menuLink}
+                      onClick={() => setIsDropdownOpen(false)}
+                      role="menuitem"
+                      aria-current={location.pathname === '/proposal-dashboard' ? 'page' : undefined}
+                    >
+                      {t('nav.proposalDashboard')}
+                    </Link>
+                  )}
+                  {permissions?.is_staff && (
+                    <a
+                      href="/admin/"
+                      className={styles.menuLink}
+                      role="menuitem"
+                      aria-label={t('nav.adminLink')}
+                      onClick={() => setIsDropdownOpen(false)}
+                    >
+                      {t('nav.adminPanel')}
+                    </a>
+                  )}
+                  <hr className={styles.divider} />
+                </div>
+              )}
               {user ? (
                 <>
                   <div className={styles.userInfo}>
