@@ -203,7 +203,7 @@ export function ProposalDashboard() {
       counts[p.status] = (counts[p.status] ?? 0) + 1
     }
     return STATUS_ORDER.map(s => ({
-      label: `${t(`proposal.statusValues.${s}`)} (${counts[s] ?? 0})`,
+      label: `${t(`proposal.statusValues.${s}`, s)} (${counts[s] ?? 0})`,
       value: counts[s] ?? 0,
       color: STATUS_COLORS[s] ?? '#9ca3af',
     }))
