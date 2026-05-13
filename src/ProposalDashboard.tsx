@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { DataTable, type DataTableExpandedRows, type DataTableRowEvent } from 'primereact/datatable'
 import { Column } from 'primereact/column'
 import { MultiSelect, type MultiSelectChangeEvent } from 'primereact/multiselect'
+import { MeterGroup } from 'primereact/metergroup'
 import {
   fetchProposalsList,
   fetchProposalEvents,
@@ -132,6 +133,18 @@ interface ExpandedData {
   loading: boolean
 }
 
+// ── status meter colors (match badge hues) ────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
+  draft:     '#9ca3af',
+  submitted: '#3b82f6',
+  revise:    '#f59e0b',
+  accepted:  '#22c55e',
+  rejected:  '#ef4444',
+}
+
+const STATUS_ORDER = ['draft', 'submitted', 'revise', 'accepted', 'rejected']
+
 // ── main component ────────────────────────────────────────────────────────────
 
 export function ProposalDashboard() {
@@ -183,6 +196,18 @@ export function ProposalDashboard() {
     if (filterValues.statuses.length > 0 && !filterValues.statuses.includes(p.status)) return false
     return true
   }), [proposals, filterValues])
+
+  const statusMeterItems = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const p of filteredProposals) {
+      counts[p.status] = (counts[p.status] ?? 0) + 1
+    }
+    return STATUS_ORDER.map(s => ({
+      label: `${t(`proposal.statusValues.${s}`)} (${counts[s] ?? 0})`,
+      value: counts[s] ?? 0,
+      color: STATUS_COLORS[s] ?? '#9ca3af',
+    }))
+  }, [filteredProposals, t])
 
   // ── filter onChange handlers (stable references) ──────────────────────────
 
@@ -336,6 +361,12 @@ export function ProposalDashboard() {
 
   return (
     <div className={styles.container}>
+      <div className={styles.statusMeter}>
+        <MeterGroup
+          values={statusMeterItems}
+          max={Math.max(filteredProposals.length, 1)}
+        />
+      </div>
       <DataTable
         value={filteredProposals}
         loading={loading}

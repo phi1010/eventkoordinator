@@ -4,6 +4,10 @@
   overflow: auto;
 }
 
+.statusMeter {
+  margin-bottom: 1.25rem;
+}
+
 .tableHeader {
   display: flex;
   align-items: center;
