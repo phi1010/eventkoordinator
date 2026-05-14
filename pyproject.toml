@@ -33,6 +33,7 @@ dependencies = [
     "celery-types>=0.26.0",
     "polars[xlsx]>=1.40.1",
     "xlsxwriter>=3.2.9",
+    "caldav>=1.4.0",
 ]
 default-groups = []
 

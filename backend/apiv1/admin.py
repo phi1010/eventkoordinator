@@ -10,6 +10,7 @@ from polymorphic.admin import PolymorphicInlineSupportMixin, PolymorphicParentMo
 from simple_history.admin import SimpleHistoryAdmin
 from viewflow import fsm
 
+from sync_caldav.models import CalDAVSyncTarget, CalDAVSyncItem
 from sync_ical.models import IcalCalendarSyncTarget, IcalCalenderSyncItem
 from . import models
 from .flows import ProposalFlow
@@ -102,7 +103,20 @@ class LinkedSyncItemsInline(StackedPolymorphicInline):
         def has_delete_permission(self, request, obj=None):
             return False
 
-    child_inlines = (PretixSyncItemInline, IcalCalenderSyncItemInline)
+    class CalDAVSyncItemInline(StackedPolymorphicInline.Child):
+        model = CalDAVSyncItem
+        readonly_fields = ("caldav_uid", "sync_target", "flag_push")
+
+        def has_add_permission(self, request, obj=None):
+            return False
+
+        def has_change_permission(self, request, obj=None):
+            return False
+
+        def has_delete_permission(self, request, obj=None):
+            return False
+
+    child_inlines = (PretixSyncItemInline, IcalCalenderSyncItemInline, CalDAVSyncItemInline)
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -311,6 +325,7 @@ class SyncBaseTargetAdmin(PolymorphicParentModelAdmin, SimpleHistoryAdmin):
     child_models = (
         PretixSyncTarget,
         IcalCalendarSyncTarget,
+        CalDAVSyncTarget,
     )
     readonly_fields = ("id", "type", "created_at")
     fields = ("id", "type", "created_at")

@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "mailqueue",
     "sync_pretix",
     "sync_ical",
+    "sync_caldav",
     "solo",
     "django_prometheus",
     "polymorphic",
