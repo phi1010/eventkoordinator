@@ -76,6 +76,12 @@ DJANGO_FRONTEND_BASE_URL=https://eventkoordinator.im.zam.haus
     * The calendar display name as shown in the nextcloud calendar app, e.g. "Kurse (admin)" when a calendarf "Kurse" was shared by the user "admin"
     * An instance base url which will be added as a metadatum to the calendar entries to see which eventcoordinator instance created the entry.
 
+## Maintenance
+### Metrics Endpoint
+See /metrics
+### Unsent Mail Queue
+Check the unsent mail queue in the admin interface and send any unsent mails, e.g. for proposal workflow notifications using the "Resend 10 mails" action in the list view. Check the exceptions in the delivery attempts.
+
 ## Development
 
 ### With PyCharm
