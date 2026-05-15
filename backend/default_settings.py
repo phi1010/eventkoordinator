@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "solo",
     "django_prometheus",
     "polymorphic",
+    "django_celery_beat",
     # "ninja", # Does not work, attempts to access nonexistent http://localhost:5173/api/v1/static/ninja/swagger-ui.css
 ]
 
