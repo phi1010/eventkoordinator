@@ -155,6 +155,24 @@ class ProposalFlow:
         except BaseException as e:
             logger.error("Failed to send submission confirmation: " + str(e), exc_info=e)
             raise
+        if self.object.call and self.object.call.responsible_email:
+            try:
+                send_mail(
+                    subject=f"Neue Einreichung / New submission: {self.object.title}",
+                    message=render_to_string(
+                        "apiv1/mails/submit_contact.txt.j2",
+                        dict(object=self.object, proposal_url=proposal_url),
+                    ),
+                    html_message=render_to_string(
+                        "apiv1/mails/submit_contact.html.j2",
+                        dict(object=self.object, proposal_url=proposal_url),
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[self.object.call.responsible_email],
+                    fail_silently=False,
+                )
+            except BaseException as e:
+                logger.error("Failed to send submission notification to call contact: " + str(e), exc_info=e)
 
     @status.transition(
         source=Proposal.Status.SUBMITTED,
@@ -493,6 +511,7 @@ class EventFlow:
     def approve(self):
         logger.info(f"Approving event: {self.object!r}")
         self.object.save()
+        self._notify_call_contact_event("approve")
         # if there are no overlapping events for the block (or any blocks, if a multiday block event that does not span full days),
         # publish automatically. This allows events that are not in conflict with others to skip the "planned" state and be published immediately.
         conflicts = self.object.find_active_conflicts()
@@ -532,6 +551,7 @@ class EventFlow:
     def reject(self):
         logger.info(f"Rejecting event: {self.object!r}")
         self.object.save()
+        self._notify_call_contact_event("reject")
 
     @status.transition(
         source=Event.Status.PLANNED,
@@ -594,6 +614,35 @@ class EventFlow:
     # ------------------------------------------------------------------ #
     #  Helpers                                                              #
     # ------------------------------------------------------------------ #
+
+    def _notify_call_contact_event(self, action: str) -> None:
+        """Send a notification to the call's responsible when an event is approved or rejected."""
+        proposal = self.object.proposal
+        if not proposal:
+            return
+        call = proposal.call
+        if not call or not call.responsible_email:
+            return
+        proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{proposal.pk}"
+        event_url = f"{settings.FRONTEND_BASE_URL}/proposal/{proposal.pk}/event/{self.object.pk}"
+        template_name = "event_approve_contact" if action == "approve" else "event_reject_contact"
+        subject_de = "bestätigt" if action == "approve" else "abgelehnt"
+        subject_en = "confirmed" if action == "approve" else "rejected"
+        ctx = dict(object=self.object, proposal_url=proposal_url, event_url=event_url)
+        try:
+            send_mail(
+                subject=f"Terminvorschlag {subject_de} / Date proposal {subject_en}: {self.object.name}",
+                message=render_to_string(f"apiv1/mails/{template_name}.txt.j2", ctx),
+                html_message=render_to_string(f"apiv1/mails/{template_name}.html.j2", ctx),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[call.responsible_email],
+                fail_silently=False,
+            )
+        except BaseException as e:
+            logger.error(
+                f"Failed to send event {action} notification to call contact: " + str(e),
+                exc_info=e,
+            )
 
     def get_available_transitions(self, user: OpenIDUser) -> list[EventTransition]:
         """Return all transitions (enabled or not) applicable to the current status."""
