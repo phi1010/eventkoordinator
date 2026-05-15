@@ -13,8 +13,16 @@ from viewflow.fsm.base import Transition
 import apiv1
 from apiv1.models import Event, Proposal, check_proposal_required_fields
 from openid_user_management.models import OpenIDUser
+from prometheus_client import Gauge
 
 logger = logging.getLogger(__name__)
+
+
+g_proposal_submit = Gauge('eventkoordinator_flow_proposal_submit_count', 'Submitted proposals')
+g_proposal_reject = Gauge('eventkoordinator_flow_proposal_reject_count', 'Rejected proposals')
+g_proposal_revise = Gauge('eventkoordinator_flow_proposal_revise_count', 'Revised proposals')
+g_proposal_accept = Gauge('eventkoordinator_flow_proposal_accept_count', 'Accepted proposals')
+
 
 
 _PROPOSAL_LABEL_IDS: dict[str, str] = {
@@ -126,6 +134,7 @@ class ProposalFlow:
     )
     def submit(self):
         logger.info(f"Submitting proposal: {self.object!r}")
+        g_proposal_submit.inc()
         self.object.save()
         proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{self.object.pk}"
         try:
@@ -161,6 +170,7 @@ class ProposalFlow:
     )
     def revise(self):
         logger.info(f"Revising proposal: {self.object}")
+        g_proposal_revise.inc()
         proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{self.object.pk}"
         try:
             send_mail(
@@ -190,6 +200,7 @@ class ProposalFlow:
     )
     def accept(self):
         logger.info(f"Accepting proposal: {self.object}")
+        g_proposal_accept.inc()
         self.object.save()
         proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{self.object.pk}"
         try:
@@ -219,6 +230,7 @@ class ProposalFlow:
     )
     def reject(self):
         logger.info(f"Rejecting proposal: {self.object}")
+        g_proposal_reject.inc()
         self.object.save()
         proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{self.object.pk}"
         try:
