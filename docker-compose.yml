@@ -15,7 +15,6 @@ x-backend-environment: &backend-environment
   DJANGO_EMAIL_USE_SSL: ${DJANGO_EMAIL_USE_SSL}
   DJANGO_EMAIL_USE_TLS: ${DJANGO_EMAIL_USE_TLS}
   DJANGO_DEFAULT_FROM_EMAIL: ${DJANGO_DEFAULT_FROM_EMAIL}
-  PROMETHEUS_MULTIPROC_DIR: /app/prometheus_multiproc
   DJANGO_PROMETHEUS_METRIC_NAMESPACE: "eventcoordinator"
   NGINX_PROXY_HOST: ${NGINX_PROXY_HOST:?Set NGINX_PROXY_HOST to the host and port of the public endpoint of the backend, e.g. localhost:8000 when debugging}
   DJANGO_DATABASES__default__ENGINE: "django_prometheus.db.backends.postgresql"
@@ -79,7 +78,6 @@ services:
       DJANGO_LOGGING__handlers__console__formatter: "simple"
       DJANGO_LOGGING__handlers__console__stream: "ext://sys.stderr"
       DJANGO_LOGGING__handlers__console__level: "DEBUG"
-      PROMETHEUS_MULTIPROC_DIR: /app/prometheus_multiproc
       DJANGO_PROMETHEUS_METRIC_NAMESPACE: "eventcoordinator"
       NGINX_PROXY_HOST: ${NGINX_PROXY_HOST:?Set NGINX_PROXY_HOST to the host and port of the public endpoint of the backend, e.g. localhost:8000 when debugging}
     expose:

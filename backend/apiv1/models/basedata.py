@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Any
 
-from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.exceptions import AppRegistryNotReady
 from django.core.validators import (
@@ -20,8 +19,6 @@ from django.utils.deconstruct import deconstructible
 from django.utils.translation import gettext_lazy as _
 from django_prometheus.models import ExportModelOperationsMixin
 from prometheus_client import Gauge
-from prometheus_client.metrics_core import GaugeMetricFamily
-from prometheus_client.registry import Collector, REGISTRY
 from solo.models import SingletonModel
 from viewflow import fsm
 
@@ -612,38 +609,46 @@ def check_proposal_required_fields(proposal: Proposal) -> dict[Any, Any]:
     return checklist
 
 
-if False: # Doesn't show up even when enabled.
-    class CustomModeCollector(Collector):
-        def describe(self):
-            # Explicit metric descriptors help registries that rely on describe().
-            yield GaugeMetricFamily(
-                "django_model_proposal_count", "Number of Proposal objects"
-            )
-            yield GaugeMetricFamily("django_model_event_count", "Number of Event objects")
-            yield GaugeMetricFamily("django_model_series_count", "Number of Series objects")
-
-        def collect(self):
-            if not apps.ready:
-                return
-
-            try:
-                yield GaugeMetricFamily(
-                    "django_model_proposal_count",
-                    "Number of Proposal objects",
-                    value=Proposal.objects.count(),
-                )
-                yield GaugeMetricFamily(
-                    "django_model_event_count",
-                    "Number of Event objects",
-                    value=Event.objects.count(),
-                )
-                yield GaugeMetricFamily(
-                    "django_model_series_count",
-                    "Number of Series objects",
-                    value=Series.objects.count(),
-                )
-            except (AppRegistryNotReady, OperationalError) as e:
-                logger.error(f"Database/app registry error in CustomModeCollector: {str(e)}")
+def _safe_count(model):
+    try:
+        return float(model.objects.count())
+    except (AppRegistryNotReady, OperationalError):
+        return 0.0
 
 
-    REGISTRY.register(CustomModeCollector())
+def _safe_count_filtered(model, **filters):
+    try:
+        return float(model.objects.filter(**filters).count())
+    except (AppRegistryNotReady, OperationalError):
+        return 0.0
+
+
+g_proposal_count = Gauge(
+    "eventkoordinator_proposal_count",
+    "Number of proposals by status",
+    ["status"],
+)
+for _status in Proposal.Status:
+    g_proposal_count.labels(status=_status.value).set_function(
+        lambda s=_status: _safe_count_filtered(Proposal, status=s)
+    )
+
+g_event_count = Gauge(
+    "eventkoordinator_event_count",
+    "Number of events by status and proposal linkage",
+    ["status", "has_proposal"],
+)
+for _status in Event.Status:
+    for _has_proposal, _isnull in (("true", False), ("false", True)):
+        g_event_count.labels(status=_status.value, has_proposal=_has_proposal).set_function(
+            lambda s=_status, isnull=_isnull: _safe_count_filtered(Event, status=s, proposal__isnull=isnull)
+        )
+
+g_model_count = Gauge(
+    "eventkoordinator_model_count",
+    "Number of model objects by type",
+    ["model"],
+)
+g_model_count.labels(model="proposal").set_function(lambda: _safe_count(Proposal))
+g_model_count.labels(model="event").set_function(lambda: _safe_count(Event))
+g_model_count.labels(model="series").set_function(lambda: _safe_count(Series))

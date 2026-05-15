@@ -90,8 +90,10 @@ EXPOSE 8000
 
 CMD ["uv", "run", "--no-group", "dev", "gunicorn", "project.wsgi:application", \
      "--bind", "0.0.0.0:8000", \
-     "--workers", "4", \
-     "--timeout", "120"]
+     "--worker-class", "gthread", \
+     "--workers", "1", \
+     "--threads", "16", \
+     "--timeout", "120" , "--log-level", "debug"]
 
 
 
