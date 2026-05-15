@@ -25,6 +25,7 @@ x-backend-environment: &backend-environment
   DJANGO_DATABASES__default__PORT: 5432
   DJANGO_CELERY_BROKER_URL: "redis://redis:6379/0"
   DJANGO_CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+  DJANGO_FRONTEND_BASE_URL: ${DJANGO_FRONTEND_BASE_URL}
 
 x-backend-volumes: &backend-volumes
   - db-data:/app/backend/data
