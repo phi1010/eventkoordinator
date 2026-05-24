@@ -38,6 +38,23 @@ import styles from './EventGeneralEditor.module.css'
 
 const NEW_SERIES_SENTINEL = '__new__'
 
+const CHECKLIST_FIELD_MAP: Record<string, { tabId: number; elementId: string }> = {
+    title: {tabId: 0, elementId: 'proposal-title'},
+    abstract: {tabId: 0, elementId: 'proposal-abstract'},
+    description: {tabId: 0, elementId: 'proposal-description'},
+    duration: {tabId: 2, elementId: 'proposal-duration-section'},
+    maxParticipants: {tabId: 1, elementId: 'proposal-max-participants'},
+    occurrenceCount: {tabId: 2, elementId: 'proposal-occurrence-count'},
+    preferredDates: {tabId: 2, elementId: 'proposal-preferred-dates'},
+    language: {tabId: 0, elementId: 'proposal-language'},
+    submissionType: {tabId: 0, elementId: 'proposal-submission-type'},
+    workshopArea: {tabId: 0, elementId: 'proposal-area'},
+    atLeastOneSpeaker: {tabId: 3, elementId: 'proposal-speaker-list-section'},
+    speakersHaveBio: {tabId: 3, elementId: 'proposal-speaker-list-section'},
+    photo: {tabId: 0, elementId: 'proposal-image-section'},
+    submissionDeadline: {tabId: 0, elementId: 'proposal-call'},
+}
+
 interface ProposalFormData {
     // General section
     title: string
@@ -233,6 +250,7 @@ export function ProposalEditor({
     const [error, setError] = useState<string | null>(null)
     const [checklist, setChecklist] = useState<Record<string, ProposalChecklistItem>>({})
     const [checklistLoading, setChecklistLoading] = useState(false)
+    const [highlightedChecklistItem, setHighlightedChecklistItem] = useState<string | null>(null)
     const [history, setHistory] = useState<ProposalHistoryEntry[]>([])
     const [historyLoading, setHistoryLoading] = useState(false)
     const [speakers, setSpeakers] = useState<ProposalSpeakerOut[]>([])
@@ -783,10 +801,32 @@ export function ProposalEditor({
 
     const handleTabChange = (tabId: number) => {
         setActiveTab(tabId)
+        setHighlightedChecklistItem(null)
         const newParams = new URLSearchParams(searchParams)
         newParams.set('tab', tabId.toString())
         setSearchParams(newParams)
     }
+
+    const handleChecklistItemClick = (item: string) => {
+        const mapping = CHECKLIST_FIELD_MAP[item]
+        if (!mapping) return
+        setActiveTab(mapping.tabId)
+        setHighlightedChecklistItem(item)
+        const newParams = new URLSearchParams(searchParams)
+        newParams.set('tab', mapping.tabId.toString())
+        setSearchParams(newParams)
+    }
+
+    useEffect(() => {
+        if (!highlightedChecklistItem) return
+        const mapping = CHECKLIST_FIELD_MAP[highlightedChecklistItem]
+        if (!mapping) return
+        const timer = setTimeout(() => {
+            const el = document.getElementById(mapping.elementId)
+            if (el) el.scrollIntoView({block: 'center', behavior: 'smooth'})
+        }, 50)
+        return () => clearTimeout(timer)
+    }, [highlightedChecklistItem])
 
     const handlePreviousTab = () => {
         if (activeTab > 0) {
@@ -918,7 +958,7 @@ export function ProposalEditor({
                                     type="text"
                                     value={formData.title}
                                     onChange={(e) => handleFieldChange('title', e.target.value.slice(0, 30))}
-                                    className={`${styles.input} ${changedFields.has('title') ? styles.changed : ''}`}
+                                    className={`${styles.input} ${changedFields.has('title') ? styles.changed : ''} ${highlightedChecklistItem === 'title' ? styles.checklistHighlight : ''}`}
                                     disabled={isSaving || !canEdit}
                                     maxLength={30}
                                     required
@@ -926,7 +966,7 @@ export function ProposalEditor({
                                 <small aria-live="polite">{formData.title.length}/30</small>
                             </div>
 
-                            <div className={styles.formGroup}>
+                            <div id="proposal-image-section" className={`${styles.formGroup} ${highlightedChecklistItem === 'photo' ? styles.checklistHighlight : ''}`}>
                                 <ImageUploadField
                                     label={t('proposal.proposalImage')}
                                     inputId="proposal-image-upload"
@@ -968,7 +1008,7 @@ export function ProposalEditor({
                                     id="proposal-call"
                                     value={formData.call_id ?? ''}
                                     onChange={(e) => handleFieldChange('call_id', e.target.value || null)}
-                                    className={`${styles.input} ${changedFields.has('call_id') ? styles.changed : ''}`}
+                                    className={`${styles.input} ${changedFields.has('call_id') ? styles.changed : ''} ${highlightedChecklistItem === 'submissionDeadline' ? styles.checklistHighlight : ''}`}
                                     disabled={isSaving || lookupLoading || !canEdit || (currentStatus !== '' && currentStatus !== 'draft')}
                                 >
                                     <option value="">{t('call.fieldPlaceholder')}</option>
@@ -995,7 +1035,7 @@ export function ProposalEditor({
                                     id="proposal-submission-type"
                                     value={formData.submission_type}
                                     onChange={(e) => handleFieldChange('submission_type', e.target.value)}
-                                    className={`${styles.input} ${changedFields.has('submission_type') ? styles.changed : ''}`}
+                                    className={`${styles.input} ${changedFields.has('submission_type') ? styles.changed : ''} ${highlightedChecklistItem === 'submissionType' ? styles.checklistHighlight : ''}`}
                                     disabled={isSaving || lookupLoading || !canEdit}
                                 >
                                     {lookupLoading ? (
@@ -1028,7 +1068,7 @@ export function ProposalEditor({
                                     id="proposal-area"
                                     value={formData.area}
                                     onChange={(e) => handleFieldChange('area', e.target.value)}
-                                    className={`${styles.input} ${changedFields.has('area') ? styles.changed : ''}`}
+                                    className={`${styles.input} ${changedFields.has('area') ? styles.changed : ''} ${highlightedChecklistItem === 'workshopArea' ? styles.checklistHighlight : ''}`}
                                     disabled={isSaving || !canEdit || lookupLoading}
                                 >
                                     {lookupLoading ? (
@@ -1058,7 +1098,7 @@ export function ProposalEditor({
                                     id="proposal-language"
                                     value={formData.language}
                                     onChange={(e) => handleFieldChange('language', e.target.value)}
-                                    className={`${styles.input} ${changedFields.has('language') ? styles.changed : ''}`}
+                                    className={`${styles.input} ${changedFields.has('language') ? styles.changed : ''} ${highlightedChecklistItem === 'language' ? styles.checklistHighlight : ''}`}
                                     disabled={isSaving || lookupLoading || !canEdit}
                                 >
                                     {lookupLoading ? (
@@ -1088,7 +1128,7 @@ export function ProposalEditor({
                                     id="proposal-abstract"
                                     value={formData.abstract}
                                     onChange={(e) => handleFieldChange('abstract', e.target.value)}
-                                    className={`${styles.textarea} ${changedFields.has('abstract') ? styles.changed : ''}`}
+                                    className={`${styles.textarea} ${changedFields.has('abstract') ? styles.changed : ''} ${highlightedChecklistItem === 'abstract' ? styles.checklistHighlight : ''}`}
                                     rows={3}
                                     disabled={isSaving || !canEdit}
                                     required
@@ -1109,7 +1149,7 @@ export function ProposalEditor({
                                     id="proposal-description"
                                     value={formData.description}
                                     onChange={(e) => handleFieldChange('description', e.target.value)}
-                                    className={`${styles.textarea} ${changedFields.has('description') ? styles.changed : ''}`}
+                                    className={`${styles.textarea} ${changedFields.has('description') ? styles.changed : ''} ${highlightedChecklistItem === 'description' ? styles.checklistHighlight : ''}`}
                                     rows={6}
                                     disabled={isSaving || !canEdit}
                                     required
@@ -1156,7 +1196,7 @@ export function ProposalEditor({
                                     type="number"
                                     value={formData.max_participants}
                                     onChange={(e) => handleFieldChange('max_participants', parseInt(e.target.value) || 0)}
-                                    className={`${styles.input} ${changedFields.has('max_participants') ? styles.changed : ''}`}
+                                    className={`${styles.input} ${changedFields.has('max_participants') ? styles.changed : ''} ${highlightedChecklistItem === 'maxParticipants' ? styles.checklistHighlight : ''}`}
                                     disabled={isSaving || !canEdit}
                                     required
                                 />
@@ -1185,6 +1225,7 @@ export function ProposalEditor({
                     {/* Tab 3: Zeitplanung */}
                     <div className={activeTab === 2 ? styles.tabPanelActive : styles.tabPanelHidden} role="tabpanel">
                         <div className={styles.detailsContent}>
+                            <div id="proposal-duration-section" className={highlightedChecklistItem === 'duration' ? styles.checklistHighlight : undefined}>
                             <div className={styles.formGroup}>
                                 <label htmlFor="proposal-duration-days" className={styles.label}>
                                     {t('proposal.numberOfDays')}
@@ -1235,6 +1276,7 @@ export function ProposalEditor({
                                     {t('proposal.timePerDayHint')}
                                 </small>
                             </div>
+                            </div>
 
                             <div className={styles.formGroup}>
                                 <label htmlFor="proposal-occurrence-count" className={styles.label}>
@@ -1247,7 +1289,7 @@ export function ProposalEditor({
                                     type="number"
                                     value={formData.occurrence_count}
                                     onChange={(e) => handleFieldChange('occurrence_count', parseInt(e.target.value) || 0)}
-                                    className={`${styles.input} ${changedFields.has('occurrence_count') ? styles.changed : ''}`}
+                                    className={`${styles.input} ${changedFields.has('occurrence_count') ? styles.changed : ''} ${highlightedChecklistItem === 'occurrenceCount' ? styles.checklistHighlight : ''}`}
                                     disabled={isSaving || !canEdit}
                                     required
                                 />
@@ -1266,7 +1308,7 @@ export function ProposalEditor({
                                     id="proposal-preferred-dates"
                                     value={formData.preferred_dates}
                                     onChange={(e) => handleFieldChange('preferred_dates', e.target.value)}
-                                    className={`${styles.textarea} ${changedFields.has('preferred_dates') ? styles.changed : ''}`}
+                                    className={`${styles.textarea} ${changedFields.has('preferred_dates') ? styles.changed : ''} ${highlightedChecklistItem === 'preferredDates' ? styles.checklistHighlight : ''}`}
                                     rows={3}
                                     disabled={isSaving || !canEdit}
                                     required
@@ -1415,7 +1457,11 @@ export function ProposalEditor({
                             </div>
 
                             {/* Speaker list editor */}
-                            <div style={{marginTop: '1rem'}}>
+                            <div
+                                id="proposal-speaker-list-section"
+                                style={{marginTop: '1rem'}}
+                                className={(highlightedChecklistItem === 'atLeastOneSpeaker' || highlightedChecklistItem === 'speakersHaveBio') ? styles.checklistHighlight : undefined}
+                            >
                                 <SpeakerListEditor
                                     proposalId={_proposalId ?? ''}
                                     speakers={speakers}
@@ -1503,8 +1549,11 @@ export function ProposalEditor({
                         >
                           {status === 'ok' ? '✓' : '⚠'}
                         </span>
-                                                    <span
-                                                        className={status === 'ok' ? styles['checklistItemText--ok'] : styles['checklistItemText--warn']}>{t(`proposal.checklist.${item}`, {defaultValue: item})}</span>
+                                                    <button
+                                                        type="button"
+                                                        className={`${status === 'ok' ? styles['checklistItemText--ok'] : styles['checklistItemText--warn']} ${styles.checklistItemButton}`}
+                                                        onClick={() => handleChecklistItemClick(item)}
+                                                    >{t(`proposal.checklist.${item}`, {defaultValue: item})}</button>
                                                 </li>
                                             ))}
                                         </ul>
