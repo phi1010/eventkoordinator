@@ -36,18 +36,17 @@ class CalDAVSyncTarget(SyncBaseTarget):
         )
 
     def create_new_sync_item(self, event) -> "CalDAVSyncItem":
-        new_uid = str(uuid4())
         logger.debug(
-            "Creating CalDAV sync item for event %s on target %s with uid %s",
-            event.pk, self.pk, new_uid,
+            "Creating CalDAV sync item for event %s on target %s",
+            event.pk, self.pk,
         )
         item, created = CalDAVSyncItem.objects.get_or_create(
             sync_target=self,
             related_event=event,
-            defaults={"caldav_uid": new_uid, "flag_push": True},
+            defaults={"caldav_uid": None, "flag_push": True},
         )
         if created:
-            logger.debug("Created new CalDAVSyncItem %s (uid=%s)", item.pk, item.caldav_uid)
+            logger.debug("Created new CalDAVSyncItem %s (no uid yet)", item.pk)
         else:
             logger.debug("CalDAVSyncItem already exists: %s (uid=%s)", item.pk, item.caldav_uid)
         return item
@@ -57,7 +56,7 @@ class CalDAVSyncItem(SyncBaseItem):
     sync_target = models.ForeignKey(
         CalDAVSyncTarget, on_delete=models.CASCADE, related_name="items"
     )
-    caldav_uid = models.CharField(max_length=255, unique=True)
+    caldav_uid = models.CharField(max_length=255, unique=True, null=True, blank=True, default=None)
 
     def _get_calendar(self):
         return self.sync_target._get_calendar()
@@ -76,11 +75,25 @@ class CalDAVSyncItem(SyncBaseItem):
         )
         calendar = self._get_calendar()
 
-        try:
-            calendar.get_event_by_uid(self.caldav_uid).delete()
-            logger.debug("Deleted existing remote event uid=%s before re-push", self.caldav_uid)
-        except Exception:
-            logger.debug("No existing remote event uid=%s (will create)", self.caldav_uid)
+        # Delete the existing remote event if we have a UID for it, then release
+        # the UID so a fresh one is always assigned — this avoids conflicts with
+        # CalDAV servers that keep deleted events in a trash bin under the same UID.
+        if self.caldav_uid:
+            try:
+                calendar.get_event_by_uid(self.caldav_uid).delete()
+                logger.debug("Deleted existing remote event uid=%s", self.caldav_uid)
+            except Exception:
+                logger.debug("Remote event uid=%s already absent", self.caldav_uid)
+            self.caldav_uid = None
+            self.save()
+
+        # Assign a new UID and persist it as a checkpoint before touching the
+        # remote — if the process dies here the item stays in CREATION_PENDING
+        # (flag_push=True) with a known UID so recovery is possible.
+        self.caldav_uid = str(uuid4())
+        self.flag_push = True
+        self.save()
+        logger.debug("Assigned new uid=%s for event=%s", self.caldav_uid, event.pk)
 
         blocks = event.get_time_blocks()
 
@@ -138,6 +151,9 @@ class CalDAVSyncItem(SyncBaseItem):
     def delete_remote(self):
         from caldav import error as caldav_error
         logger.debug("delete_remote: uid=%s", self.caldav_uid)
+        if not self.caldav_uid:
+            logger.debug("delete_remote: no uid assigned, nothing to delete")
+            return
         try:
             calendar = self._get_calendar()
             calendar.get_event_by_uid(self.caldav_uid).delete()
@@ -151,6 +167,9 @@ class CalDAVSyncItem(SyncBaseItem):
 
     def sync_diff(self, only_differences: bool = True) -> SyncDiffData | None:
         logger.debug("sync_diff: uid=%s only_differences=%s", self.caldav_uid, only_differences)
+        if not self.caldav_uid:
+            logger.debug("sync_diff: no uid assigned, returning None")
+            return None
         try:
             calendar = self._get_calendar()
             remote_evt = calendar.get_event_by_uid(self.caldav_uid)
