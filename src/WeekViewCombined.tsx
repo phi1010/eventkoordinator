@@ -184,7 +184,7 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
   /** All events that overlap the currently displayed week. */
   const visibleEvents = useMemo(() => {
     const startMs = weekStart.getTime();
-    const endMs   = startMs + 7 * 86_400_000;
+    const endMs   = addDays(weekStart, 7).getTime();
     return events.filter(ev => {
       const s = new Date(ev.startUtc).getTime();
       const e = new Date(ev.endUtc).getTime();
@@ -207,7 +207,7 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
    */
   function layoutDayEvents(day: Date): PositionedEvent[] {
     const dayMs    = day.getTime();
-    const dayEndMs = dayMs + 86_400_000;
+    const dayEndMs = addDays(day, 1).getTime();
 
     const raw = visibleEvents
       .filter(ev =>
@@ -215,10 +215,14 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
         new Date(ev.endUtc).getTime()   > dayMs,
       )
       .map(ev => {
-        const clampedStart = Math.max(new Date(ev.startUtc).getTime(), dayMs);
-        const clampedEnd   = Math.min(new Date(ev.endUtc).getTime(), dayEndMs);
-        const startMin = (clampedStart - dayMs) / MS_PER_MIN;
-        const endMin   = (clampedEnd   - dayMs) / MS_PER_MIN;
+        const startUtcMs   = new Date(ev.startUtc).getTime();
+        const endUtcMs     = new Date(ev.endUtc).getTime();
+        const clampedStart = Math.max(startUtcMs, dayMs);
+        const clampedEnd   = Math.min(endUtcMs, dayEndMs);
+        const startD = new Date(clampedStart);
+        const endD   = new Date(clampedEnd);
+        const startMin = clampedStart <= dayMs    ? 0       : startD.getHours() * 60 + startD.getMinutes();
+        const endMin   = clampedEnd   >= dayEndMs ? 24 * 60 : endD.getHours()   * 60 + endD.getMinutes();
         const topPx    = (startMin / SLOT_MIN) * SLOT_PX;
         const heightPx = Math.max(SLOT_PX, ((endMin - startMin) / SLOT_MIN) * SLOT_PX);
         return { ev, topPx, heightPx, startMin, endMin };
@@ -401,8 +405,16 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
         const cb = onEventCreateRef.current;
         if (cb) {
           const days      = weekDaysRef.current;
-          const anchorMs  = days[d.anchorDayIndex].getTime()  + d.anchorMinutes  * MS_PER_MIN;
-          const currentMs = days[d.currentDayIndex].getTime() + d.currentMinutes * MS_PER_MIN;
+          const aDay = days[d.anchorDayIndex];
+          const anchorMs = new Date(
+            aDay.getFullYear(), aDay.getMonth(), aDay.getDate(),
+            Math.floor(d.anchorMinutes / 60), d.anchorMinutes % 60,
+          ).getTime();
+          const cDay = days[d.currentDayIndex];
+          const currentMs = new Date(
+            cDay.getFullYear(), cDay.getMonth(), cDay.getDate(),
+            Math.floor(d.currentMinutes / 60), d.currentMinutes % 60,
+          ).getTime();
           const startMs   = Math.min(anchorMs, currentMs);
           const endMs     = Math.max(anchorMs, currentMs);
           const finalEndMs = Math.max(endMs, startMs + SLOT_MIN * MS_PER_MIN);
@@ -445,22 +457,25 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
   }, []); // handlers use refs for fresh values
 
   /** Return preview block dimensions for a given day column, or null. */
-  function getDragPreview(day: Date): { topPx: number; heightPx: number } | null {
+  function getDragPreview(_day: Date, dayIndex: number): { topPx: number; heightPx: number } | null {
     if (!dragPreview) return null;
-    const dayMs    = day.getTime();
-    const dayEndMs = dayMs + 86_400_000;
-    const anchorMs  = weekDays[dragPreview.anchorDayIndex].getTime()  + dragPreview.anchorMinutes  * MS_PER_MIN;
-    const currentMs = weekDays[dragPreview.currentDayIndex].getTime() + dragPreview.currentMinutes * MS_PER_MIN;
-    const startMs   = Math.min(anchorMs, currentMs);
-    const endMs     = Math.max(anchorMs, currentMs);
-    const finalEndMs = Math.max(endMs, startMs + SLOT_MIN * MS_PER_MIN);
-    if (finalEndMs <= dayMs || startMs >= dayEndMs) return null;
-    const clampedStart = Math.max(startMs, dayMs);
-    const clampedEnd   = Math.min(finalEndMs, dayEndMs);
-    const startMin = (clampedStart - dayMs) / MS_PER_MIN;
-    const endMin   = (clampedEnd   - dayMs) / MS_PER_MIN;
-    const topPx    = (startMin / SLOT_MIN) * SLOT_PX;
-    const heightPx = Math.max(SLOT_PX * MIN_PREVIEW_SLOTS, ((endMin - startMin) / SLOT_MIN) * SLOT_PX);
+    const { anchorDayIndex, anchorMinutes, currentDayIndex, currentMinutes } = dragPreview;
+
+    const [startDayIdx, startMin, endDayIdx, endMin] =
+      anchorDayIndex <= currentDayIndex
+        ? [anchorDayIndex, anchorMinutes, currentDayIndex, currentMinutes]
+        : [currentDayIndex, currentMinutes, anchorDayIndex, anchorMinutes];
+
+    if (dayIndex < startDayIdx || dayIndex > endDayIdx) return null;
+
+    const dayStartMin = dayIndex === startDayIdx ? startMin : 0;
+    const rawEndMin   = dayIndex === endDayIdx ? endMin : 24 * 60;
+    const dayEndMin   = startDayIdx === endDayIdx
+      ? Math.max(rawEndMin, dayStartMin + SLOT_MIN * MIN_PREVIEW_SLOTS)
+      : rawEndMin;
+
+    const topPx    = (dayStartMin / SLOT_MIN) * SLOT_PX;
+    const heightPx = Math.max(SLOT_PX * MIN_PREVIEW_SLOTS, ((dayEndMin - dayStartMin) / SLOT_MIN) * SLOT_PX);
     return { topPx, heightPx };
   }
 
@@ -471,7 +486,7 @@ export const WeekViewCombined: React.FC<WeekViewCombinedProps> = ({
     const dow        = day.getDay();
     const isWE       = dow === 0 || dow === 6;
     const positioned = layoutDayEvents(day);
-    const preview    = getDragPreview(day);
+    const preview    = getDragPreview(day, di);
 
     return (
       <div
