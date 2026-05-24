@@ -139,6 +139,9 @@ def create_event(request, series_id: str, payload: CreateEventIn) -> tuple[int, 
     else:
         end_dt = start_dt + timedelta(hours=1)
 
+    if start_dt > end_dt:
+        start_dt, end_dt = end_dt, start_dt
+
     # Create event in database
     event_model = EventModel.objects.create(
         id=event_id,
@@ -240,6 +243,9 @@ def update_event(request, series_id: str, event_id: str, payload: UpdateEventIn)
             event_model.series = new_series
         except SeriesModel.DoesNotExist:
             return 404, ErrorOut(code="series.notFound")
+
+    if event_model.start_time > event_model.end_time:
+        event_model.start_time, event_model.end_time = event_model.end_time, event_model.start_time
 
     event_model.save()
     return 200, model_event_to_schema(event_model)
