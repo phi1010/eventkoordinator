@@ -1009,7 +1009,7 @@ export interface ProposalListItem {
 export async function fetchProposalsList(): Promise<ProposalListItem[]> {
   const { data, error, response } = await client.GET('/api/v1/proposals/' as never, undefined as never)
   if (error || !response.ok) {
-    throw new Error(error?.code || 'common.internalError')
+    throw new Error('common.internalError')
   }
   return (data as unknown as ProposalListItem[]) || []
 }
