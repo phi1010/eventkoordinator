@@ -4,6 +4,7 @@ Proposals router.
 Handles endpoints for managing proposals, associations, and validation.
 """
 
+import inspect
 import logging
 import uuid
 from datetime import timedelta
@@ -17,6 +18,7 @@ from django.utils import timezone
 from ninja import File, Router, UploadedFile
 from openid_user_management.models import OpenIDUser
 from viewflow.fsm import chart
+from viewflow.fsm.base import TransitionMethod
 
 import apiv1
 from apiv1.api_utils import (
@@ -32,6 +34,8 @@ from apiv1.models import Call as CallModel
 from apiv1.models import ProposalArea, ProposalLanguage, SubmissionType
 from apiv1.schemas import (
     ErrorOut,
+    EventFlowDiagram,
+    FlowEdge,
     ProposalCreateIn,
     ProposalDetail,
     ProposalEventSummary,
@@ -97,6 +101,27 @@ def flow_chart_image(request):
     png_data = graph.create(format="svg")
 
     return HttpResponse(png_data, content_type="image/svg+xml")
+
+
+@router.get("/flow-diagram", response={200: EventFlowDiagram})
+def proposal_flow_diagram(request):
+    """Return the proposal FSM structure as a Pydantic model for frontend diagram rendering."""
+    nodes: set[str] = set()
+    edges: list[FlowEdge] = []
+    for action, method in (
+        (name, obj)
+        for name, obj in inspect.getmembers(ProposalFlow)
+        if isinstance(obj, TransitionMethod)
+    ):
+        for transition in method.get_transitions():
+            sources = transition.source if isinstance(transition.source, list) else [transition.source]
+            target = transition.target.value
+            for source in sources:
+                source_val = source.value
+                nodes.add(source_val)
+                nodes.add(target)
+                edges.append(FlowEdge(source=source_val, target=target, label_id=action))
+    return EventFlowDiagram(nodes=sorted(nodes), edges=edges)
 
 
 @router.get(

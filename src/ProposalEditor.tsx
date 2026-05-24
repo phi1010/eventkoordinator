@@ -1,5 +1,6 @@
 import React, {useState, useEffect, useRef} from 'react'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
+import mermaid from 'mermaid'
 import {
     fetchProposal,
     updateProposal,
@@ -13,6 +14,7 @@ import {
     searchUsers,
     fetchProposalEvents,
     fetchProposalTransitions,
+    fetchProposalFlowDiagram,
     createEvent,
     createSeries,
     searchSeriesAutocomplete,
@@ -26,7 +28,11 @@ import {
     type ProposalEventSummary,
     type Series,
     type CallOut,
+    type EventFlowDiagram,
 } from './api'
+mermaid.initialize({ startOnLoad: false, theme: 'default' })
+let proposalDiagramCounter = 0
+
 import {useUnsavedChanges} from './useUnsavedChanges'
 import {usePermissions} from './usePermissions'
 import {useTranslation} from 'react-i18next'
@@ -239,7 +245,7 @@ export function ProposalEditor({
                                    onTransitionSuccess: onTransitionSuccessProp,
                                    onUnsavedChangesChange,
                                }: ProposalEditorProps) {
-    const {t} = useTranslation()
+    const {t, i18n} = useTranslation()
     const navigate = useNavigate()
     const {canView, canAdd, hasPermission, loading: permissionsLoading} = usePermissions()
     const [formData, setFormData] = useState<ProposalFormData>(DEFAULT_FORM_DATA)
@@ -276,6 +282,14 @@ export function ProposalEditor({
     const [proposalImageUploadProgress, setProposalImageUploadProgress] = useState<number | null>(null)
     const [proposalImageError, setProposalImageError] = useState<string | null>(null)
     const [proposalImageCopyrightChecked, setProposalImageCopyrightChecked] = useState(false)
+
+    // Lifecycle diagram state
+    const [flowChartOpen, setFlowChartOpen] = useState(false)
+    const [flowDiagram, setFlowDiagram] = useState<EventFlowDiagram | null>(null)
+    const [flowChartLoading, setFlowChartLoading] = useState(false)
+    const [flowChartError, setFlowChartError] = useState<string | null>(null)
+    const [renderedSvg, setRenderedSvg] = useState<string | null>(null)
+    const diagramRenderingRef = useRef(false)
 
     // Event creation state
     const [seriesSearchQuery, setSeriesSearchQuery] = useState('')
@@ -838,6 +852,60 @@ export function ProposalEditor({
     const handleNextTab = () => {
         if (activeTab < tabs.length - 1) {
             handleTabChange(activeTab + 1)
+        }
+    }
+
+    const buildProposalMermaidDefinition = (diagram: EventFlowDiagram, activeStatus: string): string => {
+        const lines: string[] = ['flowchart TD']
+        for (const node of diagram.nodes) {
+            const label = t(`proposal.statusValues.${node}`, { defaultValue: node })
+            const cls = node === activeStatus ? ':::activeState' : ''
+            lines.push(`    ${node}["${label}"]${cls}`)
+        }
+        for (const edge of diagram.edges) {
+            const label = t(`proposal.transition.${edge.label_id}`, { defaultValue: edge.label_id })
+            lines.push(`    ${edge.source} -->|"${label}"| ${edge.target}`)
+        }
+        lines.push('    classDef activeState fill:#1565c0,stroke:#0d47a1,color:#fff,font-weight:bold')
+        return lines.join('\n')
+    }
+
+    const renderProposalMermaid = async (diagram: EventFlowDiagram, activeStatus: string) => {
+        if (diagramRenderingRef.current) return
+        diagramRenderingRef.current = true
+        try {
+            const definition = buildProposalMermaidDefinition(diagram, activeStatus)
+            const id = `proposal-flow-${++proposalDiagramCounter}`
+            const { svg } = await mermaid.render(id, definition)
+            setRenderedSvg(svg)
+        } catch (err) {
+            setFlowChartError(t('common.error'))
+        } finally {
+            diagramRenderingRef.current = false
+        }
+    }
+
+    // Re-render proposal lifecycle diagram when status, language, or diagram data changes
+    useEffect(() => {
+        if (!flowDiagram || !flowChartOpen) return
+        void renderProposalMermaid(flowDiagram, currentStatus)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentStatus, flowDiagram, flowChartOpen, i18n.language])
+
+    const handleToggleFlowChart = async () => {
+        const nextOpen = !flowChartOpen
+        setFlowChartOpen(nextOpen)
+        if (nextOpen && flowDiagram === null && !flowChartLoading) {
+            try {
+                setFlowChartLoading(true)
+                setFlowChartError(null)
+                const diagram = await fetchProposalFlowDiagram()
+                setFlowDiagram(diagram)
+            } catch (err) {
+                setFlowChartError(t('common.error'))
+            } finally {
+                setFlowChartLoading(false)
+            }
         }
     }
 
@@ -1791,6 +1859,47 @@ export function ProposalEditor({
                             )}
                         </div>
                     </div>
+
+                    {/* Proposal lifecycle diagram */}
+                    {activeTab >= 4 && _proposalId && _proposalId.trim() && (
+                        <div style={{marginTop: '1rem'}}>
+                            <button
+                                type="button"
+                                onClick={() => void handleToggleFlowChart()}
+                                aria-expanded={flowChartOpen}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem',
+                                    fontSize: '0.9rem',
+                                    color: '#555',
+                                    padding: '0.25rem 0',
+                                }}
+                            >
+                                <span style={{
+                                    display: 'inline-block',
+                                    transition: 'transform 0.2s',
+                                    transform: flowChartOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                                    fontSize: '0.75rem',
+                                }}>▶</span>
+                                {t('proposal.lifecycleDiagram')}
+                            </button>
+                            {flowChartOpen && (
+                                <div aria-label={t('proposal.lifecycleDiagramAria')} style={{marginTop: '0.5rem'}}>
+                                    {flowChartLoading && <p style={{color: '#666', fontSize: '0.9rem'}}>{t('proposal.loadingDiagram')}</p>}
+                                    {flowChartError && <p style={{color: '#d32f2f', fontSize: '0.9rem'}}>{flowChartError}</p>}
+                                    {renderedSvg && (
+                                        // SVG is generated locally by mermaid – safe to inject
+                                        <div dangerouslySetInnerHTML={{ __html: renderedSvg }} />
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Moderation Comment - visible when not in draft, editable only with moderate_proposal permission */}
                     {_proposalId && _proposalId.trim() && currentStatus && currentStatus !== 'draft' && (
                         <fieldset className={styles.fieldset} style={{marginTop: '2rem'}}>

@@ -187,7 +187,10 @@
     "tabSpeakers": "Speakers",
     "tabSubmission": "Submission",
     "tabDateArrangement": "Date Arrangement",
-    "moderationComment": "Moderation Comment"
+    "moderationComment": "Moderation Comment",
+    "lifecycleDiagram": "Proposal lifecycle diagram",
+    "lifecycleDiagramAria": "Proposal lifecycle state machine diagram",
+    "loadingDiagram": "Loading diagram..."
   },
   "defaultScreen": {
     "welcomeTitle": "Welcome to Event Coordinator",

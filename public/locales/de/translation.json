@@ -183,7 +183,10 @@
     "tabSpeakers": "Referent*innen",
     "tabSubmission": "Einreichung",
     "tabDateArrangement": "Terminfestlegung",
-    "moderationComment": "Moderationskommentar"
+    "moderationComment": "Moderationskommentar",
+    "lifecycleDiagram": "Vorschlags-Lebenszyklus-Diagramm",
+    "lifecycleDiagramAria": "Vorschlags-Lebenszyklus-Zustandsmaschinendiagramm",
+    "loadingDiagram": "Lade Diagramm…"
   },
   "defaultScreen": {
     "welcomeTitle": "Willkommen bei Event Coordinator",

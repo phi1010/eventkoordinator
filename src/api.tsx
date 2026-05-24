@@ -1356,6 +1356,16 @@ export async function fetchEventFlowDiagram(): Promise<EventFlowDiagram> {
   return response.json() as Promise<EventFlowDiagram>
 }
 
+export async function fetchProposalFlowDiagram(): Promise<EventFlowDiagram> {
+  const response = await fetch('/api/v1/proposals/flow-diagram', {
+    credentials: 'include',
+  })
+  if (!response.ok) {
+    throw new Error('common.internalError')
+  }
+  return response.json() as Promise<EventFlowDiagram>
+}
+
 export async function fetchProposalEvents(proposalId: string): Promise<ProposalEventSummary[]> {
   const { data, error, response } = await client.GET('/api/v1/proposals/{proposal_id}/events', {
     params: {
