@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { updateSeries, type Series } from './api'
+import { translateApiError } from './apiError'
 import { useUnsavedChanges } from './useUnsavedChanges'
 import styles from './EventGeneralEditor.module.css'
 
@@ -79,7 +80,7 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, on
       onSeriesUpdate(updated)
       setChangedFields(new Set())
       } catch (err) {
-        setError(err instanceof Error ? err.message : t('series.failedSave'))
+        setError(translateApiError(err instanceof Error ? err.message : undefined))
       } finally {
       setIsSaving(false)
     }
@@ -105,7 +106,7 @@ export function SeriesGeneralEditor({ series, onSeriesUpdate, onDeleteSeries, on
       setError(null)
       await onDeleteSeries()
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('series.failedDelete'))
+      setError(translateApiError(err instanceof Error ? err.message : undefined))
     } finally {
       setIsDeleting(false)
     }

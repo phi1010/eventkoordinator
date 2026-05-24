@@ -24,6 +24,7 @@ import type {CalendarEvent, Resource} from './calendarTypes'
 import WeekViewCombined from './WeekViewCombined'
 import {useUnsavedChanges} from './useUnsavedChanges'
 import {EventTransitionButtons} from './EventTransitionButtons'
+import { translateApiError } from './apiError'
 import styles from './SubEventEditor.module.css'
 
 interface EventEditorProps {
@@ -271,7 +272,7 @@ export function EventEditor({
                 setSyncTargets(targetsData)
                 setError(null)
             } catch (err) {
-                setError(err instanceof Error ? err.message : t('event.failedToLoadSyncStatus'))
+                setError(translateApiError(err instanceof Error ? err.message : undefined))
             } finally {
                 setLoading(false)
             }
@@ -290,7 +291,7 @@ export function EventEditor({
                 setExternalEvents(data)
                 setCalendarError(null)
             } catch (err) {
-                setCalendarError(err instanceof Error ? err.message : t('event.loadingReferenceEvents'))
+                setCalendarError(translateApiError(err instanceof Error ? err.message : undefined))
             } finally {
                 setCalendarLoading(false)
             }
@@ -369,7 +370,7 @@ export function EventEditor({
                 if (!isMounted) {
                     return
                 }
-                setCalculatedPricesError(err instanceof Error ? err.message : t('event.failedToLoadCalculatedPrices'))
+                setCalculatedPricesError(translateApiError(err instanceof Error ? err.message : undefined))
                 setCalculatedPrices(null)
                 setCalculatedPricesForm(EMPTY_CALCULATED_PRICES_FORM)
                 setCanViewCalculatedPrices(false)
@@ -470,7 +471,7 @@ export function EventEditor({
             setUseFullDays(updated.useFullDays || false)
             setChangedFields(new Set())
         } catch (err) {
-            setEditError(err instanceof Error ? err.message : t('event.failedToSave'))
+            setEditError(translateApiError(err instanceof Error ? err.message : undefined))
         } finally {
             setIsSaving(false)
         }
@@ -499,7 +500,7 @@ export function EventEditor({
             setEditError(null)
             await onDeleteEvent?.()
         } catch (err) {
-            setEditError(err instanceof Error ? err.message : t('event.failedToDelete'))
+            setEditError(translateApiError(err instanceof Error ? err.message : undefined))
         } finally {
             setIsDeleting(false)
         }
@@ -514,7 +515,7 @@ export function EventEditor({
             const data = await fetchSyncStatus(series.id, event.id)
             setSyncInfo(data)
         } catch (err) {
-            setError(err instanceof Error ? err.message : t('event.failedToCreateSync'))
+            setError(translateApiError(err instanceof Error ? err.message : undefined))
         } finally {
             setCreatingSyncItem(null)
         }
@@ -529,7 +530,7 @@ export function EventEditor({
             const data = await fetchSyncStatus(series.id, event.id)
             setSyncInfo(data)
         } catch (err) {
-            setError(err instanceof Error ? err.message : t('event.failedToPush'))
+            setError(translateApiError(err instanceof Error ? err.message : undefined))
         } finally {
             setPushing(null)
         }
@@ -553,7 +554,7 @@ export function EventEditor({
             const data = await fetchSyncStatus(series.id, event.id)
             setSyncInfo(data)
         } catch (err) {
-            setError(err instanceof Error ? err.message : t('event.failedToDeleteRemote'))
+            setError(translateApiError(err instanceof Error ? err.message : undefined))
         } finally {
             setDeletingRemote(null)
         }
@@ -600,7 +601,7 @@ export function EventEditor({
             setCanChangeCalculatedPrices(canChange)
             setCanDeleteCalculatedPrices(canDelete)
         } catch (err) {
-            setCalculatedPricesError(err instanceof Error ? err.message : t('event.failedToCreateCalculatedPrices'))
+            setCalculatedPricesError(translateApiError(err instanceof Error ? err.message : undefined))
         } finally {
             setCalculatedPricesCreateMode(null)
         }
@@ -630,7 +631,7 @@ export function EventEditor({
             setCalculatedPricesForm(toCalculatedPricesForm(updated))
             setCalculatedPricesDirty(false)
         } catch (err) {
-            setCalculatedPricesError(err instanceof Error ? err.message : t('event.failedToSaveCalculatedPrices'))
+            setCalculatedPricesError(translateApiError(err instanceof Error ? err.message : undefined))
         } finally {
             setCalculatedPricesSaving(false)
         }
@@ -657,7 +658,7 @@ export function EventEditor({
             setCanChangeCalculatedPrices(false)
             setCanDeleteCalculatedPrices(false)
         } catch (err) {
-            setCalculatedPricesError(err instanceof Error ? err.message : t('event.failedToDeleteCalculatedPrices'))
+            setCalculatedPricesError(translateApiError(err instanceof Error ? err.message : undefined))
         } finally {
             setCalculatedPricesDeleting(false)
         }

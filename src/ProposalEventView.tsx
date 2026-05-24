@@ -11,6 +11,7 @@ import {
   type Series,
   type Event,
 } from './api'
+import { translateApiError } from './apiError'
 import { EventEditor } from './EventEditor'
 import { EventStatusBadge } from './EventStatusBadge'
 import styles from './ProposalEventView.module.css'
@@ -48,7 +49,7 @@ export function ProposalEventView() {
         setProposal(proposalData)
         setProposalEvents(eventsData)
       } catch (err) {
-        setError(err instanceof Error ? err.message : t('api.proposals.notFound'))
+        setError(translateApiError(err instanceof Error ? err.message : undefined))
       } finally {
         setLoading(false)
       }
@@ -77,7 +78,7 @@ export function ProposalEventView() {
           setEvent(eventData)
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : t('api.events.notFound'))
+        setError(translateApiError(err instanceof Error ? err.message : undefined))
       } finally {
         setEventLoading(false)
       }

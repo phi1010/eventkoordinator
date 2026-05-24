@@ -5,6 +5,7 @@ import { DiffView, DiffModeEnum } from '@git-diff-view/react'
 import { generateDiffFile } from '@git-diff-view/file'
 import '@git-diff-view/react/styles/diff-view.css'
 import { fetchSyncDiff, type PropertyDiff } from './api'
+import { translateApiError } from './apiError'
 import { SelectionPanel, type SelectionItem } from './SelectionPanel'
 import styles from './SyncDiff.module.css'
 
@@ -63,7 +64,7 @@ export function SyncDiff() {
         }
         setError(null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : t('syncDiff.failedLoad'))
+        setError(translateApiError(err instanceof Error ? err.message : undefined))
       } finally {
         setLoading(false)
       }

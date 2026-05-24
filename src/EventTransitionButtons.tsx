@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { translateApiError } from './apiError'
 import mermaid from 'mermaid'
 import {
   fetchEventTransitions,
@@ -101,7 +102,7 @@ export function EventTransitionButtons({
       const { svg } = await mermaid.render(id, definition)
       setRenderedSvg(svg)
     } catch (err) {
-      setFlowChartError(err instanceof Error ? err.message : t('event.failedToLoadFlowChart'))
+      setFlowChartError(translateApiError(err instanceof Error ? err.message : undefined))
     } finally {
       renderingRef.current = false
     }
@@ -117,7 +118,7 @@ export function EventTransitionButtons({
         const diagram = await fetchEventFlowDiagram()
         setFlowDiagram(diagram)
       } catch (err) {
-        setFlowChartError(err instanceof Error ? err.message : t('event.failedToLoadFlowChart'))
+        setFlowChartError(translateApiError(err instanceof Error ? err.message : undefined))
       } finally {
         setFlowChartLoading(false)
       }
@@ -133,7 +134,7 @@ export function EventTransitionButtons({
       await loadTransitions()
       onTransitionSuccess?.(updatedEvent)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t('event.transitionFailedShort')
+      const msg = translateApiError(err instanceof Error ? err.message : undefined)
       setError(msg)
       onTransitionError?.(msg)
     } finally {

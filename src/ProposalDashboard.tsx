@@ -14,6 +14,7 @@ import {
   type EventSyncInfo,
 } from './api'
 import { usePermissions } from './usePermissions'
+import { translateApiError } from './apiError'
 import styles from './ProposalDashboard.module.css'
 
 // ── display helpers ───────────────────────────────────────────────────────────
@@ -163,7 +164,7 @@ export function ProposalDashboard() {
   useEffect(() => {
     fetchProposalsList()
       .then(setProposals)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => setError(translateApiError(e instanceof Error ? e.message : undefined)))
       .finally(() => setLoading(false))
   }, [])
 

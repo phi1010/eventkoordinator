@@ -264,7 +264,7 @@ async function fetchCalendarData(): Promise<Series[]> {
   const { data, error, response } = await client.GET('/api/v1/series')
 
   if (error || !response.ok) {
-    throw new Error(`Failed to fetch calendar data: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   const apiData = (data ?? []) as SeriesApiResponse
@@ -286,7 +286,7 @@ export async function fetchSeriesById(seriesId: string): Promise<Series> {
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to fetch series details: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return toFrontendSeriesItem(data as unknown as ApiSeries)
@@ -365,7 +365,7 @@ export async function fetchSyncTargets(): Promise<SyncTarget[]> {
   const { data, error, response } = await client.GET('/api/v1/sync/targets')
 
   if (error || !response.ok) {
-    throw new Error(`Failed to fetch sync targets: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return data as unknown as SyncTarget[]
@@ -390,7 +390,7 @@ export async function createSyncItem(
   )
 
   if (error || !response.ok) {
-    throw new Error(`Failed to create sync item: ${response.statusText}`)
+    throw new Error(error?.code || 'sync.failed')
   }
 
   return data as unknown as CreateSyncItemResult
@@ -413,7 +413,7 @@ export async function fetchSyncStatus(
   )
 
   if (error || !response.ok) {
-    throw new Error(`Failed to fetch sync status: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   // Cast since schema has content?: never but backend returns JSON
@@ -439,7 +439,7 @@ export async function pushToPlatform(
   )
 
   if (error || !response.ok) {
-    throw new Error(`Failed to push to platform: ${response.statusText}`)
+    throw new Error(error?.code || 'sync.failed')
   }
 
   // Cast since schema has content?: never but backend returns JSON
@@ -465,7 +465,7 @@ export async function deleteRemoteSyncItem(
   )
 
   if (error || !response.ok) {
-    throw new Error(`Failed to delete remote sync item: ${response.statusText}`)
+    throw new Error(error?.code || 'sync.failed')
   }
 }
 
@@ -488,7 +488,7 @@ export async function fetchSyncDiff(
   )
 
   if (error || !response.ok) {
-    throw new Error(`Failed to fetch sync diff: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   // Cast since schema has content?: never but backend returns JSON
@@ -506,7 +506,7 @@ export async function login(username: string, password: string): Promise<User> {
 
   if (error || !response.ok) {
     const errorData = data as unknown as AuthError
-    throw new Error(errorData?.code || `Login failed: ${response.statusText}`)
+    throw new Error(errorData?.code || 'auth.loginFailed')
   }
 
   // Ensure subsequent state-changing requests use the post-login CSRF token.
@@ -523,7 +523,7 @@ export async function getCurrentUser(): Promise<User> {
       return null as unknown as User
     }
 
-    throw new Error(error?.code || 'Failed to get current user')
+    throw new Error(error?.code || 'auth.notAuthenticated')
   }
 
   return data as unknown as User
@@ -543,7 +543,7 @@ export async function getUserPermissions(): Promise<UserPermissions> {
       }
     }
 
-    throw new Error(error?.code || 'Failed to get user permissions')
+    throw new Error(error?.code || 'auth.permissionDenied')
   }
 
   return data as unknown as UserPermissions
@@ -577,7 +577,7 @@ export async function logout(): Promise<void> {
   const { response } = await client.POST('/api/v1/logout', {})
 
   if (!response.ok) {
-    throw new Error('Logout failed')
+    throw new Error('common.internalError')
   }
 }
 
@@ -593,7 +593,7 @@ export async function createSeries(request: CreateSeriesRequest = {}): Promise<S
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to create series: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return toFrontendSeriesItem(data as unknown as ApiSeries)
@@ -625,7 +625,7 @@ export async function createEvent(request: CreateEventRequest): Promise<Event> {
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to create event: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   const payload = data as unknown as ApiCreateEventResponse
@@ -652,7 +652,7 @@ export async function updateSeries(request: UpdateSeriesRequest): Promise<Series
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to update series: ${response.statusText}`)
+    throw new Error(error?.code || 'series.validationError')
   }
 
   return toFrontendSeriesItem(data as unknown as ApiSeries)
@@ -668,7 +668,7 @@ export async function deleteSeries(seriesId: string): Promise<void> {
   })
 
   if (error || !response.ok) {
-    throw new Error(error?.code || `Failed to delete series: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 }
 
@@ -704,7 +704,7 @@ export async function updateEvent(request: UpdateEventRequest): Promise<Event> {
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to update event: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return toFrontendEvent(data as unknown as ApiEvent)
@@ -721,7 +721,7 @@ export async function deleteEvent(seriesId: string, eventId: string): Promise<vo
   })
 
   if (error || !response.ok) {
-    throw new Error(error?.code || `Failed to delete event: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 }
 
@@ -807,7 +807,7 @@ export async function fetchProposalChecklist(proposalId: string): Promise<Record
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to fetch proposal checklist: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return data as unknown as Record<string, ProposalChecklistItem>
@@ -826,7 +826,7 @@ export async function fetchProposalHistory(proposalId: string, days: number = 7)
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to fetch proposal history: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return data as unknown as ProposalHistory
@@ -856,7 +856,7 @@ export async function fetchProposalTransitions(proposalId: string): Promise<Prop
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to fetch proposal transitions: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return data as unknown as ProposalTransitions
@@ -872,7 +872,7 @@ export async function submitProposal(proposalId: string): Promise<ProposalDetail
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to submit proposal: ${response.statusText}`)
+    throw new Error(error?.code || 'proposals.transitionFailed')
   }
 
   return data as unknown as ProposalDetail
@@ -888,7 +888,7 @@ export async function acceptProposal(proposalId: string): Promise<ProposalDetail
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to accept proposal: ${response.statusText}`)
+    throw new Error(error?.code || 'proposals.transitionFailed')
   }
 
   return data as unknown as ProposalDetail
@@ -904,7 +904,7 @@ export async function rejectProposal(proposalId: string): Promise<ProposalDetail
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to reject proposal: ${response.statusText}`)
+    throw new Error(error?.code || 'proposals.transitionFailed')
   }
 
   return data as unknown as ProposalDetail
@@ -920,7 +920,7 @@ export async function reviseProposal(proposalId: string): Promise<ProposalDetail
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to revise proposal: ${response.statusText}`)
+    throw new Error(error?.code || 'proposals.transitionFailed')
   }
 
   return data as unknown as ProposalDetail
@@ -949,7 +949,7 @@ export async function createProposal(formData?: {
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to create proposal: ${response.statusText}`)
+    throw new Error(error?.code || 'proposals.createFailed')
   }
 
   return data as unknown as ProposalSummary
@@ -965,7 +965,7 @@ export async function deleteProposal(proposalId: string): Promise<void> {
   })
 
   if (error || !response.ok) {
-    throw new Error(error?.code || `Failed to delete proposal: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 }
 
@@ -1009,7 +1009,7 @@ export interface ProposalListItem {
 export async function fetchProposalsList(): Promise<ProposalListItem[]> {
   const { data, error, response } = await client.GET('/api/v1/proposals/' as never, undefined as never)
   if (error || !response.ok) {
-    throw new Error(`Failed to fetch proposals: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
   return (data as unknown as ProposalListItem[]) || []
 }
@@ -1048,7 +1048,7 @@ export async function fetchProposal(proposalId: string): Promise<ProposalDetail>
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to fetch proposal: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return data as unknown as ProposalDetail
@@ -1085,7 +1085,7 @@ export async function updateProposal(proposalId: string, formData: {
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to update proposal: ${response.statusText}`)
+    throw new Error(error?.code || 'proposals.validationError')
   }
 
   return data as unknown as ProposalDetail
@@ -1122,7 +1122,7 @@ export async function addSpeakerToProposal(
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to add speaker: ${response.statusText}`)
+    throw new Error(error?.code || 'speakers.addFailed')
   }
 
   return data as unknown as ProposalSpeakerOut
@@ -1138,7 +1138,7 @@ export async function fetchProposalSpeakers(proposalId: string): Promise<Proposa
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to fetch speakers: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return data as unknown as ProposalSpeakerOut[]
@@ -1160,7 +1160,7 @@ export async function updateSpeaker(
   })
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to update speaker: ${response.statusText}`)
+    throw new Error(error?.code || 'speakers.updateFailed')
   }
 
   return data as unknown as ProposalSpeakerOut
@@ -1177,7 +1177,7 @@ export async function removeSpeaker(proposalId: string, speakerId: string): Prom
   })
 
   if (error || !response.ok) {
-    throw new Error(`Failed to remove speaker: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 }
 
@@ -1271,7 +1271,7 @@ export async function fetchExternalCalendarEvents(
   })
 
   if (error || !response.ok) {
-    throw new Error(`Failed to fetch external calendar events: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return (data as unknown as ExternalCalendarEvent[]) || []
@@ -1312,7 +1312,7 @@ export async function fetchEventTransitions(seriesId: string, eventId: string): 
   )
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to fetch event transitions: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return data as unknown as EventTransitions
@@ -1329,7 +1329,7 @@ export async function executeEventTransition(seriesId: string, eventId: string, 
   )
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to execute event transition: ${response.statusText}`)
+    throw new Error(error?.code || 'events.transitionFailed')
   }
 
   return toFrontendEvent(data as unknown as ApiEvent)
@@ -1351,7 +1351,7 @@ export async function fetchEventFlowDiagram(): Promise<EventFlowDiagram> {
     credentials: 'include',
   })
   if (!response.ok) {
-    throw new Error(`Failed to fetch event flow diagram: ${response.statusText}`)
+    throw new Error('common.internalError')
   }
   return response.json() as Promise<EventFlowDiagram>
 }
@@ -1366,7 +1366,7 @@ export async function fetchProposalEvents(proposalId: string): Promise<ProposalE
   })
 
   if (error || !response.ok) {
-    throw new Error(`Failed to fetch proposal events: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return (data as unknown as ProposalEventSummary[]) || []
@@ -1411,7 +1411,7 @@ export async function fetchCalculatedPrices(seriesId: string, eventId: string): 
   }
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to fetch calculated prices: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return data as unknown as CalculatedPrices
@@ -1435,7 +1435,7 @@ export async function createCalculatedPrices(
   )
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to create calculated prices: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return data as unknown as CalculatedPrices
@@ -1466,7 +1466,7 @@ export async function updateCalculatedPrices(
   )
 
   if (error || !response.ok || !data) {
-    throw new Error(`Failed to update calculated prices: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 
   return data as unknown as CalculatedPrices
@@ -1483,7 +1483,7 @@ export async function deleteCalculatedPrices(seriesId: string, eventId: string):
   )
 
   if (error || !response.ok) {
-    throw new Error(`Failed to delete calculated prices: ${response.statusText}`)
+    throw new Error(error?.code || 'common.internalError')
   }
 }
 
@@ -1495,7 +1495,7 @@ export interface SiteConfig {
 
 export async function fetchSiteConfig(): Promise<SiteConfig> {
   const response = await fetch('/api/v1/config')
-  if (!response.ok) throw new Error('Failed to fetch site config')
+  if (!response.ok) throw new Error('common.internalError')
   return response.json() as Promise<SiteConfig>
 }
 
@@ -1516,7 +1516,7 @@ export async function fetchCalls(activeOnly = true): Promise<CallOut[]> {
   const response = await fetch(`/api/v1/calls/?active_only=${activeOnly}`, {
     credentials: 'include',
   })
-  if (!response.ok) throw new Error(`Failed to fetch calls: ${response.statusText}`)
+  if (!response.ok) throw new Error('common.internalError')
   return response.json() as Promise<CallOut[]>
 }
 
@@ -1524,7 +1524,7 @@ export async function fetchCall(callId: string): Promise<CallOut> {
   const response = await fetch(`/api/v1/calls/${callId}`, {
     credentials: 'include',
   })
-  if (!response.ok) throw new Error(`Failed to fetch call: ${response.statusText}`)
+  if (!response.ok) throw new Error('common.internalError')
   return response.json() as Promise<CallOut>
 }
 

@@ -33,6 +33,7 @@ import {useTranslation} from 'react-i18next'
 import {ImageUploadField} from './ImageUploadField'
 import {SpeakerListEditor} from './SpeakerListEditor'
 import {ProposalTransitionButtons} from './ProposalTransitionButtons'
+import { translateApiError } from './apiError'
 import {EventStatusBadge} from './EventStatusBadge'
 import styles from './EventGeneralEditor.module.css'
 
@@ -678,7 +679,7 @@ export function ProposalEditor({
             const updatedProposal = await uploadProposalImage(_proposalId, file, setProposalImageUploadProgress)
             setProposalPhotoUrl(updatedProposal.photo || null)
         } catch (err) {
-            setProposalImageError(err instanceof Error ? err.message : 'Failed to upload proposal image')
+            setProposalImageError(translateApiError(err instanceof Error ? err.message : undefined))
         } finally {
             setIsProposalImageUploading(false)
             setProposalImageUploadProgress(null)

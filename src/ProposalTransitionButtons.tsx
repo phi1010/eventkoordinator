@@ -9,6 +9,7 @@ import {
   type ProposalTransition,
   type ProposalDetail,
 } from './api'
+import { translateApiError } from './apiError'
 import styles from './ProposalTransitionButtons.module.css'
 
 interface ProposalTransitionButtonsProps {
@@ -37,7 +38,7 @@ export function ProposalTransitionButtons({
         const data = await fetchProposalTransitions(proposalId)
         setTransitions(data.transitions)
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : t('common.genericError')
+        const errorMsg = translateApiError(err instanceof Error ? err.message : undefined)
         setError(errorMsg)
         console.error('Failed to load transitions:', err)
       } finally {
@@ -85,7 +86,7 @@ export function ProposalTransitionButtons({
         onTransitionSuccess(result)
       }
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : t('common.genericError')
+        const errorMsg = translateApiError(err instanceof Error ? err.message : undefined)
         setError(errorMsg)
         if (onTransitionError) {
           onTransitionError(errorMsg)
