@@ -47,11 +47,13 @@ interface CallCardProps {
   myProposals: ProposalSummary[]
   onSubmit: (callId: string) => void
   onOpenProposal: (proposalId: string) => void
+  onLoginToSubmit: () => void
   isSubmitting: boolean
+  canAddProposal: boolean
   t: ReturnType<typeof useTranslation>['t']
 }
 
-function CallCard({ call, myProposals, onSubmit, onOpenProposal, isSubmitting, t }: CallCardProps) {
+function CallCard({ call, myProposals, onSubmit, onOpenProposal, onLoginToSubmit, isSubmitting, canAddProposal, t }: CallCardProps) {
   const d1 = daysUntilDate(call.submission_deadline)
   const d2 = daysUntilDate(call.print_deadline)
   const upcomingDays = [d1, d2].filter(d => d >= 0)
@@ -145,14 +147,24 @@ function CallCard({ call, myProposals, onSubmit, onOpenProposal, isSubmitting, t
       )}
 
       <div className={styles.callCardFooter}>
-        <button
-          type="button"
-          className={styles.btnSubmit}
-          onClick={() => onSubmit(String(call.id))}
-          disabled={isSubmitting || isOverdue}
-        >
-          {myProposals.length > 0 ? t('call.submitAnother') : t('call.submitNew')}
-        </button>
+        {canAddProposal ? (
+          <button
+            type="button"
+            className={styles.btnSubmit}
+            onClick={() => onSubmit(String(call.id))}
+            disabled={isSubmitting || isOverdue}
+          >
+            {myProposals.length > 0 ? t('call.submitAnother') : t('call.submitNew')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={styles.btnLoginToSubmit}
+            onClick={onLoginToSubmit}
+          >
+            {t('call.loginToSubmit')}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -165,26 +177,22 @@ export function DefaultScreen() {
 
   const [calls, setCalls] = useState<CallOut[]>([])
   const [myProposals, setMyProposals] = useState<ProposalSummary[]>([])
-  const [loadingCalls, setLoadingCalls] = useState(false)
+  const [loadingCalls, setLoadingCalls] = useState(true)
   const [callsError, setCallsError] = useState(false)
   const [submittingCallId, setSubmittingCallId] = useState<string | null>(null)
 
-  const canViewProposals = canBrowse('proposal')
-  const canViewSeries = canBrowse('series')
+  const canViewProposals = !permissionsLoading && canBrowse('proposal')
+  const canViewSeries = !permissionsLoading && canBrowse('series')
+  const canAddProposal = !permissionsLoading && canAdd('proposal')
 
+  // Load calls for all users — the endpoint is publicly accessible
   useEffect(() => {
-    if (permissionsLoading || !canViewProposals) return
-
     const load = async () => {
       setLoadingCalls(true)
       setCallsError(false)
       try {
-        const [callsData, proposalsData] = await Promise.all([
-          fetchCalls(true),
-          searchProposals(''),
-        ])
+        const callsData = await fetchCalls(true)
         setCalls(callsData)
-        setMyProposals(proposalsData)
       } catch {
         setCallsError(true)
       } finally {
@@ -192,35 +200,23 @@ export function DefaultScreen() {
       }
     }
     void load()
+  }, [])
+
+  // Load own proposals separately — requires browse_proposal permission
+  useEffect(() => {
+    if (permissionsLoading || !canViewProposals) return
+    const loadProposals = async () => {
+      try {
+        const proposalsData = await searchProposals('')
+        setMyProposals(proposalsData)
+      } catch {
+        // Non-critical — proposals list just stays empty
+      }
+    }
+    void loadProposals()
   }, [permissionsLoading, canViewProposals])
 
-  if (permissionsLoading) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.content}>
-          <p className={styles.stateBox}>{t('common.loading')}</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!canViewProposals && !canViewSeries) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.content}>
-          <h1 className={styles.title}>{t('defaultScreen.welcomeTitle')}</h1>
-          <p className={styles.stateBox}>
-            {t('defaultScreen.noPermission')}
-            <br />
-            {t('defaultScreen.contactAdmin')}
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   const handleSubmitForCall = async (callId: string) => {
-    if (!canAdd('proposal')) return
     setSubmittingCallId(callId)
     try {
       const newProposal = await createProposal({ call_id: callId })
@@ -232,6 +228,10 @@ export function DefaultScreen() {
     }
   }
 
+  const handleLoginToSubmit = () => {
+    window.location.href = `/oidc/authenticate/?next=${encodeURIComponent(window.location.pathname + window.location.search)}`
+  }
+
   const proposalsForCall = (callId: string) =>
     myProposals.filter((p) => p.call_id === callId)
 
@@ -240,66 +240,64 @@ export function DefaultScreen() {
   return (
     <div className={styles.container}>
       <div className={styles.content}>
-        {canViewProposals && (
-          <>
-            <div className={styles.pageHeader}>
-              <h1 className={styles.title}>{t('call.sectionTitle')}</h1>
-              <p className={styles.subtitle}>{t('call.sectionSubtitle')}</p>
-            </div>
+        <div className={styles.pageHeader}>
+          <h1 className={styles.title}>{t('call.sectionTitle')}</h1>
+          <p className={styles.subtitle}>{t('call.sectionSubtitle')}</p>
+        </div>
 
-            {loadingCalls && (
-              <p className={styles.stateBox}>{t('defaultScreen.loadingCalls')}</p>
-            )}
-
-            {callsError && (
-              <p className={styles.stateBox}>{t('defaultScreen.errorLoadingCalls')}</p>
-            )}
-
-            {!loadingCalls && !callsError && calls.length === 0 && (
-              <p className={styles.stateBox}>{t('call.noActiveCalls')}</p>
-            )}
-
-            {!loadingCalls && !callsError && calls.length > 0 && (
-              <div className={styles.callList}>
-                {calls.map((call) => (
-                  <CallCard
-                    key={String(call.id)}
-                    call={call}
-                    myProposals={proposalsForCall(String(call.id))}
-                    onSubmit={handleSubmitForCall}
-                    onOpenProposal={(id) => navigate(`/proposal-editor/${id}`)}
-                    isSubmitting={submittingCallId === String(call.id)}
-                    t={t}
-                  />
-                ))}
-              </div>
-            )}
-
-            {unassignedProposals.length > 0 && (
-              <div className={styles.otherSection}>
-                <h2 className={styles.otherSectionTitle}>{t('call.otherProposals')}</h2>
-                <div className={styles.otherList}>
-                  {unassignedProposals.map((p) => (
-                    <div key={String(p.id)} className={styles.otherProposalRow}>
-                      <div className={styles.otherProposalInfo}>
-                        <span>{p.title || t('proposal.untitledProposal')}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className={styles.submissionOpenBtn}
-                        onClick={() => navigate(`/proposal-editor/${p.id}`)}
-                      >
-                        {t('call.open')}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
+        {loadingCalls && (
+          <p className={styles.stateBox}>{t('call.loadingCalls')}</p>
         )}
 
-        {canViewSeries && (
+        {callsError && (
+          <p className={styles.stateBox}>{t('defaultScreen.errorLoadingCalls')}</p>
+        )}
+
+        {!loadingCalls && !callsError && calls.length === 0 && (
+          <p className={styles.stateBox}>{t('call.noActiveCalls')}</p>
+        )}
+
+        {!loadingCalls && !callsError && calls.length > 0 && (
+          <div className={styles.callList}>
+            {calls.map((call) => (
+              <CallCard
+                key={String(call.id)}
+                call={call}
+                myProposals={proposalsForCall(String(call.id))}
+                onSubmit={handleSubmitForCall}
+                onOpenProposal={(id) => navigate(`/proposal-editor/${id}`)}
+                onLoginToSubmit={handleLoginToSubmit}
+                isSubmitting={submittingCallId === String(call.id)}
+                canAddProposal={canAddProposal}
+                t={t}
+              />
+            ))}
+          </div>
+        )}
+
+        {canViewProposals && unassignedProposals.length > 0 && (
+          <div className={styles.otherSection}>
+            <h2 className={styles.otherSectionTitle}>{t('call.otherProposals')}</h2>
+            <div className={styles.otherList}>
+              {unassignedProposals.map((p) => (
+                <div key={String(p.id)} className={styles.otherProposalRow}>
+                  <div className={styles.otherProposalInfo}>
+                    <span>{p.title || t('proposal.untitledProposal')}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.submissionOpenBtn}
+                    onClick={() => navigate(`/proposal-editor/${p.id}`)}
+                  >
+                    {t('call.open')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!permissionsLoading && canViewSeries && (
           <div className={styles.coordinatorLink}>
             <button
               type="button"

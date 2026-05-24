@@ -224,6 +224,7 @@
     "fieldLabel": "Call",
     "fieldPlaceholder": "– No call assigned –",
     "noActiveCalls": "No active calls at the moment.",
+    "loginToSubmit": "Login to submit",
     "callChangeNotAllowed": "The call can only be changed in draft status.",
     "loadingCalls": "Loading calls...",
     "open": "Open"

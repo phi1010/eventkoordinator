@@ -220,6 +220,7 @@
     "fieldLabel": "Ausschreibung (Call)",
     "fieldPlaceholder": "– Kein Call zugeordnet –",
     "noActiveCalls": "Aktuell keine aktiven Ausschreibungen.",
+    "loginToSubmit": "Anmelden zum Einreichen",
     "callChangeNotAllowed": "Der Call kann nur im Entwurf-Status geändert werden.",
     "loadingCalls": "Lade Calls...",
     "open": "Öffnen"

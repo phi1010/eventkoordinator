@@ -33,19 +33,12 @@ def _call_to_schema(call: CallModel) -> CallOut:
     )
 
 
-@router.get("/", response={200: list[CallOut], 401: ErrorOut, 403: ErrorOut})
+@router.get("/", response={200: list[CallOut]}, auth=None)
 @api_permission_mandatory()
 def list_calls(request, active_only: bool = True):
-    """List calls. Requires browse_proposal (submitters) or view_call (managers).
-    Submitters always see active-only calls; managers respect the active_only param."""
-    if not request.user.is_authenticated:
-        return 401, ErrorOut(code="auth.notAuthenticated")
-
-    can_browse = request.user.has_perm("apiv1.browse_proposal")
+    """List calls. Publicly accessible — all users see active calls.
+    Managers with view_call can also see inactive calls when active_only=False."""
     can_manage = request.user.has_perm("apiv1.view_call")
-
-    if not can_browse and not can_manage:
-        return 403, ErrorOut(code="auth.permissionDenied")
 
     qs = CallModel.objects.all()
     if active_only or not can_manage:

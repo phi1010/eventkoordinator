@@ -232,6 +232,25 @@
   cursor: not-allowed;
 }
 
+.btnLoginToSubmit {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  background: #e5e7eb;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: background 150ms, color 150ms;
+}
+
+.btnLoginToSubmit:hover {
+  background: #d1d5db;
+  color: #374151;
+}
+
 /* ── "Other proposals" section ── */
 .otherSection {
   margin-top: 2rem;
