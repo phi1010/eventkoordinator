@@ -248,6 +248,8 @@ class Event(HistoricalMetaBase):
         for i in range(day_count):
             day = start_date + timedelta(days=i)
             block_start = datetime.combine(day, start_time_of_day)
+            if block_start >= ev_end:
+                break
             block_end = datetime.combine(day, end_time_of_day)
             if block_end <= block_start:
                 block_end += timedelta(days=1)

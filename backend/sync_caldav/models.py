@@ -82,25 +82,58 @@ class CalDAVSyncItem(SyncBaseItem):
         except Exception:
             logger.debug("No existing remote event uid=%s (will create)", self.caldav_uid)
 
-        extra_props = {"x-eventkoordinator-event": str(event.pk)}
-        if target.instance_base_url:
-            extra_props["x-eventkoordinator-instance"] = target.instance_base_url
+        blocks = event.get_time_blocks()
 
-        logger.debug(
-            "Creating remote event uid=%s summary=%r start=%s end=%s",
-            self.caldav_uid, event.name, event.start_time, event.end_time,
-        )
-        calendar.add_event(
-            dtstart=event.start_time,
-            dtend=event.end_time,
-            uid=self.caldav_uid,
-            summary=event.name,
-            description="Created automatically. Do not edit, updates will be overwritten!",
-            **extra_props,
-        )
+        if event.use_full_days or len(blocks) <= 1:
+            extra_props = {"x-eventkoordinator-event": str(event.pk)}
+            if target.instance_base_url:
+                extra_props["x-eventkoordinator-instance"] = target.instance_base_url
+            dtstart = blocks[0].start if blocks else event.start_time
+            dtend = blocks[0].end if blocks else event.end_time
+            logger.debug(
+                "Creating remote event uid=%s summary=%r start=%s end=%s",
+                self.caldav_uid, event.name, dtstart, dtend,
+            )
+            calendar.add_event(
+                dtstart=dtstart,
+                dtend=dtend,
+                uid=self.caldav_uid,
+                summary=event.name,
+                description="Created automatically. Do not edit, updates will be overwritten!",
+                **extra_props,
+            )
+        else:
+            ical_str = self._build_recurring_ical(event, blocks, target)
+            logger.debug(
+                "Creating remote recurring event uid=%s summary=%r blocks=%d",
+                self.caldav_uid, event.name, len(blocks),
+            )
+            calendar.add_event(ical=ical_str)
+
         self.flag_push = False
         self.save()
         logger.debug("push_update complete for uid=%s", self.caldav_uid)
+
+    def _build_recurring_ical(self, event, blocks, target) -> str:
+        from icalendar import Calendar as ICalCalendar, Event as ICalEvent
+
+        cal = ICalCalendar()
+        cal.add("prodid", "-//EventKoordinator//EN")
+        cal.add("version", "2.0")
+
+        vevent = ICalEvent()
+        vevent.add("uid", self.caldav_uid)
+        vevent.add("summary", event.name)
+        vevent.add("description", "Created automatically. Do not edit, updates will be overwritten!")
+        vevent.add("dtstart", blocks[0].start)
+        vevent.add("dtend", blocks[0].end)
+        vevent.add("rrule", {"FREQ": "DAILY", "COUNT": len(blocks)})
+        vevent["x-eventkoordinator-event"] = str(event.pk)
+        if target.instance_base_url:
+            vevent["x-eventkoordinator-instance"] = target.instance_base_url
+
+        cal.add_component(vevent)
+        return cal.to_ical().decode("utf-8")
 
     def delete_remote(self):
         from caldav import error as caldav_error
@@ -147,19 +180,31 @@ class CalDAVSyncItem(SyncBaseItem):
 
         _diff("summary", event.name, str(vevent.get("SUMMARY", "")))
 
+        blocks = event.get_time_blocks()
+        local_start = blocks[0].start if blocks else event.start_time
+        local_end = blocks[0].end if blocks else event.end_time
+
         remote_dtstart = vevent.get("DTSTART")
         _diff(
             "start_time",
-            event.start_time.isoformat(),
+            local_start.isoformat(),
             remote_dtstart.dt.isoformat() if remote_dtstart else "",
         )
 
         remote_dtend = vevent.get("DTEND")
         _diff(
             "end_time",
-            event.end_time.isoformat(),
+            local_end.isoformat(),
             remote_dtend.dt.isoformat() if remote_dtend else "",
         )
+
+        if not event.use_full_days:
+            remote_rrule = vevent.get("RRULE")
+            remote_count = (
+                remote_rrule.get("COUNT", [None])[0] if remote_rrule else None
+            )
+            local_count = len(blocks)
+            _diff("days", str(local_count), str(remote_count) if remote_count is not None else "1")
 
         logger.debug("sync_diff complete: %d differing properties for uid=%s", len(properties), self.caldav_uid)
         return SyncDiffData(
