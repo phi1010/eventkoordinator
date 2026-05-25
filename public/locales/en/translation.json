@@ -378,7 +378,7 @@
     "creatingSync": "Creating...",
     "pushUpdate": "Push/Update",
     "pushing": "Pushing...",
-    "createInPretix": "Create in Pretix",
+    "createInRemoteService": "Create in remote service",
     "viewDiff": "View Diff",
     "preview": "Preview",
     "deleteRemote": "Delete Remote",

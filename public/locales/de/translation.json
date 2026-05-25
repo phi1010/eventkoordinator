@@ -467,7 +467,7 @@
     "creatingSync": "Erstelle...",
     "pushUpdate": "Push/Aktualisieren",
     "pushing": "Pushe...",
-    "createInPretix": "In Pretix erstellen",
+    "createInRemoteService": "Im Remote-Dienst erstellen",
     "viewDiff": "Diff anzeigen",
     "preview": "Vorschau",
     "deleteRemote": "Entfernten Eintrag löschen",
