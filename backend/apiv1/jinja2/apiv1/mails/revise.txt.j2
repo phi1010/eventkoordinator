@@ -5,9 +5,20 @@ Hi!
 
 Wir haben deine Einreichung "{{ object.title }}" für "{{ call_title }}" geprüft und bitten dich, einige Überarbeitungen vorzunehmen.
 
+{% if reviews %}
+{% for review in reviews %}
+{% if review.reviewer_is_system %}Kommentar des Teams:{% else %}Kommentar von {{ review.reviewer.username }}:{% endif %}
+
+{{ review.comment }}
+{% if not loop.last %}
+---
+{% endif %}
+{% endfor %}
+{% elif object.moderation_comment %}
 Kommentar des Teams:
 
 {{ object.moderation_comment }}
+{% endif %}
 
 Du kannst deine Einreichung unter folgendem Link bearbeiten:
 
@@ -25,9 +36,20 @@ Hi!
 
 We have reviewed your submission "{{ object.title }}" for "{{ call_title }}" and would like to ask you to make some revisions.
 
+{% if reviews %}
+{% for review in reviews %}
+{% if review.reviewer_is_system %}Comment from the team:{% else %}Comment from {{ review.reviewer.username }}:{% endif %}
+
+{{ review.comment }}
+{% if not loop.last %}
+---
+{% endif %}
+{% endfor %}
+{% elif object.moderation_comment %}
 Comment from the team:
 
 {{ object.moderation_comment }}
+{% endif %}
 
 You can edit your submission at the following link:
 

@@ -14,11 +14,14 @@
         .proposal-title {
             font-weight: bold;
         }
+        .comment-block {
+            margin: 16px 0;
+        }
         .comment-box {
             background-color: #f5f5f5;
             border-left: 4px solid #0066cc;
             padding: 12px 16px;
-            margin: 20px 0;
+            margin: 4px 0 0;
             white-space: pre-wrap;
             word-wrap: break-word;
         }
@@ -57,8 +60,17 @@
 
     <p>Wir haben deine Einreichung <span class="proposal-title">"{{ object.title }}"</span> für <span class="proposal-title">"{{ call_title }}"</span> geprüft und bitten dich, einige Überarbeitungen vorzunehmen.</p>
 
-    <p class="comment-label">Kommentar des Teams:</p>
-    <div class="comment-box">{{ object.moderation_comment }}</div>
+    {% if reviews %}
+        {% for review in reviews %}
+        <div class="comment-block">
+            <p class="comment-label">{% if review.reviewer_is_system %}Kommentar des Teams:{% else %}Kommentar von {{ review.reviewer.username }}:{% endif %}</p>
+            <div class="comment-box">{{ review.comment }}</div>
+        </div>
+        {% endfor %}
+    {% elif object.moderation_comment %}
+        <p class="comment-label">Kommentar des Teams:</p>
+        <div class="comment-box">{{ object.moderation_comment }}</div>
+    {% endif %}
 
     <p>Du kannst deine Einreichung unter folgendem Link bearbeiten:</p>
 
@@ -76,8 +88,17 @@
 
     <p>We have reviewed your submission <span class="proposal-title">"{{ object.title }}"</span> for <span class="proposal-title">"{{ call_title }}"</span> and would like to ask you to make some revisions.</p>
 
-    <p class="comment-label">Comment from the team:</p>
-    <div class="comment-box">{{ object.moderation_comment }}</div>
+    {% if reviews %}
+        {% for review in reviews %}
+        <div class="comment-block">
+            <p class="comment-label">{% if review.reviewer_is_system %}Comment from the team:{% else %}Comment from {{ review.reviewer.username }}:{% endif %}</p>
+            <div class="comment-box">{{ review.comment }}</div>
+        </div>
+        {% endfor %}
+    {% elif object.moderation_comment %}
+        <p class="comment-label">Comment from the team:</p>
+        <div class="comment-box">{{ object.moderation_comment }}</div>
+    {% endif %}
 
     <p>You can edit your submission at the following link:</p>
 

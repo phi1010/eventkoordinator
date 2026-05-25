@@ -245,16 +245,22 @@ class ProposalFlow:
         logger.info(f"Revising proposal: {self.object}")
         g_proposal_revise.inc()
         proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{self.object.pk}"
+        reviews_with_comments = list(
+            ProposalReview.objects.filter(
+                proposal=self.object,
+                kind=ProposalReview.KIND_USER,
+            ).exclude(comment="").select_related("reviewer")
+        )
         try:
             send_mail(
                 subject=f"Überarbeitung angefordert / Revision requested: {self.object.title}",
                 message=render_to_string(
                     "apiv1/mails/revise.txt.j2",
-                    dict(object=self.object, proposal_url=proposal_url),
+                    dict(object=self.object, proposal_url=proposal_url, reviews=reviews_with_comments),
                 ),
                 html_message=render_to_string(
                     "apiv1/mails/revise.html.j2",
-                    dict(object=self.object, proposal_url=proposal_url),
+                    dict(object=self.object, proposal_url=proposal_url, reviews=reviews_with_comments),
                 ),
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[self.object.owner.email],
