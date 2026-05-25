@@ -214,6 +214,20 @@ def create_review(request, proposal_id: uuid.UUID, payload: ProposalReviewCreate
             requested_by=request.user,
             requested_at=timezone.now(),
         )
+        # Link any existing member reviews to this group request.
+        member_pks = list(group.user_set.values_list("pk", flat=True))
+        existing_member_reviews = list(
+            ProposalReview.objects.filter(
+                proposal=proposal, kind="user", reviewer__in=member_pks
+            )
+        )
+        to_update = []
+        for mr in existing_member_reviews:
+            if payload.group_code not in (mr.requested_via_groups or []):
+                mr.requested_via_groups = (mr.requested_via_groups or []) + [payload.group_code]
+                to_update.append(mr)
+        if to_update:
+            ProposalReview.objects.bulk_update(to_update, ["requested_via_groups"])
         for member in group.user_set.filter(email__gt=""):
             _send_review_requested_mail(proposal, member)
         return 201, _review_to_schema(r)
