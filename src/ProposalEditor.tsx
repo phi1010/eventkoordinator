@@ -41,6 +41,7 @@ import {SpeakerListEditor} from './SpeakerListEditor'
 import {ProposalTransitionButtons} from './ProposalTransitionButtons'
 import { translateApiError } from './apiError'
 import {EventStatusBadge} from './EventStatusBadge'
+import {ReviewsSection} from './ProposalReviews'
 import styles from './EventGeneralEditor.module.css'
 
 const NEW_SERIES_SENTINEL = '__new__'
@@ -1630,6 +1631,15 @@ export function ProposalEditor({
                                 </div>
                             ) : null}
 
+                            {_proposalId && _proposalId.trim() && currentStatus && currentStatus !== 'draft' && (
+                                <ReviewsSection
+                                    proposalId={_proposalId}
+                                    proposalStatus={currentStatus}
+                                    moderationComment={formData.moderation_comment || undefined}
+                                    moderationCommentAt={undefined}
+                                    canModerate={hasPermission('moderate_proposal')}
+                                />
+                            )}
 
                         </div>
                     </div>
@@ -1900,24 +1910,6 @@ export function ProposalEditor({
                         </div>
                     )}
 
-                    {/* Moderation Comment - visible when not in draft, editable only with moderate_proposal permission */}
-                    {_proposalId && _proposalId.trim() && currentStatus && currentStatus !== 'draft' && (
-                        <fieldset className={styles.fieldset} style={{marginTop: '2rem'}}>
-                            <legend className={styles.legend}>{t('proposal.moderationComment')}</legend>
-                            <textarea
-                                value={formData.moderation_comment}
-                                readOnly={!hasPermission('moderate_proposal')}
-                                disabled={!hasPermission('moderate_proposal')}
-                                maxLength={2000}
-                                rows={3}
-                                onChange={(e) => {
-                                    setFormData((prev) => ({...prev, moderation_comment: e.target.value}))
-                                    markFieldAsChanged('moderation_comment')
-                                }}
-                                style={{width: '100%', boxSizing: 'border-box', resize: 'vertical'}}
-                            />
-                        </fieldset>
-                    )}
                     {/* Save/Cancel/Delete Buttons - Always visible */}
                     <div className={styles.buttonGroup}>
                         <button type="button" onClick={handleSave}

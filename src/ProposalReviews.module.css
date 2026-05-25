@@ -1,0 +1,471 @@
+/* ── Reviews section wrapper ─────────────────────────────────────── */
+.reviewsFieldset {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  margin-top: 2rem;
+}
+
+.reviewsLegend {
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0 0.4rem;
+}
+
+.reviewsHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.reviewsHeader h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.reviewsCount {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: #6b7280;
+  flex-wrap: wrap;
+}
+
+/* ── Progress bar ──────────────────────────────────────────────────── */
+.reviewsProgress {
+  margin-bottom: 1rem;
+}
+
+.progressBar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: #e5e7eb;
+  gap: 2px;
+}
+
+.progressSeg {
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progressSegApproved { background: #4caf50; }
+.progressSegRevise   { background: #f9a825; }
+.progressSegRejected { background: #f44336; }
+
+/* ── Review card ──────────────────────────────────────────────────── */
+.reviewCard {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+.reviewCardPending  { border-left: 4px solid #ff9800; background: #fffaf2; }
+.reviewCardApproved { border-left: 4px solid #4caf50; }
+.reviewCardRejected { border-left: 4px solid #f44336; background: #fff7f7; }
+.reviewCardRevise   { border-left: 4px solid #f9a825; background: #fffef5; }
+.reviewCardNote     { border-left: 4px solid #94a3b8; background: #f8fafc; border-style: dashed; }
+.reviewCardSelf     { box-shadow: 0 0 0 2px #e8f4fd inset; }
+.reviewCardGroup    { background: #fff; }
+.reviewCardGroupPending  { border-left: 4px solid #ff9800; }
+.reviewCardGroupApproved { border-left: 4px solid #4caf50; }
+.reviewCardGroupRevise   { border-left: 4px solid #f9a825; }
+.reviewCardGroupRejected { border-left: 4px solid #f44336; }
+
+.reviewHead {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.reviewer {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #e0e7ef;
+  color: #374151;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.avatarSystem {
+  background: #e0e7ef;
+  font-size: 0.9rem;
+}
+
+.avatarGroup {
+  background: #1e3a5f;
+  color: #fff;
+  font-size: 0.65rem;
+}
+
+.avatarSmall {
+  width: 20px;
+  height: 20px;
+  font-size: 0.6rem;
+}
+
+.selfTag {
+  font-size: 0.72rem;
+  background: #e0f2fe;
+  color: #0369a1;
+  border-radius: 10px;
+  padding: 0.1rem 0.45rem;
+  font-weight: 600;
+}
+
+.tagSoft {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.reviewMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: #9ca3af;
+}
+
+.reviewBody {
+  margin: 0.4rem 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: #374151;
+}
+
+.reviewBodyMuted {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.reviewFootline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: #9ca3af;
+  margin-top: 0.4rem;
+}
+
+.requestedBy strong { color: #6b7280; }
+
+.viaGroup { color: #6b7280; }
+
+.reviewList {
+  margin-bottom: 0.5rem;
+}
+
+/* ── Status badge ──────────────────────────────────────────────────── */
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border-radius: 20px;
+  padding: 0.15rem 0.55rem;
+  white-space: nowrap;
+}
+
+.badgeDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.badgeApproved { background: #e8f5e9; color: #2e7d32; }
+.badgeApproved .badgeDot { background: #43a047; }
+
+.badgeRejected { background: #ffebee; color: #b71c1c; }
+.badgeRejected .badgeDot { background: #e53935; }
+
+.badgeRevise { background: #fffde7; color: #8b6508; }
+.badgeRevise .badgeDot { background: #f9a825; }
+
+.badgeNote { background: #f1f5f9; color: #475569; }
+.badgeNote .badgeDot { background: #64748b; }
+
+.badgePending { background: #fff3e0; color: #b25e09; }
+.badgePending .badgeDot { background: #ff9800; }
+
+/* ── Group card extras ─────────────────────────────────────────────── */
+.groupSummary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.groupTrending {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: #9ca3af;
+}
+
+.memberChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.memberChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  border-radius: 20px;
+  padding: 0.2rem 0.55rem 0.2rem 0.3rem;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #374151;
+  cursor: default;
+}
+
+.memberChipMe       { background: #e3f2fd; border-color: #bcdffb; color: #0d47a1; }
+.memberChipApproved { background: #e8f5e9; border-color: #c8e6c9; color: #2e7d32; }
+.memberChipRejected { background: #ffebee; border-color: #ffcdd2; color: #b71c1c; }
+.memberChipRevise   { background: #fffde7; border-color: #fff59d; color: #8b6508; }
+
+/* ── Self-review composer ─────────────────────────────────────────── */
+.selfReviewForm {
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.selfReviewFormEditing {
+  border-style: solid;
+  border-color: #2196f3;
+  background: #f0f7ff;
+}
+
+.selfReviewFormRequested {
+  border-color: #7c3aed;
+  background: #fdf4ff;
+}
+
+.selfReviewHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.selfReviewRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ── User picker ──────────────────────────────────────────────────── */
+.userPickerWrap {
+  position: relative;
+  width: 100%;
+}
+
+.userPickerInput {
+  width: 100%;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.userPickerInput:focus {
+  outline: none;
+  border-color: #2196f3;
+  box-shadow: 0 0 0 2px #e3f2fd;
+}
+
+.userPickerMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 100;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.pickerSectionLabel {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ca3af;
+  background: #f9fafb;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.userPickerItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: #374151;
+}
+
+.userPickerItem:hover:not(.userPickerItemDisabled) { background: #f3f4f6; }
+
+.userPickerItemDisabled { opacity: 0.5; cursor: not-allowed; }
+
+.userPickerItemRole { color: #6b7280; font-size: 0.78rem; margin-left: auto; }
+
+.userPickerItemGroup { background: #f8fafc; }
+.userPickerItemGroup:hover:not(.userPickerItemDisabled) { background: #eef2f6; }
+
+/* ── Request row ──────────────────────────────────────────────────── */
+.requestRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.requestRowInner {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.requestHint {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+.btn {
+  padding: 0.45rem 1rem;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btnApprove { background: #4caf50; color: #fff; }
+.btnApprove:hover:not(:disabled) { background: #43a047; }
+
+.btnRevise  { background: #f9a825; color: #1f1f1f; }
+.btnRevise:hover:not(:disabled) { background: #f59c00; }
+
+.btnReject  { background: #f44336; color: #fff; }
+.btnReject:hover:not(:disabled) { background: #e53935; }
+
+.btnPrimary { background: #2196f3; color: #fff; }
+.btnPrimary:hover:not(:disabled) { background: #1976d2; }
+
+.btnGhost {
+  background: transparent;
+  border: 1px solid #d1d5db;
+  color: #6b7280;
+}
+.btnGhost:hover:not(:disabled) { background: #f3f4f6; }
+
+.btnSubtle {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.3rem;
+  cursor: pointer;
+}
+.btnSubtle:hover { color: #374151; }
+
+.iconBtn {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+.iconBtn:hover { color: #374151; }
+
+/* ── Textarea ──────────────────────────────────────────────────────── */
+.textarea {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  resize: vertical;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: #2196f3;
+  box-shadow: 0 0 0 2px #e3f2fd;
+}
+
+/* ── Field hint ───────────────────────────────────────────────────── */
+.fieldHint {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  display: block;
+}
+
+/* ── Previous vote block ─────────────────────────────────────────── */
+.prevVoteBlock {
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-style: italic;
+  white-space: pre-wrap;
+  color: #4b5563;
+  font-size: 0.85rem;
+}
