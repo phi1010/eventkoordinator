@@ -11,7 +11,6 @@ import {
   type UserBasic,
   type LookupItem,
   type ProposalReviewOut,
-  type ProposalReviewsOut,
 } from './api'
 import styles from './ProposalReviews.module.css'
 
@@ -22,7 +21,8 @@ type PickResult =
   | { kind: 'user'; user: UserBasic }
   | { kind: 'group'; group: LookupItem }
 
-type TFn = (key: string, opts?: Record<string, unknown>) => string
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TFn = (key: any, opts?: any) => string
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
