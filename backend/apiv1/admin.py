@@ -315,6 +315,22 @@ class CallAdmin(SimpleHistoryAdmin):
     )
 
 
+@admin.register(models.ProposalReview)
+class ProposalReviewAdmin(ModelAdmin):
+    list_display = ("id", "proposal", "kind", "status", "reviewer", "requested_by", "created_at", "completed_at")
+    list_filter = ("kind", "status", "reviewer_is_system", "migrated")
+    search_fields = ("proposal__title", "reviewer__email", "requested_by__email", "group_code", "comment")
+    readonly_fields = ("id", "created_at", "updated_at")
+    raw_id_fields = ("proposal", "reviewer", "requested_by")
+    fieldsets = (
+        ("General", {"fields": ("id", "proposal", "kind", "status", "comment")}),
+        ("Reviewer", {"fields": ("reviewer", "reviewer_is_system", "group_code")}),
+        ("Request", {"fields": ("requested_by", "requested_directly", "requested_via_groups", "requested_at", "completed_at")}),
+        ("History", {"fields": ("previous_status", "previous_comment", "migrated")}),
+        ("Timestamps", {"fields": ("created_at", "updated_at")}),
+    )
+
+
 @admin.register(SyncBaseTarget)
 class SyncBaseTargetAdmin(PolymorphicParentModelAdmin, SimpleHistoryAdmin):
     list_display = (
