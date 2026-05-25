@@ -250,12 +250,13 @@ class ProposalAdmin(fsm.FlowAdminMixin, SimpleHistoryAdmin):
         "title",
         "submission_type",
         "status",
+        "call",
         "owner",
         "is_basic_course",
         "max_participants",
         "created_at",
     )
-    list_filter = ("submission_type", "status", "area", "language", "is_basic_course")
+    list_filter = ("submission_type", "status", "call", "area", "language", "is_basic_course")
     search_fields = ("title", "abstract", "description")
     readonly_fields = ("created_at", "updated_at", "status")
     raw_id_fields = ("owner",)
@@ -289,6 +290,7 @@ class ProposalAdmin(fsm.FlowAdminMixin, SimpleHistoryAdmin):
             },
         ),
         ("People", {"fields": ("owner", "editors")}),
+        ("Call", {"fields": ("call",)}),
         ("Status", {"fields": ("status",)}),
     )
 
