@@ -7,12 +7,16 @@ Endpoints for managing proposal peer-reviews and group-review requests.
 import logging
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.models import Group
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
 from django.utils import timezone
 from ninja import Router
 
 import apiv1
 from apiv1.api_utils import api_permission_mandatory
+from apiv1.auth_groups import AUTHENTICATED_USERS_GROUP_NAME
 from apiv1.models import Proposal as ProposalModel
 from apiv1.models.basedata import ProposalReview
 from apiv1.schemas import (
@@ -82,6 +86,44 @@ def _get_proposal_or_404(proposal_id: uuid.UUID, request) -> tuple[ProposalModel
         return None, (403, ErrorOut(code="auth.permissionDenied"))
 
     return proposal, None
+
+
+# ── Mail helpers ──────────────────────────────────────────────────────────────
+
+def _send_review_requested_mail(proposal: ProposalModel, reviewer) -> None:
+    """Notify a reviewer that they have been asked to review a proposal."""
+    proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{proposal.pk}"
+    ctx = dict(object=proposal, proposal_url=proposal_url, reviewer=reviewer)
+    try:
+        send_mail(
+            subject=f"Bitte um Gutachten / Review requested: {proposal.title}",
+            message=render_to_string("apiv1/mails/review_requested.txt.j2", ctx),
+            html_message=render_to_string("apiv1/mails/review_requested.html.j2", ctx),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[reviewer.email],
+            fail_silently=False,
+        )
+    except BaseException as e:
+        logger.error("Failed to send review-requested notification: " + str(e), exc_info=e)
+
+
+def _send_review_given_mail(proposal: ProposalModel, review: ProposalReview) -> None:
+    """Notify the call organizer that a reviewer has submitted their review."""
+    if not proposal.call or not proposal.call.responsible_email:
+        return
+    proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{proposal.pk}"
+    ctx = dict(object=proposal, proposal_url=proposal_url, review=review)
+    try:
+        send_mail(
+            subject=f"Gutachten eingegangen / Review submitted: {proposal.title}",
+            message=render_to_string("apiv1/mails/review_given.txt.j2", ctx),
+            html_message=render_to_string("apiv1/mails/review_given.html.j2", ctx),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[proposal.call.responsible_email],
+            fail_silently=False,
+        )
+    except BaseException as e:
+        logger.error("Failed to send review-given notification: " + str(e), exc_info=e)
 
 
 # ── List ──────────────────────────────────────────────────────────────────────
@@ -154,9 +196,11 @@ def create_review(request, proposal_id: uuid.UUID, payload: ProposalReviewCreate
             return 400, ErrorOut(code="reviews.missingGroupCode")
         # Validate that the group_code is a valid Django Group pk
         try:
-            Group.objects.get(pk=int(payload.group_code))
+            group = Group.objects.get(pk=int(payload.group_code))
         except (Group.DoesNotExist, ValueError):
             return 400, ErrorOut(code="reviews.groupNotFound")
+        if group.name == AUTHENTICATED_USERS_GROUP_NAME:
+            return 400, ErrorOut(code="reviews.groupNotAllowed")
         # Prevent duplicate group requests
         if ProposalReview.objects.filter(
             proposal=proposal, kind="group", group_code=payload.group_code
@@ -170,6 +214,8 @@ def create_review(request, proposal_id: uuid.UUID, payload: ProposalReviewCreate
             requested_by=request.user,
             requested_at=timezone.now(),
         )
+        for member in group.user_set.filter(email__gt=""):
+            _send_review_requested_mail(proposal, member)
         return 201, _review_to_schema(r)
 
     # kind == 'user'
@@ -240,6 +286,8 @@ def create_review(request, proposal_id: uuid.UUID, payload: ProposalReviewCreate
         requested_via_groups=payload.requested_via_groups or [],
         migrated=payload.migrated,
     )
+    if payload.reviewer_id and reviewer.email:
+        _send_review_requested_mail(proposal, reviewer)
     return 201, _review_to_schema(r)
 
 
@@ -294,6 +342,7 @@ def update_review(
         review.comment = payload.comment
         review.completed_at = timezone.now()
         review.save()
+        _send_review_given_mail(proposal, review)
     return 200, _review_to_schema(review)
 
 

@@ -24,6 +24,7 @@ from apiv1.helpers import (
 )
 from django.contrib.auth.models import Group
 
+from apiv1.auth_groups import AUTHENTICATED_USERS_GROUP_NAME
 from apiv1.models import (
     Event as EventModel,
     ProposalArea,
@@ -131,7 +132,7 @@ def get_permission_groups(request):
     """Return all Django permission groups (excluding the catch-all authenticated-users group)."""
     if not request.user.has_perm((apiv1, "view", Group)):
         return 401, ErrorOut(code="auth.notAuthenticated")
-    groups = Group.objects.order_by("name")
+    groups = Group.objects.exclude(name=AUTHENTICATED_USERS_GROUP_NAME).order_by("name")
     return [
         LookupOut(
             code=str(g.pk),
