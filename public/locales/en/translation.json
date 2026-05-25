@@ -503,6 +503,86 @@
     "common.internalError": "An unexpected error occurred",
     "common.invalidRequest": "Invalid request"
   },
+  "reviews": {
+    "legend": "Reviews",
+    "noReviewsYet": "no reviews yet",
+    "noReviewsMessage": "No reviews yet. Request one below or add your own.",
+    "stats": {
+      "approved": "{{count}} approved",
+      "revise": "{{count}} revise",
+      "rejected": "{{count}} rejected",
+      "pending": "{{count}} pending"
+    },
+    "status": {
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "revise": "Revisions requested",
+      "pending": "Awaiting review",
+      "note": "Comment"
+    },
+    "relative": {
+      "justNow": "just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
+    },
+    "picker": {
+      "placeholder": "Search a person or area to request review…",
+      "groupsSection": "Permission Groups",
+      "peopleSection": "People",
+      "alreadyAdded": "already added",
+      "area": "area"
+    },
+    "card": {
+      "system": "System",
+      "you": "you",
+      "migratedTag": "migrated · author unknown",
+      "migratedTitle": "Migrated from the legacy moderation comment — original author unknown",
+      "requested": "requested {{when}}",
+      "edit": "edit",
+      "withdrawReview": "Withdraw review",
+      "removeReview": "Remove review",
+      "noComment": "No comment provided.",
+      "waitingFor": "Waiting for {{name}} to respond…",
+      "previouslyVoted": "Previously voted",
+      "requestedDirectlyBy": "requested directly by",
+      "via": "via",
+      "migratedFrom": "migrated from",
+      "moderationComment": "moderation comment"
+    },
+    "group": {
+      "permissionGroup": "permission group",
+      "withdrawGroupRequest": "Withdraw group request",
+      "membersVotedSuffix": "members voted",
+      "trending": "trending",
+      "oneApprovalEnough": "✓ one approval is enough — no rejections or revisions",
+      "groupNote": "Any one member of this group can approve. Their comment lives in their own review card below.",
+      "requestedBy": "requested by"
+    },
+    "composer": {
+      "notAsked": "You haven't been asked, but you can add your own review.",
+      "addMyReview": "+ Add my review",
+      "askedToReview": "You've been asked to review",
+      "editingReview": "Editing your review",
+      "newReview": "New review",
+      "requestedBy": "requested by",
+      "removeReview": "Remove review",
+      "resubmitted": "Resubmitted since your last vote. You previously voted",
+      "commentPlaceholderRequested": "Leave a comment explaining your decision…",
+      "commentPlaceholderNew": "Share what you think. What works, what concerns you, what should change?",
+      "approve": "✓ Approve",
+      "requestRevisions": "↻ Request revisions",
+      "reject": "✕ Reject",
+      "cancel": "Cancel",
+      "commentRequired": "A comment is required so the author understands your decision."
+    },
+    "requestRow": {
+      "requestFrom": "Request review from:",
+      "requestButton": "+ Request review",
+      "cancel": "Cancel",
+      "hint": "Pick a person or a permission group. Group reviews let all members comment."
+    }
+  },
   "proposalDashboard": {
     "title": "Proposal Dashboard",
     "toggleColumns": "Show/hide columns",

@@ -22,6 +22,8 @@ type PickResult =
   | { kind: 'user'; user: UserBasic }
   | { kind: 'group'; group: LookupItem }
 
+type TFn = (key: string, opts?: Record<string, unknown>) => string
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function initials(name: string): string {
@@ -33,13 +35,13 @@ function initials(name: string): string {
     .toUpperCase()
 }
 
-function fmtRel(iso: string | null | undefined): string {
+function fmtRel(iso: string | null | undefined, t: TFn): string {
   if (!iso) return ''
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
-  if (diff < 60) return 'just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return `${Math.floor(diff / 86400)}d ago`
+  if (diff < 60) return t('reviews.relative.justNow')
+  if (diff < 3600) return t('reviews.relative.minutesAgo', { count: Math.floor(diff / 60) })
+  if (diff < 86400) return t('reviews.relative.hoursAgo', { count: Math.floor(diff / 3600) })
+  return t('reviews.relative.daysAgo', { count: Math.floor(diff / 86400) })
 }
 
 function deriveGroupStatus(
@@ -102,25 +104,14 @@ function statusBadgeClass(status: ReviewStatus): string {
   )
 }
 
-function statusLabel(status: ReviewStatus): string {
-  return (
-    {
-      approved: 'Approved',
-      rejected: 'Rejected',
-      revise: 'Revisions requested',
-      pending: 'Awaiting review',
-      note: 'Comment',
-    }[status] ?? status
-  )
-}
-
 // ── StatusBadge ───────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: ReviewStatus }) {
+  const { t } = useTranslation()
   return (
     <span className={`${styles.statusBadge} ${statusBadgeClass(status)}`}>
       <span className={styles.badgeDot} />
-      {statusLabel(status)}
+      {t(`reviews.status.${status}`)}
     </span>
   )
 }
@@ -134,6 +125,7 @@ interface UserPickerProps {
 }
 
 function UserPicker({ excludeIds, groups, onPick }: UserPickerProps) {
+  const { t } = useTranslation()
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const [userResults, setUserResults] = useState<UserBasic[]>([])
@@ -237,7 +229,7 @@ function UserPicker({ excludeIds, groups, onPick }: UserPickerProps) {
     <div className={styles.userPickerWrap} ref={ref}>
       <input
         className={styles.userPickerInput}
-        placeholder="Search a person or area to request review…"
+        placeholder={t('reviews.picker.placeholder')}
         value={q}
         role="combobox"
         aria-expanded={open}
@@ -254,7 +246,7 @@ function UserPicker({ excludeIds, groups, onPick }: UserPickerProps) {
       {open && (filteredGroups.length > 0 || userResults.length > 0) && (
         <div className={styles.userPickerMenu} role="listbox" id={listboxId} ref={menuRef}>
           {filteredGroups.length > 0 && (
-            <div className={styles.pickerSectionLabel}>Permission Groups</div>
+            <div className={styles.pickerSectionLabel}>{t('reviews.picker.groupsSection')}</div>
           )}
           {filteredGroups.map((g) => {
             const disabled = excludeIds.includes(g.code)
@@ -282,14 +274,14 @@ function UserPicker({ excludeIds, groups, onPick }: UserPickerProps) {
                 </span>
                 <span>{g.label}</span>
                 <span className={styles.userPickerItemRole}>
-                  {disabled ? 'already added' : 'area'}
+                  {disabled ? t('reviews.picker.alreadyAdded') : t('reviews.picker.area')}
                 </span>
               </div>
             )
           })}
 
           {userResults.length > 0 && (
-            <div className={styles.pickerSectionLabel}>People</div>
+            <div className={styles.pickerSectionLabel}>{t('reviews.picker.peopleSection')}</div>
           )}
           {userResults.map((u) => {
             const disabled = excludeIds.includes(u.id)
@@ -315,7 +307,7 @@ function UserPicker({ excludeIds, groups, onPick }: UserPickerProps) {
                 <span className={styles.avatar}>{initials(u.username)}</span>
                 <span>{u.username}</span>
                 {disabled && (
-                  <span className={styles.userPickerItemRole}>already added</span>
+                  <span className={styles.userPickerItemRole}>{t('reviews.picker.alreadyAdded')}</span>
                 )}
               </div>
             )
@@ -340,6 +332,7 @@ interface ReviewCardProps {
 }
 
 function ReviewCard({ review, currentUserId, groups, canModerate, canDeleteReview, onRemove, onWithdraw, onEditOwn }: ReviewCardProps) {
+  const { t } = useTranslation()
   const isSelf = review.reviewer_id === currentUserId
   const isSystem = review.reviewer_is_system
 
@@ -358,27 +351,27 @@ function ReviewCard({ review, currentUserId, groups, canModerate, canDeleteRevie
           <span className={`${styles.avatar} ${isSystem ? styles.avatarSystem : ''}`}>
             {isSystem ? '⚙' : initials(review.reviewer_username || '?')}
           </span>
-          <span>{isSystem ? 'System' : review.reviewer_username}</span>
-          {isSelf && <span className={styles.selfTag}>you</span>}
+          <span>{isSystem ? t('reviews.card.system') : review.reviewer_username}</span>
+          {isSelf && <span className={styles.selfTag}>{t('reviews.card.you')}</span>}
           {isSystem && (
             <span
               className={styles.tagSoft}
-              title="Migrated from the legacy moderation comment — original author unknown"
+              title={t('reviews.card.migratedTitle')}
             >
-              migrated · author unknown
+              {t('reviews.card.migratedTag')}
             </span>
           )}
         </span>
         <StatusBadge status={review.status as ReviewStatus} />
         <span className={styles.reviewMeta}>
           {review.status === 'pending' ? (
-            <span>requested {fmtRel(review.requested_at)}</span>
+            <span>{t('reviews.card.requested', { when: fmtRel(review.requested_at, t) })}</span>
           ) : (
-            <span>{fmtRel(review.completed_at)}</span>
+            <span>{fmtRel(review.completed_at, t)}</span>
           )}
           {isSelf && review.status !== 'pending' && !isSystem && (
             <button type="button" className={styles.btnSubtle} onClick={onEditOwn}>
-              edit
+              {t('reviews.card.edit')}
             </button>
           )}
           {!isSystem && (() => {
@@ -392,13 +385,14 @@ function ReviewCard({ review, currentUserId, groups, canModerate, canDeleteRevie
             if (!showForPending && !showForCompleted) return null
             // Withdraw (reset to pending) only for own completed requested reviews without delete perm
             const withdrawOnly = isSelf && isCompleted && wasRequested && !canDeleteReview && !canModerate
+            const actionLabel = withdrawOnly ? t('reviews.card.withdrawReview') : t('reviews.card.removeReview')
             return (
               <button
                 type="button"
                 className={styles.iconBtn}
-                title={withdrawOnly ? 'Withdraw review' : 'Remove review'}
+                title={actionLabel}
                 onClick={withdrawOnly ? onWithdraw : onRemove}
-                aria-label={withdrawOnly ? 'Withdraw review' : 'Remove review'}
+                aria-label={actionLabel}
               >
                 ×
               </button>
@@ -410,12 +404,12 @@ function ReviewCard({ review, currentUserId, groups, canModerate, canDeleteRevie
       {review.status !== 'pending' ? (
         <div className={styles.reviewBody}>
           {review.comment || (
-            <em style={{ color: '#9ca3af' }}>No comment provided.</em>
+            <em style={{ color: '#9ca3af' }}>{t('reviews.card.noComment')}</em>
           )}
         </div>
       ) : (
         <div className={`${styles.reviewBody} ${styles.reviewBodyMuted}`}>
-          Waiting for {(review.reviewer_username || '').split(' ')[0]} to respond…
+          {t('reviews.card.waitingFor', { name: (review.reviewer_username || '').split(' ')[0] })}
           {review.previous_status && (
             <div
               style={{
@@ -425,7 +419,7 @@ function ReviewCard({ review, currentUserId, groups, canModerate, canDeleteRevie
                 fontSize: '0.85rem',
               }}
             >
-              Previously voted{' '}
+              {t('reviews.card.previouslyVoted')}{' '}
               <StatusBadge status={review.previous_status as ReviewStatus} />
               {review.previous_comment && (
                 <div className={styles.prevVoteBlock}>"{review.previous_comment}"</div>
@@ -438,20 +432,20 @@ function ReviewCard({ review, currentUserId, groups, canModerate, canDeleteRevie
       <div className={styles.reviewFootline}>
         {review.requested_directly && review.requested_by_username && (
           <span className={styles.requestedBy}>
-            requested directly by <strong>{review.requested_by_username}</strong>
+            {t('reviews.card.requestedDirectlyBy')} <strong>{review.requested_by_username}</strong>
           </span>
         )}
         {(review.requested_via_groups || []).map((code) => {
           const label = groups.find((g) => g.code === code)?.label ?? code
           return (
             <span key={code} className={`${styles.requestedBy} ${styles.viaGroup}`}>
-              via <strong>{label}</strong>
+              {t('reviews.card.via')} <strong>{label}</strong>
             </span>
           )
         })}
         {isSystem && (
           <span className={styles.requestedBy}>
-            migrated from <strong>moderation comment</strong>
+            {t('reviews.card.migratedFrom')} <strong>{t('reviews.card.moderationComment')}</strong>
           </span>
         )}
       </div>
@@ -474,6 +468,7 @@ function GroupReviewCard({
   currentUserId,
   onWithdraw,
 }: GroupReviewCardProps) {
+  const { t } = useTranslation()
   const derived = deriveGroupStatus(groupRequest.group_code, allReviews)
   const worst = worstMemberVote(groupRequest.group_code, allReviews)
   const memberVotes = allReviews.filter(
@@ -501,18 +496,18 @@ function GroupReviewCard({
             {initials(groupRequest.group_label || groupRequest.group_code)}
           </span>
           <span>{groupRequest.group_label || groupRequest.group_code}</span>
-          <span className={styles.tagSoft}>permission group</span>
+          <span className={styles.tagSoft}>{t('reviews.group.permissionGroup')}</span>
         </span>
         <StatusBadge status={derived} />
         <span className={styles.reviewMeta}>
-          <span>requested {fmtRel(groupRequest.requested_at)}</span>
+          <span>{t('reviews.card.requested', { when: fmtRel(groupRequest.requested_at, t) })}</span>
           {derived !== 'approved' && (
             <button
               type="button"
               className={styles.iconBtn}
-              title="Withdraw group request"
+              title={t('reviews.group.withdrawGroupRequest')}
               onClick={onWithdraw}
-              aria-label="Withdraw group request"
+              aria-label={t('reviews.group.withdrawGroupRequest')}
             >
               ×
             </button>
@@ -523,16 +518,17 @@ function GroupReviewCard({
       <div className={styles.groupSummary}>
         <span>
           <strong>{memberVotes.filter((r) => r.status !== 'pending').length}/
-          {groupRequest.group_member_count ?? memberVotes.length}</strong> members voted
+          {groupRequest.group_member_count ?? memberVotes.length}</strong>{' '}
+          {t('reviews.group.membersVotedSuffix')}
         </span>
         {derived === 'pending' && worst && (
           <span className={styles.groupTrending}>
-            trending <StatusBadge status={worst} />
+            {t('reviews.group.trending')} <StatusBadge status={worst} />
           </span>
         )}
         {derived === 'approved' && (
           <span style={{ color: '#2e7d32', fontWeight: 600 }}>
-            ✓ one approval is enough — no rejections or revisions
+            {t('reviews.group.oneApprovalEnough')}
           </span>
         )}
       </div>
@@ -564,7 +560,7 @@ function GroupReviewCard({
                   {initials(r.reviewer_username || '?')}
                 </span>
                 <span>{(r.reviewer_username || '').split(' ')[0]}</span>
-                {isMe && <span className={styles.selfTag}>you</span>}
+                {isMe && <span className={styles.selfTag}>{t('reviews.card.you')}</span>}
                 <StatusBadge status={r.status as ReviewStatus} />
               </span>
             )
@@ -575,12 +571,11 @@ function GroupReviewCard({
       <div className={styles.reviewFootline}>
         {groupRequest.requested_by_username && (
           <span className={styles.requestedBy}>
-            requested by <strong>{groupRequest.requested_by_username}</strong>
+            {t('reviews.group.requestedBy')} <strong>{groupRequest.requested_by_username}</strong>
           </span>
         )}
         <span className={styles.fieldHint}>
-          Any one member of this group can approve. Their comment lives in their own
-          review card below.
+          {t('reviews.group.groupNote')}
         </span>
       </div>
     </div>
@@ -606,6 +601,7 @@ function SelfReviewComposer({
   onDismiss,
   dismissTitle,
 }: SelfReviewComposerProps) {
+  const { t } = useTranslation()
   const isRequested = existing && existing.status === 'pending'
   const isEditing = existing && existing.status !== 'pending'
   const seedComment = existing?.comment || existing?.previous_comment || ''
@@ -624,10 +620,10 @@ function SelfReviewComposer({
           <span className={styles.reviewer}>
             <span className={styles.avatar}>{initials(currentUser.username)}</span>
             <span>{currentUser.username}</span>
-            <span className={styles.selfTag}>you</span>
+            <span className={styles.selfTag}>{t('reviews.card.you')}</span>
           </span>
           <span style={{ marginLeft: 'auto', color: '#6b7280', fontSize: '0.85rem' }}>
-            You haven't been asked, but you can add your own review.
+            {t('reviews.composer.notAsked')}
           </span>
         </div>
         <div className={styles.selfReviewRow}>
@@ -636,7 +632,7 @@ function SelfReviewComposer({
             className={`${styles.btn} ${styles.btnPrimary}`}
             onClick={() => setOpen(true)}
           >
-            + Add my review
+            {t('reviews.composer.addMyReview')}
           </button>
         </div>
       </div>
@@ -650,10 +646,10 @@ function SelfReviewComposer({
   }
 
   const headerLabel = isRequested
-    ? "You've been asked to review"
+    ? t('reviews.composer.askedToReview')
     : isEditing
-    ? 'Editing your review'
-    : 'New review'
+    ? t('reviews.composer.editingReview')
+    : t('reviews.composer.newReview')
 
   const formClasses = [
     styles.selfReviewForm,
@@ -669,22 +665,22 @@ function SelfReviewComposer({
         <span className={styles.reviewer}>
           <span className={styles.avatar}>{initials(currentUser.username)}</span>
           <span>{currentUser.username}</span>
-          <span className={styles.selfTag}>you</span>
+          <span className={styles.selfTag}>{t('reviews.card.you')}</span>
         </span>
         <span className={styles.tagSoft}>{headerLabel}</span>
         {isRequested && existing.requested_by_username && (
           <span style={{ marginLeft: 'auto', color: '#6b7280', fontSize: '0.82rem' }}>
-            requested by <strong>{existing.requested_by_username}</strong>{' '}
-            {fmtRel(existing.requested_at)}
+            {t('reviews.composer.requestedBy')} <strong>{existing.requested_by_username}</strong>{' '}
+            {fmtRel(existing.requested_at, t)}
           </span>
         )}
         {onDismiss && (
           <button
             type="button"
             className={styles.iconBtn}
-            title={dismissTitle ?? 'Remove review'}
+            title={dismissTitle ?? t('reviews.composer.removeReview')}
             onClick={onDismiss}
-            aria-label={dismissTitle ?? 'Remove review'}
+            aria-label={dismissTitle ?? t('reviews.composer.removeReview')}
             style={{ marginLeft: isRequested ? undefined : 'auto' }}
           >
             ×
@@ -694,7 +690,7 @@ function SelfReviewComposer({
 
       {isRequested && existing.previous_status && (
         <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-          Resubmitted since your last vote. You previously voted{' '}
+          {t('reviews.composer.resubmitted')}{' '}
           <StatusBadge status={existing.previous_status as ReviewStatus} />.
           {existing.previous_comment && (
             <div className={styles.prevVoteBlock}>"{existing.previous_comment}"</div>
@@ -706,8 +702,8 @@ function SelfReviewComposer({
         className={styles.textarea}
         placeholder={
           isRequested
-            ? 'Leave a comment explaining your decision…'
-            : 'Share what you think. What works, what concerns you, what should change?'
+            ? t('reviews.composer.commentPlaceholderRequested')
+            : t('reviews.composer.commentPlaceholderNew')
         }
         value={comment}
         onChange={(e) => setComment(e.target.value)}
@@ -722,7 +718,7 @@ function SelfReviewComposer({
             onClick={() => submit('approved')}
             disabled={!comment.trim()}
           >
-            ✓ Approve
+            {t('reviews.composer.approve')}
           </button>
           <button
             type="button"
@@ -730,7 +726,7 @@ function SelfReviewComposer({
             onClick={() => submit('revise')}
             disabled={!comment.trim()}
           >
-            ↻ Request revisions
+            {t('reviews.composer.requestRevisions')}
           </button>
           <button
             type="button"
@@ -738,7 +734,7 @@ function SelfReviewComposer({
             onClick={() => submit('rejected')}
             disabled={!comment.trim()}
           >
-            ✕ Reject
+            {t('reviews.composer.reject')}
           </button>
         </div>
         <button
@@ -751,11 +747,11 @@ function SelfReviewComposer({
           }}
           style={{ visibility: isRequested ? 'hidden' : 'visible' }}
         >
-          Cancel
+          {t('reviews.composer.cancel')}
         </button>
       </div>
       <span className={styles.fieldHint}>
-        A comment is required so the author understands your decision.
+        {t('reviews.composer.commentRequired')}
       </span>
     </div>
   )
@@ -985,25 +981,25 @@ export function ReviewsSection({
 
   return (
     <fieldset className={styles.reviewsFieldset}>
-      <legend className={styles.reviewsLegend}>Reviews</legend>
+      <legend className={styles.reviewsLegend}>{t('reviews.legend')}</legend>
 
       <div className={styles.reviewsHeader}>
         <div className={styles.reviewsCount}>
           {stats.total === 0 ? (
-            <span>no reviews yet</span>
+            <span>{t('reviews.noReviewsYet')}</span>
           ) : (
             <>
               {stats.approved > 0 && (
-                <span style={{ color: '#2e7d32' }}>{stats.approved} approved</span>
+                <span style={{ color: '#2e7d32' }}>{t('reviews.stats.approved', { count: stats.approved })}</span>
               )}
               {stats.revise > 0 && (
-                <span style={{ color: '#8b6508' }}>{stats.revise} revise</span>
+                <span style={{ color: '#8b6508' }}>{t('reviews.stats.revise', { count: stats.revise })}</span>
               )}
               {stats.rejected > 0 && (
-                <span style={{ color: '#b71c1c' }}>{stats.rejected} rejected</span>
+                <span style={{ color: '#b71c1c' }}>{t('reviews.stats.rejected', { count: stats.rejected })}</span>
               )}
               {stats.pending > 0 && (
-                <span style={{ color: '#b25e09' }}>{stats.pending} pending</span>
+                <span style={{ color: '#b25e09' }}>{t('reviews.stats.pending', { count: stats.pending })}</span>
               )}
             </>
           )}
@@ -1041,7 +1037,7 @@ export function ReviewsSection({
             className={`${styles.reviewBody} ${styles.reviewBodyMuted}`}
             style={{ padding: '0.5rem 0' }}
           >
-            No reviews yet. Request one below or add your own.
+            {t('reviews.noReviewsMessage')}
           </div>
         )}
 
@@ -1089,7 +1085,7 @@ export function ReviewsSection({
             ? () => void resetReviewToPending(existing)
             : () => void removeReview(existing.id)
           : undefined
-        const dismissTitle = withdrawOnly ? 'Withdraw review' : 'Remove review'
+        const dismissTitle = withdrawOnly ? t('reviews.card.withdrawReview') : t('reviews.card.removeReview')
         return (
           <SelfReviewComposer
             currentUser={currentUser}
@@ -1120,7 +1116,7 @@ export function ReviewsSection({
                 }}
               >
                 <span style={{ fontSize: '0.85rem', color: '#374151' }}>
-                  Request review from:{' '}
+                  {t('reviews.requestRow.requestFrom')}{' '}
                   <strong>
                     {pendingRequestee.kind === 'group'
                       ? pendingRequestee.group.label
@@ -1133,19 +1129,19 @@ export function ReviewsSection({
                   onClick={() => void requestReview()}
                   disabled={saving}
                 >
-                  + Request review
+                  {t('reviews.requestRow.requestButton')}
                 </button>
                 <button
                   type="button"
                   className={`${styles.btn} ${styles.btnGhost}`}
                   onClick={() => setPendingRequestee(null)}
                 >
-                  Cancel
+                  {t('reviews.requestRow.cancel')}
                 </button>
               </div>
             )}
             <span className={styles.requestHint}>
-              Pick a person or a permission group. Group reviews let all members comment.
+              {t('reviews.requestRow.hint')}
             </span>
           </div>
         </div>

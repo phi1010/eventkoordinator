@@ -499,6 +499,86 @@
     "description": "Beschreibung",
     "url": "URL"
   },
+  "reviews": {
+    "legend": "Bewertungen",
+    "noReviewsYet": "noch keine Bewertungen",
+    "noReviewsMessage": "Noch keine Bewertungen. Weiter unten anfragen oder eigene hinzufügen.",
+    "stats": {
+      "approved": "{{count}} genehmigt",
+      "revise": "{{count}} Überarbeitung",
+      "rejected": "{{count}} abgelehnt",
+      "pending": "{{count}} ausstehend"
+    },
+    "status": {
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "revise": "Überarbeitung erbeten",
+      "pending": "Warte auf Bewertung",
+      "note": "Kommentar"
+    },
+    "relative": {
+      "justNow": "gerade eben",
+      "minutesAgo": "vor {{count}}m",
+      "hoursAgo": "vor {{count}}h",
+      "daysAgo": "vor {{count}}d"
+    },
+    "picker": {
+      "placeholder": "Person oder Bereich für Bewertungsanfrage suchen…",
+      "groupsSection": "Berechtigungsgruppen",
+      "peopleSection": "Personen",
+      "alreadyAdded": "bereits hinzugefügt",
+      "area": "Bereich"
+    },
+    "card": {
+      "system": "System",
+      "you": "du",
+      "migratedTag": "migriert · Autor unbekannt",
+      "migratedTitle": "Migriert aus dem alten Moderationskommentar — ursprünglicher Autor unbekannt",
+      "requested": "{{when}} angefragt",
+      "edit": "bearbeiten",
+      "withdrawReview": "Bewertung zurückziehen",
+      "removeReview": "Bewertung entfernen",
+      "noComment": "Kein Kommentar angegeben.",
+      "waitingFor": "Warte auf {{name}}…",
+      "previouslyVoted": "Zuletzt abgestimmt",
+      "requestedDirectlyBy": "direkt angefragt von",
+      "via": "via",
+      "migratedFrom": "migriert von",
+      "moderationComment": "Moderationskommentar"
+    },
+    "group": {
+      "permissionGroup": "Berechtigungsgruppe",
+      "withdrawGroupRequest": "Gruppenanfrage zurückziehen",
+      "membersVotedSuffix": "Mitglieder haben abgestimmt",
+      "trending": "Tendenz",
+      "oneApprovalEnough": "✓ eine Genehmigung reicht — keine Ablehnungen oder Überarbeitungen",
+      "groupNote": "Jedes Mitglied dieser Gruppe kann genehmigen. Der Kommentar erscheint in der eigenen Bewertungskarte unten.",
+      "requestedBy": "angefragt von"
+    },
+    "composer": {
+      "notAsked": "Du wurdest nicht gefragt, kannst aber eine eigene Bewertung hinzufügen.",
+      "addMyReview": "+ Eigene Bewertung hinzufügen",
+      "askedToReview": "Du wurdest um eine Bewertung gebeten",
+      "editingReview": "Deine Bewertung bearbeiten",
+      "newReview": "Neue Bewertung",
+      "requestedBy": "angefragt von",
+      "removeReview": "Bewertung entfernen",
+      "resubmitted": "Neu eingereicht seit deiner letzten Abstimmung. Zuletzt abgestimmt",
+      "commentPlaceholderRequested": "Hinterlasse einen Kommentar zu deiner Entscheidung…",
+      "commentPlaceholderNew": "Teile deine Gedanken. Was funktioniert, was bedenkt dich, was sollte sich ändern?",
+      "approve": "✓ Genehmigen",
+      "requestRevisions": "↻ Überarbeitung anfordern",
+      "reject": "✕ Ablehnen",
+      "cancel": "Abbrechen",
+      "commentRequired": "Ein Kommentar ist erforderlich, damit der Autor deine Entscheidung versteht."
+    },
+    "requestRow": {
+      "requestFrom": "Bewertung anfordern von:",
+      "requestButton": "+ Bewertung anfordern",
+      "cancel": "Abbrechen",
+      "hint": "Wähle eine Person oder eine Berechtigungsgruppe. Gruppenbewertungen erlauben allen Mitgliedern zu kommentieren."
+    }
+  },
   "proposalDashboard": {
     "title": "Vorschlagsübersicht",
     "toggleColumns": "Spalten ein-/ausblenden",
