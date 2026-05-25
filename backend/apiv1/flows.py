@@ -501,6 +501,7 @@ class EventFlow:
     def submit(self):
         logger.info(f"Submitting event: {self.object!r}")
         self.object.save()
+        self._notify_proposal_owner_event("submit")
 
     @status.transition(
         source=Event.Status.PROPOSED,
@@ -573,6 +574,8 @@ class EventFlow:
     def confirm(self):
         logger.info(f"Confirming event: {self.object!r}")
         self.object.save()
+        self._notify_proposal_owner_event("confirm")
+        self._notify_call_contact_event("confirm")
 
     @status.transition(
         source=Event.Status.PLANNED,
@@ -589,6 +592,8 @@ class EventFlow:
     def cancel(self):
         logger.info(f"Canceling event: {self.object!r}")
         self.object.save()
+        self._notify_proposal_owner_event("cancel")
+        self._notify_call_contact_event("cancel")
 
     @status.transition(
         source=Event.Status.CONFIRMED,
@@ -615,8 +620,37 @@ class EventFlow:
     #  Helpers                                                              #
     # ------------------------------------------------------------------ #
 
+    def _notify_proposal_owner_event(self, action: str) -> None:
+        """Send a notification to the proposal owner for event lifecycle transitions."""
+        proposal = self.object.proposal
+        if not proposal or not proposal.owner or not proposal.owner.email:
+            return
+        proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{proposal.pk}"
+        event_url = f"{settings.FRONTEND_BASE_URL}/proposal/{proposal.pk}/event/{self.object.pk}"
+        _subjects = {
+            "submit": ("Neuer Terminvorschlag", "New date proposal"),
+            "confirm": ("Termin bestätigt", "Date confirmed"),
+            "cancel": ("Termin abgesagt", "Date canceled"),
+        }
+        subject_de, subject_en = _subjects[action]
+        ctx = dict(object=self.object, proposal_url=proposal_url, event_url=event_url)
+        try:
+            send_mail(
+                subject=f"{subject_de} / {subject_en}: {self.object.name}",
+                message=render_to_string(f"apiv1/mails/event_{action}_owner.txt.j2", ctx),
+                html_message=render_to_string(f"apiv1/mails/event_{action}_owner.html.j2", ctx),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[proposal.owner.email],
+                fail_silently=False,
+            )
+        except BaseException as e:
+            logger.error(
+                f"Failed to send event {action} notification to proposal owner: " + str(e),
+                exc_info=e,
+            )
+
     def _notify_call_contact_event(self, action: str) -> None:
-        """Send a notification to the call's responsible when an event is approved or rejected."""
+        """Send a notification to the call's responsible for event lifecycle transitions."""
         proposal = self.object.proposal
         if not proposal:
             return
@@ -625,13 +659,24 @@ class EventFlow:
             return
         proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{proposal.pk}"
         event_url = f"{settings.FRONTEND_BASE_URL}/proposal/{proposal.pk}/event/{self.object.pk}"
-        template_name = "event_approve_contact" if action == "approve" else "event_reject_contact"
-        subject_de = "bestätigt" if action == "approve" else "abgelehnt"
-        subject_en = "confirmed" if action == "approve" else "rejected"
+        _template_names = {
+            "approve": "event_approve_contact",
+            "reject": "event_reject_contact",
+            "confirm": "event_confirm_contact",
+            "cancel": "event_cancel_contact",
+        }
+        _subjects = {
+            "approve": ("Terminvorschlag bestätigt", "Date proposal confirmed"),
+            "reject": ("Terminvorschlag abgelehnt", "Date proposal rejected"),
+            "confirm": ("Termin bestätigt", "Date confirmed"),
+            "cancel": ("Termin abgesagt", "Date canceled"),
+        }
+        template_name = _template_names[action]
+        subject_de, subject_en = _subjects[action]
         ctx = dict(object=self.object, proposal_url=proposal_url, event_url=event_url)
         try:
             send_mail(
-                subject=f"Terminvorschlag {subject_de} / Date proposal {subject_en}: {self.object.name}",
+                subject=f"{subject_de} / {subject_en}: {self.object.name}",
                 message=render_to_string(f"apiv1/mails/{template_name}.txt.j2", ctx),
                 html_message=render_to_string(f"apiv1/mails/{template_name}.html.j2", ctx),
                 from_email=settings.DEFAULT_FROM_EMAIL,
