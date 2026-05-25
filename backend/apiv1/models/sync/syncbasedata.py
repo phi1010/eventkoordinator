@@ -1,5 +1,5 @@
 import uuid
-from typing import ClassVar
+from typing import ClassVar, Optional
 
 from django.db import models
 from ninja import Schema
@@ -16,7 +16,7 @@ class PropertyDiff(Schema):
 
 
 class SyncDiffData(Schema):
-    series_id: uuid.UUID
+    series_id: Optional[uuid.UUID] = None
     event_id: uuid.UUID
     target_id: uuid.UUID
     properties: list[PropertyDiff]

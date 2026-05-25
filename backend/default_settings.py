@@ -225,6 +225,11 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute=0),  # Every hour at :00
         "options": {"queue": "default"},
     },
+    "sync-caldav-every-hour": {
+        "task": "sync_caldav.tasks.sync_all_caldav_targets",
+        "schedule": crontab(minute=30),  # Offset from iCal to spread load
+        "options": {"queue": "default"},
+    },
 }
 
 CELERY_TASK_ROUTES = {}

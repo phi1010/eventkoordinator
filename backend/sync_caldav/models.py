@@ -1,6 +1,7 @@
 import logging
 from uuid import uuid4
 
+import icalendar
 from caldav.davclient import DAVClient
 from django.db import models
 
@@ -56,7 +57,8 @@ class CalDAVSyncItem(SyncBaseItem):
     sync_target = models.ForeignKey(
         CalDAVSyncTarget, on_delete=models.CASCADE, related_name="items"
     )
-    caldav_uid = models.CharField(max_length=255, unique=True, null=True, blank=True, default=None)
+    caldav_uid = models.CharField(max_length=255, null=True, blank=True, default=None)
+    remote_ical_definition = models.TextField(null=True, blank=True, default=None)
 
     def _get_calendar(self):
         return self.sync_target._get_calendar()
@@ -165,28 +167,53 @@ class CalDAVSyncItem(SyncBaseItem):
             logger.error("Failed to delete CalDAV event %s: %s", self.caldav_uid, exc)
             raise
 
-    def sync_diff(self, only_differences: bool = True) -> SyncDiffData | None:
-        logger.debug("sync_diff: uid=%s only_differences=%s", self.caldav_uid, only_differences)
-        if not self.caldav_uid:
-            logger.debug("sync_diff: no uid assigned, returning None")
-            return None
+    def _parse_remote_vevent(self, ical_text: str):
+        """Parse a stored iCal string and return the first VEVENT component, or None."""
         try:
-            calendar = self._get_calendar()
-            remote_evt = calendar.get_event_by_uid(self.caldav_uid)
-        except Exception as exc:
-            logger.debug("Remote event uid=%s not found (%s), returning None", self.caldav_uid, exc)
+            cal = icalendar.Calendar.from_ical(ical_text)
+            return next(
+                (c for c in cal.subcomponents if c.name == "VEVENT"),
+                None,
+            )
+        except Exception:
             return None
 
-        cal_instance = remote_evt.icalendar_instance
-        vevent = next(
-            (c for c in cal_instance.subcomponents if c.name == "VEVENT"),
-            None,
-        )
-        if vevent is None:
-            logger.debug("No VEVENT subcomponent found for uid=%s", self.caldav_uid)
-            return None
-
+    def sync_diff(self, only_differences: bool = True) -> SyncDiffData | None:
         event = self.related_event
+
+        # Unclaimed events (no series, no proposal) are always kept in sync by
+        # the pull task — no meaningful diff to show.
+        if event.series_id is None and event.proposal_id is None:
+            return None
+
+        logger.debug("sync_diff: uid=%s only_differences=%s", self.caldav_uid, only_differences)
+
+        # Prefer the cached remote snapshot; fall back to a live network call for
+        # items that predate the pull-sync feature.
+        if self.remote_ical_definition:
+            vevent = self._parse_remote_vevent(self.remote_ical_definition)
+            if vevent is None:
+                logger.debug("sync_diff: could not parse remote_ical_definition for uid=%s", self.caldav_uid)
+                return None
+        elif self.caldav_uid:
+            try:
+                calendar = self._get_calendar()
+                remote_evt = calendar.get_event_by_uid(self.caldav_uid)
+            except Exception as exc:
+                logger.debug("Remote event uid=%s not found (%s), returning None", self.caldav_uid, exc)
+                return None
+            cal_instance = remote_evt.icalendar_instance
+            vevent = next(
+                (c for c in cal_instance.subcomponents if c.name == "VEVENT"),
+                None,
+            )
+            if vevent is None:
+                logger.debug("No VEVENT subcomponent found for uid=%s", self.caldav_uid)
+                return None
+        else:
+            logger.debug("sync_diff: no uid and no cached data, returning None")
+            return None
+
         properties: list[PropertyDiff] = []
 
         def _diff(name: str, local: str, remote: str) -> None:
