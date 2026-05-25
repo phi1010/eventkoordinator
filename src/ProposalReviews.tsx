@@ -11,6 +11,7 @@ import {
   type UserBasic,
   type LookupItem,
   type ProposalReviewOut,
+  type ProposalReviewsOut,
 } from './api'
 import styles from './ProposalReviews.module.css'
 
@@ -522,7 +523,7 @@ function GroupReviewCard({
       <div className={styles.groupSummary}>
         <span>
           <strong>{memberVotes.filter((r) => r.status !== 'pending').length}/
-          {memberVotes.length}</strong> members voted
+          {groupRequest.group_member_count ?? memberVotes.length}</strong> members voted
         </span>
         {derived === 'pending' && worst && (
           <span className={styles.groupTrending}>
@@ -784,6 +785,7 @@ export function ReviewsSection({
   const [currentUser, setCurrentUser] = useState<UserBasic | null>(null)
   const [groups, setGroups] = useState<LookupItem[]>([])
   const [reviews, setReviews] = useState<ProposalReviewOut[]>([])
+  const [pendingViaGroups, setPendingViaGroups] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [editingOwn, setEditingOwn] = useState(false)
   const [pendingRequestee, setPendingRequestee] = useState<PickResult | null>(null)
@@ -802,7 +804,10 @@ export function ReviewsSection({
     if (!proposalId) return
     setLoading(true)
     fetchProposalReviews(proposalId)
-      .then(setReviews)
+      .then((data) => {
+        setReviews(data.reviews)
+        setPendingViaGroups(data.pending_via_groups)
+      })
       .catch((err) => console.error('Failed to load reviews:', err))
       .finally(() => setLoading(false))
   }, [proposalId])
@@ -843,7 +848,10 @@ export function ReviewsSection({
       proposalId
     ) {
       fetchProposalReviews(proposalId)
-        .then(setReviews)
+        .then((data) => {
+          setReviews(data.reviews)
+          setPendingViaGroups(data.pending_via_groups)
+        })
         .catch((err) => console.error('Failed to reload reviews after resubmission:', err))
     }
   }, [proposalStatus, proposalId])
@@ -945,8 +953,10 @@ export function ReviewsSection({
             status,
             comment,
             requested_directly: false,
+            requested_via_groups: pendingViaGroups.length > 0 ? pendingViaGroups : undefined,
           })
           setReviews((prev) => [...prev, updated])
+          setPendingViaGroups([])
         }
         setEditingOwn(false)
       } catch (err) {
@@ -955,7 +965,7 @@ export function ReviewsSection({
         setSaving(false)
       }
     },
-    [proposalId, currentUser, reviews],
+    [proposalId, currentUser, reviews, pendingViaGroups],
   )
 
   const ownReview = reviews.find(
@@ -1065,7 +1075,7 @@ export function ReviewsSection({
         })}
       </div>
 
-      {!isLocked && (ownReview?.status === 'pending' || editingOwn || (!ownReview && (canCreateReview || canModerate))) && (() => {
+      {!isLocked && (ownReview?.status === 'pending' || editingOwn || (!ownReview && (canCreateReview || canModerate || pendingViaGroups.length > 0))) && (() => {
         const existing = editingOwn
           ? ownReview
           : ownReview?.status === 'pending'

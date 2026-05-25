@@ -19,6 +19,7 @@ from apiv1.schemas import (
     ErrorOut,
     ProposalReviewCreateIn,
     ProposalReviewOut,
+    ProposalReviewsOut,
     ProposalReviewUpdateIn,
 )
 
@@ -36,6 +37,13 @@ def _group_label(code: str) -> str:
         return code
 
 
+def _group_member_count(code: str) -> int | None:
+    try:
+        return Group.objects.get(pk=int(code)).user_set.count()
+    except (Group.DoesNotExist, ValueError):
+        return None
+
+
 def _review_to_schema(r: ProposalReview) -> ProposalReviewOut:
     return ProposalReviewOut(
         id=r.id,
@@ -45,6 +53,7 @@ def _review_to_schema(r: ProposalReview) -> ProposalReviewOut:
         reviewer_is_system=r.reviewer_is_system,
         group_code=r.group_code,
         group_label=_group_label(r.group_code) if r.group_code else "",
+        group_member_count=_group_member_count(r.group_code) if r.kind == "group" and r.group_code else None,
         status=r.status,
         comment=r.comment,
         requested_by_id=r.requested_by_id,
@@ -79,19 +88,44 @@ def _get_proposal_or_404(proposal_id: uuid.UUID, request) -> tuple[ProposalModel
 
 @router.get(
     "/{proposal_id}/reviews",
-    response={200: list[ProposalReviewOut], 401: ErrorOut, 403: ErrorOut, 404: ErrorOut},
+    response={200: ProposalReviewsOut, 401: ErrorOut, 403: ErrorOut, 404: ErrorOut},
 )
 @api_permission_mandatory()
 def list_reviews(request, proposal_id: uuid.UUID):
-    """Return all reviews and group-review requests for a proposal."""
+    """Return all reviews and group-review requests for a proposal.
+
+    Also returns pending_via_groups: group codes where the current user is a
+    member of a requested group but has not yet submitted a review.
+    """
     proposal, err = _get_proposal_or_404(proposal_id, request)
     if err:
         return err
 
-    reviews = ProposalReview.objects.filter(proposal=proposal).select_related(
-        "reviewer", "requested_by"
+    reviews_qs = list(
+        ProposalReview.objects.filter(proposal=proposal).select_related("reviewer", "requested_by")
     )
-    return 200, [_review_to_schema(r) for r in reviews]
+
+    # Determine which requested groups the current user belongs to (and hasn't voted in yet)
+    has_own_review = any(
+        r.kind == ProposalReview.KIND_USER and r.reviewer == request.user
+        for r in reviews_qs
+    )
+    pending_via_groups: list[str] = []
+    if not has_own_review:
+        group_codes = [r.group_code for r in reviews_qs if r.kind == ProposalReview.KIND_GROUP and r.group_code]
+        if group_codes:
+            member_pks = list(
+                Group.objects.filter(
+                    pk__in=[int(c) for c in group_codes if c.isdigit()],
+                    user=request.user,
+                ).values_list("pk", flat=True)
+            )
+            pending_via_groups = [str(pk) for pk in member_pks]
+
+    return 200, ProposalReviewsOut(
+        reviews=[_review_to_schema(r) for r in reviews_qs],
+        pending_via_groups=pending_via_groups,
+    )
 
 
 # ── Create ─────────────────────────────────────────────────────────────────────
@@ -120,7 +154,7 @@ def create_review(request, proposal_id: uuid.UUID, payload: ProposalReviewCreate
             return 400, ErrorOut(code="reviews.missingGroupCode")
         # Validate that the group_code is a valid Django Group pk
         try:
-            group_obj = Group.objects.prefetch_related("user_set").get(pk=int(payload.group_code))
+            Group.objects.get(pk=int(payload.group_code))
         except (Group.DoesNotExist, ValueError):
             return 400, ErrorOut(code="reviews.groupNotFound")
         # Prevent duplicate group requests
@@ -129,40 +163,13 @@ def create_review(request, proposal_id: uuid.UUID, payload: ProposalReviewCreate
         ).exists():
             return 400, ErrorOut(code="reviews.duplicateGroupRequest")
 
-        now = timezone.now()
         r = ProposalReview.objects.create(
             proposal=proposal,
             kind="group",
             group_code=payload.group_code,
             requested_by=request.user,
-            requested_at=now,
+            requested_at=timezone.now(),
         )
-
-        # Create or update a pending user-review slot for every group member so
-        # the group card can show member chips and derive its status.
-        for member in group_obj.user_set.all():
-            existing = ProposalReview.objects.filter(
-                proposal=proposal, kind="user", reviewer=member
-            ).first()
-            if existing:
-                via = existing.requested_via_groups or []
-                if payload.group_code not in via:
-                    existing.requested_via_groups = via + [payload.group_code]
-                    existing.save(update_fields=["requested_via_groups"])
-            else:
-                ProposalReview.objects.create(
-                    proposal=proposal,
-                    kind="user",
-                    reviewer=member,
-                    status="pending",
-                    comment="",
-                    requested_by=request.user,
-                    requested_at=now,
-                    completed_at=None,
-                    requested_directly=False,
-                    requested_via_groups=[payload.group_code],
-                )
-
         return 201, _review_to_schema(r)
 
     # kind == 'user'
@@ -196,11 +203,23 @@ def create_review(request, proposal_id: uuid.UUID, payload: ProposalReviewCreate
         except OpenIDUser.DoesNotExist:
             return 400, ErrorOut(code="reviews.reviewerNotFound")
     else:
-        # Self-review — requires create_review permission (or moderate)
+        # Self-review — requires create_review permission, moderate, or membership in a
+        # requested group listed in payload.requested_via_groups.
         reviewer = request.user
         has_create_review = request.user.has_perm((apiv1, "create_review", ProposalModel), None)
         if not has_create_review and not can_moderate:
-            return 403, ErrorOut(code="auth.permissionDenied")
+            # Allow if user is genuinely in one of the requested groups for this proposal
+            requested_group_codes = set(
+                ProposalReview.objects.filter(proposal=proposal, kind="group")
+                .values_list("group_code", flat=True)
+            )
+            claimed_codes = [c for c in (payload.requested_via_groups or []) if c in requested_group_codes]
+            is_group_member = bool(claimed_codes) and Group.objects.filter(
+                pk__in=[int(c) for c in claimed_codes if c.isdigit()],
+                user=request.user,
+            ).exists()
+            if not is_group_member:
+                return 403, ErrorOut(code="auth.permissionDenied")
 
     # Prevent duplicate user reviews for the same reviewer on this proposal
     if ProposalReview.objects.filter(
@@ -308,27 +327,17 @@ def delete_review(request, proposal_id: uuid.UUID, review_id: uuid.UUID):
         return 403, ErrorOut(code="auth.permissionDenied")
 
     if review.kind == "group":
-        # Remove this group code from every member's requested_via_groups.
-        # Delete member slots that were created solely by this group request.
+        # Remove this group code from requested_via_groups on any real votes already cast.
         group_code = review.group_code
-        member_reviews = ProposalReview.objects.filter(
+        voted = list(ProposalReview.objects.filter(
             proposal=proposal,
             kind="user",
             requested_via_groups__contains=group_code,
-        )
-        to_delete = []
-        to_update = []
-        for mr in member_reviews:
-            via = [c for c in (mr.requested_via_groups or []) if c != group_code]
-            if not via and not mr.requested_directly and mr.status == "pending":
-                to_delete.append(mr.pk)
-            else:
-                mr.requested_via_groups = via
-                to_update.append(mr)
-        if to_delete:
-            ProposalReview.objects.filter(pk__in=to_delete).delete()
-        if to_update:
-            ProposalReview.objects.bulk_update(to_update, ["requested_via_groups"])
+        ))
+        for mr in voted:
+            mr.requested_via_groups = [c for c in (mr.requested_via_groups or []) if c != group_code]
+        if voted:
+            ProposalReview.objects.bulk_update(voted, ["requested_via_groups"])
 
     review.delete()
     return 204, None

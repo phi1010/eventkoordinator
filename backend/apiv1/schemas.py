@@ -473,6 +473,7 @@ class ProposalReviewOut(Schema):
     # group request fields
     group_code: str = ""
     group_label: str = ""
+    group_member_count: Optional[int] = None
     # status/comment
     status: str = "pending"
     comment: str = ""
@@ -489,6 +490,12 @@ class ProposalReviewOut(Schema):
     # flags
     migrated: bool = False
     created_at: str = ""
+
+
+class ProposalReviewsOut(Schema):
+    """Wrapper returned by GET /proposals/{id}/reviews."""
+    reviews: list[ProposalReviewOut]
+    pending_via_groups: list[str] = Field(default_factory=list)
 
 
 class ProposalReviewCreateIn(Schema):

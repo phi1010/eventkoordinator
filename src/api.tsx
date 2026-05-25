@@ -1558,6 +1558,7 @@ export interface ProposalReviewOut {
   reviewer_is_system: boolean
   group_code: string
   group_label: string
+  group_member_count: number | null
   status: string
   comment: string
   requested_by_id: string | null
@@ -1572,12 +1573,17 @@ export interface ProposalReviewOut {
   created_at: string
 }
 
-export async function fetchProposalReviews(proposalId: string): Promise<ProposalReviewOut[]> {
+export interface ProposalReviewsOut {
+  reviews: ProposalReviewOut[]
+  pending_via_groups: string[]
+}
+
+export async function fetchProposalReviews(proposalId: string): Promise<ProposalReviewsOut> {
   const response = await fetch(`/api/v1/proposals/${proposalId}/reviews`, {
     credentials: 'include',
   })
   if (!response.ok) throw new Error('common.internalError')
-  return response.json() as Promise<ProposalReviewOut[]>
+  return response.json() as Promise<ProposalReviewsOut>
 }
 
 export interface ProposalReviewCreateIn {

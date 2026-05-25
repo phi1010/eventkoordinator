@@ -409,10 +409,22 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
         if perm.endswith(f".view_{Proposal.__name__.lower()}"):
             if user == self.owner or user in self.editors.all():
                 return True
-            if self.status != self.Status.DRAFT and ProposalReview.objects.filter(
-                kind=ProposalReview.KIND_USER, reviewer=user, proposal=self
-            ).exists():
-                return True
+            if self.status != self.Status.DRAFT:
+                # Directly requested reviewer (has voted or has a pending direct request)
+                if ProposalReview.objects.filter(
+                    kind=ProposalReview.KIND_USER, reviewer=user, proposal=self
+                ).exists():
+                    return True
+                # Member of a group that has been requested to review
+                from django.contrib.auth.models import Group as AuthGroup
+                group_codes = ProposalReview.objects.filter(
+                    proposal=self, kind=ProposalReview.KIND_GROUP
+                ).values_list("group_code", flat=True)
+                if group_codes and AuthGroup.objects.filter(
+                    pk__in=[int(c) for c in group_codes if c.isdigit()],
+                    user=user,
+                ).exists():
+                    return True
             return False
         if perm.endswith(f".delete_{Proposal.__name__.lower()}"):
             return user == self.owner and self.status in [self.Status.DRAFT]
