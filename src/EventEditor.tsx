@@ -1118,7 +1118,7 @@ export function EventEditor({
                                                 {pushing === sync.target_id
                                                     ? t('event.pushing')
                                                     : sync.status === 'creation pending'
-                                                        ? t('event.createInPretix')
+                                                        ? t('event.createInRemoteService')
                                                         : t('event.pushUpdate')}
                                             </button>
 
