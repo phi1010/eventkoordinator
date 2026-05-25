@@ -220,16 +220,14 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 # Celery Beat scheduled tasks
 
 CELERY_BEAT_SCHEDULE = {
-    "import-ical-every-hour": {
-        "task": "sync_ical.tasks.import_ical_task",
+    "sync-ical-every-hour": {
+        "task": "sync_ical.tasks.sync_all_ical_targets",
         "schedule": crontab(minute=0),  # Every hour at :00
         "options": {"queue": "default"},
     },
 }
 
-CELERY_TASK_ROUTES = {
-    "sync_ical.tasks.import_ical_task": {"queue": "default"},
-}
+CELERY_TASK_ROUTES = {}
 
 
 CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"

@@ -125,7 +125,7 @@ class Event(HistoricalMetaBase):
 
     status = models.CharField(max_length=20, choices=Status, default=Status.DRAFT)
 
-    series = models.ForeignKey(Series, on_delete=models.CASCADE, related_name="events")
+    series = models.ForeignKey(Series, on_delete=models.CASCADE, null=True, blank=True, related_name="events")
     proposal = models.ForeignKey(
         "Proposal",
         on_delete=models.SET_NULL,

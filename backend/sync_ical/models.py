@@ -11,7 +11,7 @@ class IcalCalendarSyncTarget(SyncBaseTarget):
     def create_new_sync_item(self, event) -> SyncBaseItem:
         raise NotImplementedError(
             "IcalCalendarSyncTarget does not support creating sync items via the API. "
-            "iCal items are created by the import_ical management command."
+            "iCal items are created by the sync_ical_target Celery task."
         )
 
 class IcalCalenderSyncItem(SyncBaseItem):

@@ -1,7 +1,7 @@
 from pathlib import Path
 from datetime import date, datetime, timezone
 import time
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from uuid import UUID
 
@@ -9,10 +9,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.management import call_command
 from django.test import TestCase, override_settings
 
-from sync_ical.management.commands.import_ical import parse_calendar_data
+from sync_ical.tasks import parse_calendar_data
 from apiv1.models import (
     Event,
     Proposal,
@@ -178,7 +177,11 @@ END:VCALENDAR
         )
         self.assertTrue(all(event["summary"] == "Recurring Workshop" for event in events))
 
-    def test_import_command_limits_recurring_events_to_one_year_past_and_future(self):
+    def test_sync_limits_recurring_events_to_one_year_past_and_future(self):
+        from unittest.mock import Mock
+        from sync_ical.models import IcalCalendarSyncTarget
+        from sync_ical.tasks import sync_ical_target
+
         ics_content = """BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Test//Recurring Import//EN
@@ -195,22 +198,29 @@ END:VCALENDAR
 """
 
         fixed_now = datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc)
+        target = IcalCalendarSyncTarget.objects.create(
+            url="https://cal.example.com/feed.ics",
+            name="Test Calendar",
+        )
 
-        with NamedTemporaryFile("w", suffix=".ics", encoding="utf-8") as calendar_file:
-            calendar_file.write(ics_content)
-            calendar_file.flush()
+        mock_response = Mock()
+        mock_response.text = ics_content
+        mock_response.raise_for_status = Mock()
 
-            with patch("sync_ical.management.commands.import_ical.django_timezone.now", return_value=fixed_now):
-                call_command("import_ical", file=calendar_file.name)
+        with patch("sync_ical.tasks.django_timezone.now", return_value=fixed_now):
+            with patch("sync_ical.tasks.requests.get", return_value=mock_response):
+                sync_ical_target(target.pk)
 
-        series = Series.objects.get(name="Recurring Import")
-        imported_events = list(series.events.order_by("start_time"))
+        self.assertEqual(Series.objects.count(), 0)
+        imported_events = list(
+            Event.objects.filter(name="Recurring Import").order_by("start_time")
+        )
 
         self.assertTrue(imported_events)
         self.assertEqual(imported_events[0].start_time.date(), date(2025, 3, 10))
         self.assertEqual(imported_events[-1].start_time.date(), date(2027, 3, 10))
         self.assertTrue(all(event.tag == "community" for event in imported_events))
-        self.assertEqual(series.description, "Recurring import description")
+        self.assertTrue(all(event.series is None for event in imported_events))
 
 
 class EventApprovalPermissionTests(TestCase):
