@@ -109,7 +109,11 @@ def _send_review_requested_mail(proposal: ProposalModel, reviewer) -> None:
 
 def _send_review_given_mail(proposal: ProposalModel, review: ProposalReview) -> None:
     """Notify the call organizer that a reviewer has submitted their review."""
-    if not proposal.call or not proposal.call.responsible_email:
+    if not proposal.call:
+        logger.warning("Skipping review-given mail for proposal %s: no call associated", proposal.pk)
+        return
+    if not proposal.call.responsible_email:
+        logger.warning("Skipping review-given mail for proposal %s: call %s has no responsible_email", proposal.pk, proposal.call.pk)
         return
     proposal_url = f"{settings.FRONTEND_BASE_URL}/proposal-editor/{proposal.pk}"
     ctx = dict(object=proposal, proposal_url=proposal_url, review=review)
@@ -302,6 +306,8 @@ def create_review(request, proposal_id: uuid.UUID, payload: ProposalReviewCreate
     )
     if payload.reviewer_id and reviewer.email:
         _send_review_requested_mail(proposal, reviewer)
+    elif payload.reviewer_id is None and r.status not in ("pending", "note"):
+        _send_review_given_mail(proposal, r)
     return 201, _review_to_schema(r)
 
 
