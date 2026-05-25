@@ -109,6 +109,11 @@ def sync_caldav_target(sync_target_id):
                     item.remote_ical_definition = raw_ical
                     item.save(update_fields=["remote_ical_definition"])
 
+            # If all existing items are claimed, there is nothing to import — skip to
+            # avoid creating duplicate pull-imported events alongside pushed ones.
+            if existing_items and not unclaimed:
+                continue
+
             # For unclaimed: check if the iCal changed (or if there are no items yet).
             ical_unchanged = (
                 unclaimed
