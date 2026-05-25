@@ -25,10 +25,13 @@ from apiv1.api_utils import (
     api_permission_mandatory,
     api_permission_required,
 )
+from django.contrib.auth.models import Group
+
 from apiv1.flows import ProposalFlow
 from apiv1.helpers import model_proposal_to_schema
 from apiv1.models import check_proposal_required_fields
 from apiv1.models import Proposal as ProposalModel, Speaker
+from apiv1.models.basedata import ProposalReview
 from apiv1.models import Event as EventModel
 from apiv1.models import Call as CallModel
 from apiv1.models import ProposalArea, ProposalLanguage, SubmissionType
@@ -52,6 +55,60 @@ from apiv1.schemas import (
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+def _review_gate_for_accept(proposal: ProposalModel) -> str | None:
+    """Return a human-readable disable reason if reviews block acceptance, or None if clear."""
+    reviews = list(
+        ProposalReview.objects.filter(proposal=proposal).values(
+            "kind", "status", "reviewer_is_system",
+            "group_code", "requested_directly", "requested_via_groups",
+        )
+    )
+
+    def _derive_group(code: str) -> str:
+        member_statuses = [
+            r["status"] for r in reviews
+            if r["kind"] == "user" and code in (r["requested_via_groups"] or [])
+        ]
+        if "rejected" in member_statuses:
+            return "rejected"
+        if "revise" in member_statuses:
+            return "revise"
+        if "approved" in member_statuses:
+            return "approved"
+        return "pending"
+
+    pending_count = 0
+    rejected_count = 0
+    revise_count = 0
+
+    for r in reviews:
+        if r["kind"] == "user" and (r["status"] == "note" or r["reviewer_is_system"]):
+            continue
+        # User reviews that are solely via group (not directly requested) are handled by the group card
+        if (
+            r["kind"] == "user"
+            and not r["requested_directly"]
+            and (r["requested_via_groups"] or [])
+        ):
+            continue
+
+        effective = _derive_group(r["group_code"]) if r["kind"] == "group" else r["status"]
+        if effective == "pending":
+            pending_count += 1
+        elif effective == "rejected":
+            rejected_count += 1
+        elif effective == "revise":
+            revise_count += 1
+
+    if rejected_count:
+        return f"{rejected_count} reviewer{'s' if rejected_count > 1 else ''} rejected this proposal."
+    if revise_count:
+        return f"{revise_count} reviewer{'s' if revise_count > 1 else ''} requested changes."
+    if pending_count:
+        return f"Waiting on {pending_count} pending review{'s' if pending_count > 1 else ''}."
+    return None
 
 
 def _proposal_to_detail_schema(proposal: ProposalModel) -> ProposalDetail:
@@ -261,13 +318,13 @@ _ACCEPTED_EVENT_STATUSES = {
 @api_permission_required((apiv1, "browse", ProposalModel))
 def list_proposals(request) -> list[ProposalListItem]:
     """List all proposals visible to the current user."""
-    proposals = (
+    proposals_qs = (
         ProposalModel.objects.select_related("submission_type", "owner", "call")
         .prefetch_related("speakers", "events")
         .order_by("title")
     )
     result = []
-    for p in proposals:
+    for p in proposals_qs:
         if not request.user.has_perm((apiv1, "view", ProposalModel), p):
             continue
         accepted = sum(1 for e in p.events.all() if e.status in _ACCEPTED_EVENT_STATUSES)
@@ -654,23 +711,59 @@ def get_proposal_transitions(
     flow = ProposalFlow(proposal)
     transitions = flow.get_available_transitions(request.user)
 
+    # Review gating: block 'accept' if any reviews are not yet approved
+    review_block = _review_gate_for_accept(proposal)
+
     # Convert to response format with proper schema objects
-    transitions_data = [
-        ProposalTransitionOut(
-            action=t.action,
-            label_id=t.label_id,
-            target_status=t.target_status,
-            enabled=t.enabled,
-            disable_reason=t.disable_reason,
-        )
-        for t in transitions
-    ]
+    transitions_data = []
+    for t in transitions:
+        if t.action == "accept" and t.enabled and review_block:
+            transitions_data.append(ProposalTransitionOut(
+                action=t.action,
+                label_id=t.label_id,
+                target_status=t.target_status,
+                enabled=False,
+                disable_reason=review_block,
+            ))
+        else:
+            transitions_data.append(ProposalTransitionOut(
+                action=t.action,
+                label_id=t.label_id,
+                target_status=t.target_status,
+                enabled=t.enabled,
+                disable_reason=t.disable_reason,
+            ))
 
     return 200, ProposalTransitions(
         proposal_id=proposal_id,
         current_status=proposal.status,
         transitions=transitions_data,
     )
+
+
+def _reset_reviews_on_resubmit(proposal: ProposalModel) -> None:
+    """Reset all completed user reviews to pending when a proposal is resubmitted."""
+    now = timezone.now()
+    reviews = ProposalReview.objects.filter(proposal=proposal)
+    to_update = []
+    for r in reviews:
+        if r.reviewer_is_system or r.status == "note":
+            continue
+        if r.kind == "group":
+            r.requested_at = now
+            to_update.append(r)
+        elif r.status != "pending":
+            r.previous_status = r.status
+            r.previous_comment = r.comment
+            r.status = "pending"
+            r.completed_at = None
+            r.requested_at = now
+            to_update.append(r)
+    if to_update:
+        ProposalReview.objects.bulk_update(
+            to_update,
+            ["status", "completed_at", "requested_at", "previous_status", "previous_comment"],
+        )
 
 
 def _execute_proposal_transition(
@@ -705,6 +798,17 @@ def _execute_proposal_transition(
             code="proposals.transitionNotAllowed", detail=transition.disable_reason
         )
 
+    # Additional review gating for 'accept'
+    if action == "accept":
+        review_block = _review_gate_for_accept(proposal)
+        if review_block:
+            return 400, ErrorOut(
+                code="proposals.transitionNotAllowed", detail=review_block
+            )
+
+    # For resubmissions, reset all completed reviews to pending
+    is_resubmission = action == "submit" and proposal.status != ProposalModel.Status.DRAFT
+
     # Execute the transition
     try:
         success = flow.execute_transition(action)
@@ -713,6 +817,9 @@ def _execute_proposal_transition(
     except Exception as e:
         logger.error(f"Error executing transition {action}: {str(e)}")
         return 400, ErrorOut(code="proposals.transitionFailed")
+
+    if is_resubmission:
+        _reset_reviews_on_resubmit(proposal)
 
     return 200, _proposal_to_detail_schema(proposal)
 

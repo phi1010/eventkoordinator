@@ -20,6 +20,7 @@ from apiv1.routers import calendar as calendar_router
 from apiv1.routers import calculated_prices as calculated_prices_router
 from apiv1.routers import calls as calls_router
 from apiv1.routers import export as export_router
+from apiv1.routers import reviews as reviews_router
 
 # Initialize the main API instance with Django auth as default
 api = NinjaAPI(auth=django_auth)
@@ -35,6 +36,7 @@ api.add_router("/pricing", calculated_prices_router.router, tags=["calculated-pr
 api.add_router("/calls", calls_router.router, tags=["calls"])
 api.add_router("/user", openid_user_management_router.router, tags=["user"])
 api.add_router("/export", export_router.router, tags=["export"])
+api.add_router("/proposals", reviews_router.router, tags=["reviews"])
 
 
 # Health check endpoint

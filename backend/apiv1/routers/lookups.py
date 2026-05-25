@@ -22,6 +22,8 @@ from apiv1.helpers import (
     model_event_to_schema,
     model_series_to_schema,
 )
+from django.contrib.auth.models import Group
+
 from apiv1.models import (
     Event as EventModel,
     ProposalArea,
@@ -30,6 +32,7 @@ from apiv1.models import (
     Series as SeriesModel,
 )
 from apiv1.schemas import ErrorOut, Event, LookupOut, Series, SiteConfigOut, UserBasic
+
 
 router = Router()
 
@@ -116,6 +119,28 @@ def get_proposal_areas(request):
             sort_order=i.sort_order,
         )
         for i in items
+    ]
+
+
+@router.get(
+    "/permission_groups",
+    response={200: list[LookupOut], 401: ErrorOut, 403: ErrorOut},
+)
+@api_permission_mandatory()
+def get_permission_groups(request):
+    """Return all Django permission groups (excluding the catch-all authenticated-users group)."""
+    if not request.user.has_perm((apiv1, "view", Group)):
+        return 401, ErrorOut(code="auth.notAuthenticated")
+    groups = Group.objects.order_by("name")
+    return [
+        LookupOut(
+            code=str(g.pk),
+            label=g.name,
+            description="",
+            is_active=True,
+            sort_order=0,
+        )
+        for g in groups
     ]
 
 

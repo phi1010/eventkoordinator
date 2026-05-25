@@ -461,3 +461,58 @@ class SyncItemOut(Schema):
     event_id: uuid.UUID
 
 
+# ── Proposal reviews ─────────────────────────────────────────────────────────
+
+class ProposalReviewOut(Schema):
+    id: uuid.UUID
+    kind: str  # 'user' | 'group'
+    # user review fields
+    reviewer_id: Optional[uuid.UUID] = None
+    reviewer_username: Optional[str] = None
+    reviewer_is_system: bool = False
+    # group request fields
+    group_code: str = ""
+    group_label: str = ""
+    # status/comment
+    status: str = "pending"
+    comment: str = ""
+    # attribution
+    requested_by_id: Optional[uuid.UUID] = None
+    requested_by_username: Optional[str] = None
+    requested_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    requested_directly: bool = False
+    requested_via_groups: list[str] = Field(default_factory=list)
+    # resubmission history
+    previous_status: str = ""
+    previous_comment: str = ""
+    # flags
+    migrated: bool = False
+    created_at: str = ""
+
+
+class ProposalReviewCreateIn(Schema):
+    """Create a new review or group-review request."""
+    kind: str  # 'user' | 'group'
+    # For kind='user': reviewer_id (omit for a self-review)
+    reviewer_id: Optional[uuid.UUID] = None
+    # For kind='group'
+    group_code: Optional[str] = None
+    # For migrated system reviews
+    reviewer_is_system: bool = False
+    comment: str = ""
+    status: str = "pending"  # for system/note reviews
+    requested_directly: bool = False
+    requested_via_groups: list[str] = Field(default_factory=list)
+    migrated: bool = False
+
+
+class ProposalReviewUpdateIn(Schema):
+    """Submit or update a vote on an existing user review."""
+    status: str
+    comment: str = ""
+
+
+class ProposalReviewResetIn(Schema):
+    """Reset all reviews to pending (called on resubmission)."""
+    pass

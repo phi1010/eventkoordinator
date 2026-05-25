@@ -1631,15 +1631,6 @@ export function ProposalEditor({
                                 </div>
                             ) : null}
 
-                            {_proposalId && _proposalId.trim() && currentStatus && currentStatus !== 'draft' && (
-                                <ReviewsSection
-                                    proposalId={_proposalId}
-                                    proposalStatus={currentStatus}
-                                    moderationComment={formData.moderation_comment || undefined}
-                                    moderationCommentAt={undefined}
-                                    canModerate={hasPermission('moderate_proposal')}
-                                />
-                            )}
 
                         </div>
                     </div>
@@ -1934,6 +1925,18 @@ export function ProposalEditor({
 
                     {error && <div className={styles.error} role="alert">{error}</div>}
 
+                    {/* Reviews - always visible for non-draft proposals */}
+                    {_proposalId && _proposalId.trim() && currentStatus && currentStatus !== 'draft' && (
+                        <ReviewsSection
+                            proposalId={_proposalId}
+                            proposalStatus={currentStatus}
+                            moderationComment={formData.moderation_comment || undefined}
+                            moderationCommentAt={undefined}
+                            canModerate={hasPermission('moderate_proposal')}
+                            canDeleteReview={hasPermission('delete_review_proposal')}
+                            canCreateReview={hasPermission('create_review_proposal')}
+                        />
+                    )}
 
                     {/* History Display - Always visible */}
                     {_proposalId && _proposalId.trim() && (

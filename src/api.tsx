@@ -1249,6 +1249,16 @@ export async function fetchProposalAreas(): Promise<LookupItem[]> {
   return (data as unknown as LookupItem[]) || []
 }
 
+export async function fetchPermissionGroups(): Promise<LookupItem[]> {
+  const response = await fetch('/api/v1/permission_groups', { credentials: 'include' })
+  if (!response.ok) {
+    console.error('Failed to fetch permission groups:', response.statusText)
+    return []
+  }
+  const data = await response.json() as Array<{ code: string; label: string }>
+  return data.map((g) => ({ code: g.code, label: g.label }))
+}
+
 export interface ExternalCalendarEvent {
   id: string
   title: string
@@ -1536,5 +1546,111 @@ export async function fetchCall(callId: string): Promise<CallOut> {
   })
   if (!response.ok) throw new Error('common.internalError')
   return response.json() as Promise<CallOut>
+}
+
+// ── Proposal Reviews ──────────────────────────────────────────────────────────
+
+export interface ProposalReviewOut {
+  id: string
+  kind: 'user' | 'group'
+  reviewer_id: string | null
+  reviewer_username: string | null
+  reviewer_is_system: boolean
+  group_code: string
+  group_label: string
+  status: string
+  comment: string
+  requested_by_id: string | null
+  requested_by_username: string | null
+  requested_at: string | null
+  completed_at: string | null
+  requested_directly: boolean
+  requested_via_groups: string[]
+  previous_status: string
+  previous_comment: string
+  migrated: boolean
+  created_at: string
+}
+
+export async function fetchProposalReviews(proposalId: string): Promise<ProposalReviewOut[]> {
+  const response = await fetch(`/api/v1/proposals/${proposalId}/reviews`, {
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error('common.internalError')
+  return response.json() as Promise<ProposalReviewOut[]>
+}
+
+export interface ProposalReviewCreateIn {
+  kind: 'user' | 'group'
+  reviewer_id?: string | null
+  group_code?: string | null
+  reviewer_is_system?: boolean
+  comment?: string
+  status?: string
+  requested_directly?: boolean
+  requested_via_groups?: string[]
+  migrated?: boolean
+}
+
+export async function createProposalReview(
+  proposalId: string,
+  payload: ProposalReviewCreateIn,
+): Promise<ProposalReviewOut> {
+  const csrf = await getCsrfToken()
+  const response = await fetch(`/api/v1/proposals/${proposalId}/reviews`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error((err as { code?: string }).code || 'common.internalError')
+  }
+  return response.json() as Promise<ProposalReviewOut>
+}
+
+export async function updateProposalReview(
+  proposalId: string,
+  reviewId: string,
+  status: string,
+  comment: string,
+): Promise<ProposalReviewOut> {
+  const csrf = await getCsrfToken()
+  const response = await fetch(`/api/v1/proposals/${proposalId}/reviews/${reviewId}`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+    body: JSON.stringify({ status, comment }),
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error((err as { code?: string }).code || 'common.internalError')
+  }
+  return response.json() as Promise<ProposalReviewOut>
+}
+
+export async function deleteProposalReview(proposalId: string, reviewId: string): Promise<void> {
+  const csrf = await getCsrfToken()
+  const response = await fetch(`/api/v1/proposals/${proposalId}/reviews/${reviewId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'X-CSRFToken': csrf },
+  })
+  if (!response.ok && response.status !== 204) {
+    throw new Error('common.internalError')
+  }
+}
+
+export async function resetProposalReviews(proposalId: string): Promise<ProposalReviewOut[]> {
+  const csrf = await getCsrfToken()
+  const response = await fetch(`/api/v1/proposals/${proposalId}/reviews/reset`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+    body: '{}',
+  })
+  if (!response.ok) throw new Error('common.internalError')
+  return response.json() as Promise<ProposalReviewOut[]>
 }
 

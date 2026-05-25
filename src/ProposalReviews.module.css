@@ -356,6 +356,9 @@
 .userPickerItemGroup { background: #f8fafc; }
 .userPickerItemGroup:hover:not(.userPickerItemDisabled) { background: #eef2f6; }
 
+.userPickerItemActive,
+.userPickerItemActive.userPickerItemGroup { background: #dbeafe !important; outline: none; }
+
 /* ── Request row ──────────────────────────────────────────────────── */
 .requestRow {
   display: flex;

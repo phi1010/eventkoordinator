@@ -1,45 +1,27 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getCurrentUser, searchUsers, fetchProposalAreas, type UserBasic, type LookupItem } from './api'
+import {
+  getCurrentUser,
+  searchUsers,
+  fetchPermissionGroups,
+  fetchProposalReviews,
+  createProposalReview,
+  updateProposalReview,
+  deleteProposalReview,
+  type UserBasic,
+  type LookupItem,
+  type ProposalReviewOut,
+} from './api'
 import styles from './ProposalReviews.module.css'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type ReviewStatus = 'approved' | 'rejected' | 'revise' | 'pending' | 'note'
-
-interface UserReview {
-  id: string
-  kind: 'user'
-  reviewer: UserBasic & { system?: boolean }
-  status: ReviewStatus
-  comment: string
-  requestedBy: string | null
-  requestedAt: string | null
-  completedAt: string | null
-  requestedDirectly: boolean
-  requestedViaGroups: string[]  // area codes
-  previousStatus?: ReviewStatus
-  previousComment?: string
-  migrated?: boolean
-}
-
-interface GroupRequest {
-  id: string
-  kind: 'group'
-  group: LookupItem
-  requestedBy: string
-  requestedAt: string
-}
-
-type ReviewEntry = UserReview | GroupRequest
+type PickResult =
+  | { kind: 'user'; user: UserBasic }
+  | { kind: 'group'; group: LookupItem }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const SYSTEM_USER: UserBasic & { system: true } = {
-  id: 'u-system',
-  username: 'System',
-  system: true,
-}
 
 function initials(name: string): string {
   return name
@@ -59,11 +41,12 @@ function fmtRel(iso: string | null | undefined): string {
   return `${Math.floor(diff / 86400)}d ago`
 }
 
-// Derive group status: worst-of for rejections/revisions, one-approver for approvals
-function deriveGroupStatus(groupCode: string, allReviews: ReviewEntry[]): ReviewStatus {
-  const memberReviews = allReviews.filter(
-    (r): r is UserReview =>
-      r.kind === 'user' && (r.requestedViaGroups || []).includes(groupCode),
+function deriveGroupStatus(
+  groupCode: string,
+  reviews: ProposalReviewOut[],
+): ReviewStatus {
+  const memberReviews = reviews.filter(
+    (r) => r.kind === 'user' && (r.requested_via_groups || []).includes(groupCode),
   )
   if (memberReviews.some((r) => r.status === 'rejected')) return 'rejected'
   if (memberReviews.some((r) => r.status === 'revise')) return 'revise'
@@ -71,49 +54,63 @@ function deriveGroupStatus(groupCode: string, allReviews: ReviewEntry[]): Review
   return 'pending'
 }
 
-function worstMemberVote(groupCode: string, allReviews: ReviewEntry[]): ReviewStatus | null {
+function worstMemberVote(
+  groupCode: string,
+  reviews: ProposalReviewOut[],
+): ReviewStatus | null {
   const RANK: Record<string, number> = { rejected: 3, revise: 2, approved: 1 }
-  const decided = allReviews.filter(
-    (r): r is UserReview =>
+  const decided = reviews.filter(
+    (r) =>
       r.kind === 'user' &&
-      (r.requestedViaGroups || []).includes(groupCode) &&
+      (r.requested_via_groups || []).includes(groupCode) &&
       r.status !== 'pending',
   )
   if (decided.length === 0) return null
   return decided.reduce<ReviewStatus | null>(
-    (w, r) => (!w ? r.status : (RANK[r.status] || 0) > (RANK[w] || 0) ? r.status : w),
+    (w, r) =>
+      !w
+        ? (r.status as ReviewStatus)
+        : (RANK[r.status] || 0) > (RANK[w] || 0)
+        ? (r.status as ReviewStatus)
+        : w,
     null,
   )
 }
 
 function statusCardClass(status: ReviewStatus): string {
-  return {
-    approved: styles.reviewCardApproved,
-    rejected: styles.reviewCardRejected,
-    revise: styles.reviewCardRevise,
-    pending: styles.reviewCardPending,
-    note: styles.reviewCardNote,
-  }[status]
+  return (
+    {
+      approved: styles.reviewCardApproved,
+      rejected: styles.reviewCardRejected,
+      revise: styles.reviewCardRevise,
+      pending: styles.reviewCardPending,
+      note: styles.reviewCardNote,
+    }[status] ?? ''
+  )
 }
 
 function statusBadgeClass(status: ReviewStatus): string {
-  return {
-    approved: styles.badgeApproved,
-    rejected: styles.badgeRejected,
-    revise: styles.badgeRevise,
-    pending: styles.badgePending,
-    note: styles.badgeNote,
-  }[status]
+  return (
+    {
+      approved: styles.badgeApproved,
+      rejected: styles.badgeRejected,
+      revise: styles.badgeRevise,
+      pending: styles.badgePending,
+      note: styles.badgeNote,
+    }[status] ?? ''
+  )
 }
 
 function statusLabel(status: ReviewStatus): string {
-  return {
-    approved: 'Approved',
-    rejected: 'Rejected',
-    revise: 'Revisions requested',
-    pending: 'Awaiting review',
-    note: 'Comment',
-  }[status]
+  return (
+    {
+      approved: 'Approved',
+      rejected: 'Rejected',
+      revise: 'Revisions requested',
+      pending: 'Awaiting review',
+      note: 'Comment',
+    }[status] ?? status
+  )
 }
 
 // ── StatusBadge ───────────────────────────────────────────────────────────────
@@ -129,10 +126,6 @@ function StatusBadge({ status }: { status: ReviewStatus }) {
 
 // ── UserPicker ────────────────────────────────────────────────────────────────
 
-type PickResult =
-  | { kind: 'user'; user: UserBasic }
-  | { kind: 'group'; group: LookupItem }
-
 interface UserPickerProps {
   excludeIds: string[]
   groups: LookupItem[]
@@ -143,11 +136,16 @@ function UserPicker({ excludeIds, groups, onPick }: UserPickerProps) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const [userResults, setUserResults] = useState<UserBasic[]>([])
+  const [activeIndex, setActiveIndex] = useState(-1)
   const ref = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+        setActiveIndex(-1)
+      }
     }
     document.addEventListener('mousedown', onDocClick)
     return () => document.removeEventListener('mousedown', onDocClick)
@@ -158,7 +156,13 @@ function UserPicker({ excludeIds, groups, onPick }: UserPickerProps) {
     searchUsers(q).then((results) => {
       if (!cancelled) setUserResults(results)
     })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
+  }, [q])
+
+  useEffect(() => {
+    setActiveIndex(-1)
   }, [q])
 
   const filteredGroups = useMemo(
@@ -169,34 +173,112 @@ function UserPicker({ excludeIds, groups, onPick }: UserPickerProps) {
     [q, groups],
   )
 
+  // Flat list of selectable (non-disabled) items for keyboard nav
+  const selectableItems = useMemo(() => {
+    const items: Array<{ kind: 'group'; group: LookupItem } | { kind: 'user'; user: UserBasic }> = []
+    for (const g of filteredGroups) {
+      if (!excludeIds.includes(g.code)) items.push({ kind: 'group', group: g })
+    }
+    for (const u of userResults) {
+      if (!excludeIds.includes(u.id)) items.push({ kind: 'user', user: u })
+    }
+    return items
+  }, [filteredGroups, userResults, excludeIds])
+
+  const pick = (item: (typeof selectableItems)[number]) => {
+    onPick(item.kind === 'group' ? { kind: 'group', group: item.group } : { kind: 'user', user: item.user })
+    setQ('')
+    setOpen(false)
+    setActiveIndex(-1)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        setOpen(true)
+        setActiveIndex(0)
+        e.preventDefault()
+      }
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIndex((i) => Math.min(i + 1, selectableItems.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIndex((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (activeIndex >= 0 && activeIndex < selectableItems.length) {
+        pick(selectableItems[activeIndex])
+      }
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+      setActiveIndex(-1)
+    }
+  }
+
+  // Scroll active item into view
+  useEffect(() => {
+    if (activeIndex < 0 || !menuRef.current) return
+    const el = menuRef.current.querySelector(`[data-picker-index="${activeIndex}"]`) as HTMLElement | null
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex])
+
+  const getSelectableIndex = (kind: 'group' | 'user', id: string) =>
+    selectableItems.findIndex(
+      (item) => item.kind === kind && (item.kind === 'group' ? item.group.code : item.user.id) === id,
+    )
+
+  const listboxId = 'user-picker-listbox'
+
   return (
     <div className={styles.userPickerWrap} ref={ref}>
       <input
         className={styles.userPickerInput}
         placeholder="Search a person or area to request review…"
         value={q}
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        aria-controls={listboxId}
+        aria-activedescendant={activeIndex >= 0 ? `picker-item-${activeIndex}` : undefined}
         onFocus={() => setOpen(true)}
-        onChange={(e) => { setQ(e.target.value); setOpen(true) }}
+        onChange={(e) => {
+          setQ(e.target.value)
+          setOpen(true)
+        }}
+        onKeyDown={handleKeyDown}
       />
       {open && (filteredGroups.length > 0 || userResults.length > 0) && (
-        <div className={styles.userPickerMenu} role="listbox">
+        <div className={styles.userPickerMenu} role="listbox" id={listboxId} ref={menuRef}>
           {filteredGroups.length > 0 && (
-            <div className={styles.pickerSectionLabel}>Areas / Workshops</div>
+            <div className={styles.pickerSectionLabel}>Permission Groups</div>
           )}
           {filteredGroups.map((g) => {
             const disabled = excludeIds.includes(g.code)
+            const sIdx = disabled ? -1 : getSelectableIndex('group', g.code)
+            const isActive = sIdx >= 0 && sIdx === activeIndex
             return (
               <div
                 key={g.code}
-                className={`${styles.userPickerItem} ${styles.userPickerItemGroup} ${disabled ? styles.userPickerItemDisabled : ''}`}
+                id={sIdx >= 0 ? `picker-item-${sIdx}` : undefined}
+                data-picker-index={sIdx >= 0 ? sIdx : undefined}
+                role="option"
+                aria-selected={isActive}
+                aria-disabled={disabled}
+                className={`${styles.userPickerItem} ${styles.userPickerItemGroup} ${
+                  disabled ? styles.userPickerItemDisabled : ''
+                } ${isActive ? styles.userPickerItemActive : ''}`}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   if (disabled) return
-                  onPick({ kind: 'group', group: g })
-                  setQ('')
-                  setOpen(false)
+                  pick({ kind: 'group', group: g })
                 }}
               >
-                <span className={`${styles.avatar} ${styles.avatarGroup}`}>{initials(g.label)}</span>
+                <span className={`${styles.avatar} ${styles.avatarGroup}`}>
+                  {initials(g.label)}
+                </span>
                 <span>{g.label}</span>
                 <span className={styles.userPickerItemRole}>
                   {disabled ? 'already added' : 'area'}
@@ -210,15 +292,23 @@ function UserPicker({ excludeIds, groups, onPick }: UserPickerProps) {
           )}
           {userResults.map((u) => {
             const disabled = excludeIds.includes(u.id)
+            const sIdx = disabled ? -1 : getSelectableIndex('user', u.id)
+            const isActive = sIdx >= 0 && sIdx === activeIndex
             return (
               <div
                 key={u.id}
-                className={`${styles.userPickerItem} ${disabled ? styles.userPickerItemDisabled : ''}`}
+                id={sIdx >= 0 ? `picker-item-${sIdx}` : undefined}
+                data-picker-index={sIdx >= 0 ? sIdx : undefined}
+                role="option"
+                aria-selected={isActive}
+                aria-disabled={disabled}
+                className={`${styles.userPickerItem} ${
+                  disabled ? styles.userPickerItemDisabled : ''
+                } ${isActive ? styles.userPickerItemActive : ''}`}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   if (disabled) return
-                  onPick({ kind: 'user', user: u })
-                  setQ('')
-                  setOpen(false)
+                  pick({ kind: 'user', user: u })
                 }}
               >
                 <span className={styles.avatar}>{initials(u.username)}</span>
@@ -238,19 +328,23 @@ function UserPicker({ excludeIds, groups, onPick }: UserPickerProps) {
 // ── ReviewCard ────────────────────────────────────────────────────────────────
 
 interface ReviewCardProps {
-  review: UserReview
+  review: ProposalReviewOut
   currentUserId: string
+  groups: LookupItem[]
+  canModerate: boolean
+  canDeleteReview: boolean
+  onRemove: () => void
   onWithdraw: () => void
   onEditOwn: () => void
 }
 
-function ReviewCard({ review, currentUserId, onWithdraw, onEditOwn }: ReviewCardProps) {
-  const isSelf = review.reviewer.id === currentUserId
-  const isSystem = review.reviewer.system === true
+function ReviewCard({ review, currentUserId, groups, canModerate, canDeleteReview, onRemove, onWithdraw, onEditOwn }: ReviewCardProps) {
+  const isSelf = review.reviewer_id === currentUserId
+  const isSystem = review.reviewer_is_system
 
   const cardClasses = [
     styles.reviewCard,
-    statusCardClass(review.status),
+    statusCardClass(review.status as ReviewStatus),
     isSelf ? styles.reviewCardSelf : '',
   ]
     .filter(Boolean)
@@ -261,46 +355,79 @@ function ReviewCard({ review, currentUserId, onWithdraw, onEditOwn }: ReviewCard
       <div className={styles.reviewHead}>
         <span className={styles.reviewer}>
           <span className={`${styles.avatar} ${isSystem ? styles.avatarSystem : ''}`}>
-            {isSystem ? '⚙' : initials(review.reviewer.username)}
+            {isSystem ? '⚙' : initials(review.reviewer_username || '?')}
           </span>
-          <span>{isSystem ? 'System' : review.reviewer.username}</span>
+          <span>{isSystem ? 'System' : review.reviewer_username}</span>
           {isSelf && <span className={styles.selfTag}>you</span>}
-          {isSystem ? (
-            <span className={styles.tagSoft} title="Migrated from the legacy moderation comment — original author unknown">
+          {isSystem && (
+            <span
+              className={styles.tagSoft}
+              title="Migrated from the legacy moderation comment — original author unknown"
+            >
               migrated · author unknown
             </span>
-          ) : null}
+          )}
         </span>
-        <StatusBadge status={review.status} />
+        <StatusBadge status={review.status as ReviewStatus} />
         <span className={styles.reviewMeta}>
           {review.status === 'pending' ? (
-            <span>requested {fmtRel(review.requestedAt)}</span>
+            <span>requested {fmtRel(review.requested_at)}</span>
           ) : (
-            <span>{fmtRel(review.completedAt)}</span>
+            <span>{fmtRel(review.completed_at)}</span>
           )}
           {isSelf && review.status !== 'pending' && !isSystem && (
-            <button className={styles.btnSubtle} onClick={onEditOwn}>edit</button>
-          )}
-          {review.status === 'pending' && !isSystem && (
-            <button className={styles.iconBtn} title="Withdraw request" onClick={onWithdraw} aria-label="Withdraw request">
-              ×
+            <button type="button" className={styles.btnSubtle} onClick={onEditOwn}>
+              edit
             </button>
           )}
+          {!isSystem && (() => {
+            const isCompleted = review.status !== 'pending'
+            const wasRequested =
+              review.requested_directly || (review.requested_via_groups || []).length > 0
+            // Pending reviews: show X for own self-submitted or for moderators
+            const showForPending = !isCompleted && (canModerate || (isSelf && !wasRequested))
+            // Completed reviews: show X for own or moderator
+            const showForCompleted = isCompleted && (isSelf || canModerate)
+            if (!showForPending && !showForCompleted) return null
+            // Withdraw (reset to pending) only for own completed requested reviews without delete perm
+            const withdrawOnly = isSelf && isCompleted && wasRequested && !canDeleteReview && !canModerate
+            return (
+              <button
+                type="button"
+                className={styles.iconBtn}
+                title={withdrawOnly ? 'Withdraw review' : 'Remove review'}
+                onClick={withdrawOnly ? onWithdraw : onRemove}
+                aria-label={withdrawOnly ? 'Withdraw review' : 'Remove review'}
+              >
+                ×
+              </button>
+            )
+          })()}
         </span>
       </div>
 
       {review.status !== 'pending' ? (
         <div className={styles.reviewBody}>
-          {review.comment || <em style={{ color: '#9ca3af' }}>No comment provided.</em>}
+          {review.comment || (
+            <em style={{ color: '#9ca3af' }}>No comment provided.</em>
+          )}
         </div>
       ) : (
         <div className={`${styles.reviewBody} ${styles.reviewBodyMuted}`}>
-          Waiting for {review.reviewer.username.split(' ')[0]} to respond…
-          {review.previousStatus && (
-            <div style={{ marginTop: '0.5rem', fontStyle: 'normal', color: '#6b7280', fontSize: '0.85rem' }}>
-              Previously voted <StatusBadge status={review.previousStatus} />
-              {review.previousComment && (
-                <div className={styles.prevVoteBlock}>"{review.previousComment}"</div>
+          Waiting for {(review.reviewer_username || '').split(' ')[0]} to respond…
+          {review.previous_status && (
+            <div
+              style={{
+                marginTop: '0.5rem',
+                fontStyle: 'normal',
+                color: '#6b7280',
+                fontSize: '0.85rem',
+              }}
+            >
+              Previously voted{' '}
+              <StatusBadge status={review.previous_status as ReviewStatus} />
+              {review.previous_comment && (
+                <div className={styles.prevVoteBlock}>"{review.previous_comment}"</div>
               )}
             </div>
           )}
@@ -308,16 +435,19 @@ function ReviewCard({ review, currentUserId, onWithdraw, onEditOwn }: ReviewCard
       )}
 
       <div className={styles.reviewFootline}>
-        {review.requestedDirectly && review.requestedBy && (
+        {review.requested_directly && review.requested_by_username && (
           <span className={styles.requestedBy}>
-            requested directly by <strong>{review.requestedBy}</strong>
+            requested directly by <strong>{review.requested_by_username}</strong>
           </span>
         )}
-        {(review.requestedViaGroups || []).map((code) => (
-          <span key={code} className={`${styles.requestedBy} ${styles.viaGroup}`}>
-            via <strong>{code}</strong>
-          </span>
-        ))}
+        {(review.requested_via_groups || []).map((code) => {
+          const label = groups.find((g) => g.code === code)?.label ?? code
+          return (
+            <span key={code} className={`${styles.requestedBy} ${styles.viaGroup}`}>
+              via <strong>{label}</strong>
+            </span>
+          )
+        })}
         {isSystem && (
           <span className={styles.requestedBy}>
             migrated from <strong>moderation comment</strong>
@@ -331,10 +461,9 @@ function ReviewCard({ review, currentUserId, onWithdraw, onEditOwn }: ReviewCard
 // ── GroupReviewCard ───────────────────────────────────────────────────────────
 
 interface GroupReviewCardProps {
-  groupRequest: GroupRequest
-  allReviews: ReviewEntry[]
+  groupRequest: ProposalReviewOut
+  allReviews: ProposalReviewOut[]
   currentUserId: string
-  groups: LookupItem[]
   onWithdraw: () => void
 }
 
@@ -344,24 +473,21 @@ function GroupReviewCard({
   currentUserId,
   onWithdraw,
 }: GroupReviewCardProps) {
-  const derived = deriveGroupStatus(groupRequest.group.code, allReviews)
-  const worst = worstMemberVote(groupRequest.group.code, allReviews)
-
+  const derived = deriveGroupStatus(groupRequest.group_code, allReviews)
+  const worst = worstMemberVote(groupRequest.group_code, allReviews)
   const memberVotes = allReviews.filter(
-    (r): r is UserReview =>
-      r.kind === 'user' && (r.requestedViaGroups || []).includes(groupRequest.group.code),
+    (r) =>
+      r.kind === 'user' &&
+      (r.requested_via_groups || []).includes(groupRequest.group_code),
   )
 
   const groupCardClass = [
     styles.reviewCard,
     styles.reviewCardGroup,
-    {
-      approved: styles.reviewCardGroupApproved,
-      rejected: styles.reviewCardGroupRejected,
-      revise: styles.reviewCardGroupRevise,
-      pending: styles.reviewCardGroupPending,
-      note: '',
-    }[derived],
+    derived === 'approved' ? styles.reviewCardGroupApproved : '',
+    derived === 'rejected' ? styles.reviewCardGroupRejected : '',
+    derived === 'revise' ? styles.reviewCardGroupRevise : '',
+    derived === 'pending' ? styles.reviewCardGroupPending : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -371,16 +497,17 @@ function GroupReviewCard({
       <div className={styles.reviewHead}>
         <span className={styles.reviewer}>
           <span className={`${styles.avatar} ${styles.avatarGroup}`}>
-            {initials(groupRequest.group.label)}
+            {initials(groupRequest.group_label || groupRequest.group_code)}
           </span>
-          <span>{groupRequest.group.label}</span>
-          <span className={styles.tagSoft}>area · workshop</span>
+          <span>{groupRequest.group_label || groupRequest.group_code}</span>
+          <span className={styles.tagSoft}>permission group</span>
         </span>
         <StatusBadge status={derived} />
         <span className={styles.reviewMeta}>
-          <span>requested {fmtRel(groupRequest.requestedAt)}</span>
+          <span>requested {fmtRel(groupRequest.requested_at)}</span>
           {derived !== 'approved' && (
             <button
+              type="button"
               className={styles.iconBtn}
               title="Withdraw group request"
               onClick={onWithdraw}
@@ -393,7 +520,10 @@ function GroupReviewCard({
       </div>
 
       <div className={styles.groupSummary}>
-        <span><strong>{memberVotes.filter((r) => r.status !== 'pending').length}/{memberVotes.length}</strong> members voted</span>
+        <span>
+          <strong>{memberVotes.filter((r) => r.status !== 'pending').length}/
+          {memberVotes.length}</strong> members voted
+        </span>
         {derived === 'pending' && worst && (
           <span className={styles.groupTrending}>
             trending <StatusBadge status={worst} />
@@ -409,7 +539,7 @@ function GroupReviewCard({
       {memberVotes.length > 0 && (
         <div className={styles.memberChips}>
           {memberVotes.map((r) => {
-            const isMe = r.reviewer.id === currentUserId
+            const isMe = r.reviewer_id === currentUserId
             const chipClass = [
               styles.memberChip,
               isMe ? styles.memberChipMe : '',
@@ -421,16 +551,20 @@ function GroupReviewCard({
               .join(' ')
             return (
               <span
-                key={r.reviewer.id}
+                key={r.reviewer_id}
                 className={chipClass}
-                title={r.comment ? `${r.reviewer.username}: ${r.comment}` : `${r.reviewer.username} — ${r.status}`}
+                title={
+                  r.comment
+                    ? `${r.reviewer_username}: ${r.comment}`
+                    : `${r.reviewer_username} — ${r.status}`
+                }
               >
                 <span className={`${styles.avatar} ${styles.avatarSmall}`}>
-                  {initials(r.reviewer.username)}
+                  {initials(r.reviewer_username || '?')}
                 </span>
-                <span>{r.reviewer.username.split(' ')[0]}</span>
+                <span>{(r.reviewer_username || '').split(' ')[0]}</span>
                 {isMe && <span className={styles.selfTag}>you</span>}
-                <StatusBadge status={r.status} />
+                <StatusBadge status={r.status as ReviewStatus} />
               </span>
             )
           })}
@@ -438,13 +572,14 @@ function GroupReviewCard({
       )}
 
       <div className={styles.reviewFootline}>
-        {groupRequest.requestedBy && (
+        {groupRequest.requested_by_username && (
           <span className={styles.requestedBy}>
-            requested by <strong>{groupRequest.requestedBy}</strong>
+            requested by <strong>{groupRequest.requested_by_username}</strong>
           </span>
         )}
         <span className={styles.fieldHint}>
-          Any one member of this area can approve. Their comment lives in their own review card below.
+          Any one member of this group can approve. Their comment lives in their own
+          review card below.
         </span>
       </div>
     </div>
@@ -455,21 +590,29 @@ function GroupReviewCard({
 
 interface SelfReviewComposerProps {
   currentUser: UserBasic
-  existing: UserReview | undefined
+  existing: ProposalReviewOut | undefined
   onSubmit: (vote: { status: ReviewStatus; comment: string }) => void
   onCancel?: () => void
+  onDismiss?: () => void
+  dismissTitle?: string
 }
 
-function SelfReviewComposer({ currentUser, existing, onSubmit, onCancel }: SelfReviewComposerProps) {
+function SelfReviewComposer({
+  currentUser,
+  existing,
+  onSubmit,
+  onCancel,
+  onDismiss,
+  dismissTitle,
+}: SelfReviewComposerProps) {
   const isRequested = existing && existing.status === 'pending'
   const isEditing = existing && existing.status !== 'pending'
-  const seedComment = existing?.comment || existing?.previousComment || ''
+  const seedComment = existing?.comment || existing?.previous_comment || ''
   const [comment, setComment] = useState(seedComment)
   const [open, setOpen] = useState(Boolean(existing))
 
-  // Sync seed when existing changes (e.g. on edit click)
   useEffect(() => {
-    setComment(existing?.comment || existing?.previousComment || '')
+    setComment(existing?.comment || existing?.previous_comment || '')
     setOpen(Boolean(existing))
   }, [existing?.id])
 
@@ -487,7 +630,11 @@ function SelfReviewComposer({ currentUser, existing, onSubmit, onCancel }: SelfR
           </span>
         </div>
         <div className={styles.selfReviewRow}>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setOpen(true)}>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={() => setOpen(true)}
+          >
             + Add my review
           </button>
         </div>
@@ -501,7 +648,11 @@ function SelfReviewComposer({ currentUser, existing, onSubmit, onCancel }: SelfR
     setOpen(false)
   }
 
-  const headerLabel = isRequested ? "You've been asked to review" : isEditing ? 'Editing your review' : 'New review'
+  const headerLabel = isRequested
+    ? "You've been asked to review"
+    : isEditing
+    ? 'Editing your review'
+    : 'New review'
 
   const formClasses = [
     styles.selfReviewForm,
@@ -520,18 +671,32 @@ function SelfReviewComposer({ currentUser, existing, onSubmit, onCancel }: SelfR
           <span className={styles.selfTag}>you</span>
         </span>
         <span className={styles.tagSoft}>{headerLabel}</span>
-        {isRequested && existing.requestedBy && (
+        {isRequested && existing.requested_by_username && (
           <span style={{ marginLeft: 'auto', color: '#6b7280', fontSize: '0.82rem' }}>
-            requested by <strong>{existing.requestedBy}</strong> {fmtRel(existing.requestedAt)}
+            requested by <strong>{existing.requested_by_username}</strong>{' '}
+            {fmtRel(existing.requested_at)}
           </span>
+        )}
+        {onDismiss && (
+          <button
+            type="button"
+            className={styles.iconBtn}
+            title={dismissTitle ?? 'Remove review'}
+            onClick={onDismiss}
+            aria-label={dismissTitle ?? 'Remove review'}
+            style={{ marginLeft: isRequested ? undefined : 'auto' }}
+          >
+            ×
+          </button>
         )}
       </div>
 
-      {isRequested && existing.previousStatus && (
+      {isRequested && existing.previous_status && (
         <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-          Resubmitted since your last vote. You previously voted <StatusBadge status={existing.previousStatus} />.
-          {existing.previousComment && (
-            <div className={styles.prevVoteBlock}>"{existing.previousComment}"</div>
+          Resubmitted since your last vote. You previously voted{' '}
+          <StatusBadge status={existing.previous_status as ReviewStatus} />.
+          {existing.previous_comment && (
+            <div className={styles.prevVoteBlock}>"{existing.previous_comment}"</div>
           )}
         </div>
       )}
@@ -551,6 +716,7 @@ function SelfReviewComposer({ currentUser, existing, onSubmit, onCancel }: SelfR
       <div className={styles.selfReviewRow} style={{ justifyContent: 'space-between' }}>
         <div className={styles.selfReviewRow}>
           <button
+            type="button"
             className={`${styles.btn} ${styles.btnApprove}`}
             onClick={() => submit('approved')}
             disabled={!comment.trim()}
@@ -558,6 +724,7 @@ function SelfReviewComposer({ currentUser, existing, onSubmit, onCancel }: SelfR
             ✓ Approve
           </button>
           <button
+            type="button"
             className={`${styles.btn} ${styles.btnRevise}`}
             onClick={() => submit('revise')}
             disabled={!comment.trim()}
@@ -565,6 +732,7 @@ function SelfReviewComposer({ currentUser, existing, onSubmit, onCancel }: SelfR
             ↻ Request revisions
           </button>
           <button
+            type="button"
             className={`${styles.btn} ${styles.btnReject}`}
             onClick={() => submit('rejected')}
             disabled={!comment.trim()}
@@ -573,6 +741,7 @@ function SelfReviewComposer({ currentUser, existing, onSubmit, onCancel }: SelfR
           </button>
         </div>
         <button
+          type="button"
           className={`${styles.btn} ${styles.btnGhost}`}
           onClick={() => {
             setOpen(false)
@@ -584,7 +753,9 @@ function SelfReviewComposer({ currentUser, existing, onSubmit, onCancel }: SelfR
           Cancel
         </button>
       </div>
-      <span className={styles.fieldHint}>A comment is required so the author understands your decision.</span>
+      <span className={styles.fieldHint}>
+        A comment is required so the author understands your decision.
+      </span>
     </div>
   )
 }
@@ -597,84 +768,91 @@ interface ReviewsSectionProps {
   moderationComment?: string
   moderationCommentAt?: string
   canModerate: boolean
+  canDeleteReview: boolean
+  canCreateReview: boolean
 }
 
 export function ReviewsSection({
   proposalId,
   proposalStatus,
   moderationComment,
-  moderationCommentAt,
   canModerate,
+  canDeleteReview,
+  canCreateReview,
 }: ReviewsSectionProps) {
   const { t } = useTranslation()
   const [currentUser, setCurrentUser] = useState<UserBasic | null>(null)
   const [groups, setGroups] = useState<LookupItem[]>([])
-  const [reviews, setReviews] = useState<ReviewEntry[]>([])
+  const [reviews, setReviews] = useState<ProposalReviewOut[]>([])
+  const [loading, setLoading] = useState(true)
   const [editingOwn, setEditingOwn] = useState(false)
   const [pendingRequestee, setPendingRequestee] = useState<PickResult | null>(null)
+  const [saving, setSaving] = useState(false)
   const prevStatusRef = useRef(proposalStatus)
+  const moderationCommentSeededRef = useRef(false)
 
   // Load current user and groups once
   useEffect(() => {
     getCurrentUser().then((u) => setCurrentUser({ id: u.user_id, username: u.username }))
-    fetchProposalAreas().then(setGroups)
+    fetchPermissionGroups().then(setGroups)
   }, [])
 
-  // Seed legacy moderation comment as a System review when present
+  // Load reviews from API
   useEffect(() => {
-    if (!moderationComment) return
-    setReviews((rs) => {
-      if (rs.some((r) => r.kind === 'user' && r.reviewer.system)) return rs
-      const legacyReview: UserReview = {
-        id: 'rv-legacy-migration',
-        kind: 'user',
-        reviewer: SYSTEM_USER,
-        status: 'note',
-        comment: moderationComment,
-        requestedBy: null,
-        requestedAt: moderationCommentAt || null,
-        completedAt: moderationCommentAt || null,
-        requestedDirectly: false,
-        requestedViaGroups: [],
-        migrated: true,
-      }
-      return [legacyReview, ...rs]
-    })
-  }, [moderationComment, moderationCommentAt])
+    if (!proposalId) return
+    setLoading(true)
+    fetchProposalReviews(proposalId)
+      .then(setReviews)
+      .catch((err) => console.error('Failed to load reviews:', err))
+      .finally(() => setLoading(false))
+  }, [proposalId])
 
-  // Reset reviews to pending on resubmission
+  // Migrate legacy moderation_comment as System review (once per proposal, if not already present)
+  useEffect(() => {
+    if (
+      !moderationComment ||
+      !proposalId ||
+      moderationCommentSeededRef.current ||
+      loading
+    )
+      return
+    const alreadyMigrated = reviews.some((r) => r.reviewer_is_system)
+    if (alreadyMigrated) {
+      moderationCommentSeededRef.current = true
+      return
+    }
+    moderationCommentSeededRef.current = true
+    createProposalReview(proposalId, {
+      kind: 'user',
+      reviewer_is_system: true,
+      comment: moderationComment,
+      status: 'note',
+      migrated: true,
+    })
+      .then((r) => setReviews((prev) => [r, ...prev]))
+      .catch((err) => console.error('Failed to migrate moderation comment:', err))
+  }, [moderationComment, proposalId, loading, reviews])
+
+  // Reload reviews when the proposal is resubmitted (backend handles the reset atomically)
   useEffect(() => {
     const prev = prevStatusRef.current
     prevStatusRef.current = proposalStatus
     if (
       proposalStatus === 'submitted' &&
-      (prev === 'revise' || prev === 'rejected' || prev === 'draft')
+      (prev === 'revise' || prev === 'rejected') &&
+      proposalId
     ) {
-      setReviews((rs) =>
-        rs.map((r) => {
-          if (r.kind === 'user' && (r.status === 'note' || r.reviewer.system)) return r
-          if (r.kind === 'group') return { ...r, requestedAt: new Date().toISOString() }
-          if (r.status === 'pending') return r
-          return {
-            ...r,
-            status: 'pending' as const,
-            comment: '',
-            completedAt: null,
-            requestedAt: new Date().toISOString(),
-            previousStatus: r.status,
-            previousComment: r.comment,
-          }
-        }),
-      )
+      fetchProposalReviews(proposalId)
+        .then(setReviews)
+        .catch((err) => console.error('Failed to reload reviews after resubmission:', err))
     }
-  }, [proposalStatus])
+  }, [proposalStatus, proposalId])
 
   const currentUserId = currentUser?.id ?? ''
-  const currentUsername = currentUser?.username ?? ''
 
   // Ids already in the list (for picker exclusion)
   const excludeIds = reviews.map((r) =>
-    r.kind === 'group' ? r.group.code : r.reviewer.id,
+    r.kind === 'group' ? r.group_code : (r.reviewer_id ?? ''),
   )
 
   // Stats: count each direct ask once; group requests count once via derived status
@@ -682,119 +860,118 @@ export function ReviewsSection({
     let approved = 0, revise = 0, rejected = 0, pending = 0
     for (const r of reviews) {
       if (r.kind === 'user' && r.status === 'note') continue
-      // Skip user reviews that are solely group-request members (not direct asks)
       if (
         r.kind === 'user' &&
-        !r.requestedDirectly &&
-        (r.requestedViaGroups || []).length > 0
-      ) continue
-
-      const s = r.kind === 'group' ? deriveGroupStatus(r.group.code, reviews) : r.status
+        !r.requested_directly &&
+        (r.requested_via_groups || []).length > 0
+      )
+        continue
+      const s = r.kind === 'group' ? deriveGroupStatus(r.group_code, reviews) : r.status
       if (s === 'approved') approved++
       else if (s === 'revise') revise++
       else if (s === 'rejected') rejected++
-      else if (s === 'pending') pending++
+      else pending++
     }
     return { approved, revise, rejected, pending, total: approved + revise + rejected + pending }
   }, [reviews])
 
-  // Request a review from user or group
-  const requestReview = useCallback(() => {
-    if (!pendingRequestee || !currentUser) return
-    const requestedBy = currentUser.username
-    const now = new Date().toISOString()
-
-    if (pendingRequestee.kind === 'group') {
-      const g = pendingRequestee.group
-      const groupReq: GroupRequest = {
-        id: `rv-g-${g.code}-${Date.now()}`,
-        kind: 'group',
-        group: g,
-        requestedBy,
-        requestedAt: now,
-      }
-      setReviews((rs) => [...rs, groupReq])
-    } else {
-      const u = pendingRequestee.user
-      setReviews((rs) => {
-        const existing = rs.find((r): r is UserReview => r.kind === 'user' && r.reviewer.id === u.id)
-        if (existing) {
-          return rs.map((r) =>
-            r.kind === 'user' && r.reviewer.id === u.id
-              ? { ...r, requestedDirectly: true }
-              : r,
-          )
-        }
-        const newReview: UserReview = {
-          id: `rv-${u.id}-${Date.now()}`,
+  const requestReview = useCallback(async () => {
+    if (!pendingRequestee || !proposalId) return
+    setSaving(true)
+    try {
+      if (pendingRequestee.kind === 'group') {
+        const r = await createProposalReview(proposalId, {
+          kind: 'group',
+          group_code: pendingRequestee.group.code,
+        })
+        setReviews((prev) => [...prev, r])
+      } else {
+        const r = await createProposalReview(proposalId, {
           kind: 'user',
-          reviewer: u,
-          status: 'pending',
-          comment: '',
-          requestedBy,
-          requestedAt: now,
-          completedAt: null,
-          requestedDirectly: true,
-          requestedViaGroups: [],
-        }
-        return [...rs, newReview]
-      })
+          reviewer_id: pendingRequestee.user.id,
+          requested_directly: true,
+        })
+        setReviews((prev) => [...prev, r])
+      }
+      setPendingRequestee(null)
+    } catch (err) {
+      console.error('Failed to request review:', err)
+    } finally {
+      setSaving(false)
     }
-    setPendingRequestee(null)
-  }, [pendingRequestee, currentUser])
+  }, [pendingRequestee, proposalId])
 
-  const withdrawReview = useCallback((id: string) => {
-    setReviews((rs) => rs.filter((r) => r.id !== id))
-  }, [])
+  const removeReview = useCallback(
+    async (reviewId: string) => {
+      if (!proposalId) return
+      try {
+        await deleteProposalReview(proposalId, reviewId)
+        setReviews((prev) => prev.filter((r) => r.id !== reviewId))
+      } catch (err) {
+        console.error('Failed to remove review:', err)
+      }
+    },
+    [proposalId],
+  )
+
+  const resetReviewToPending = useCallback(
+    async (review: ProposalReviewOut) => {
+      if (!proposalId) return
+      try {
+        const updated = await updateProposalReview(proposalId, review.id, 'pending', review.comment)
+        setReviews((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      } catch (err) {
+        console.error('Failed to withdraw review:', err)
+      }
+    },
+    [proposalId],
+  )
 
   const submitOwnReview = useCallback(
-    ({ status, comment }: { status: ReviewStatus; comment: string }) => {
-      if (!currentUser) return
-      setReviews((rs) => {
-        const idx = rs.findIndex(
-          (r): r is UserReview => r.kind === 'user' && r.reviewer.id === currentUser.id,
+    async ({ status, comment }: { status: ReviewStatus; comment: string }) => {
+      if (!proposalId || !currentUser) return
+      setSaving(true)
+      try {
+        const existing = reviews.find(
+          (r) => r.kind === 'user' && r.reviewer_id === currentUser.id,
         )
-        const updated: UserReview = {
-          id: idx >= 0 ? (rs[idx] as UserReview).id : `rv-self-${Date.now()}`,
-          kind: 'user',
-          reviewer: currentUser,
-          status,
-          comment,
-          requestedBy: idx >= 0 ? (rs[idx] as UserReview).requestedBy : null,
-          requestedAt: idx >= 0 ? (rs[idx] as UserReview).requestedAt : new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-          requestedDirectly: idx >= 0 ? (rs[idx] as UserReview).requestedDirectly : false,
-          requestedViaGroups: idx >= 0 ? (rs[idx] as UserReview).requestedViaGroups : [],
+        let updated: ProposalReviewOut
+        if (existing) {
+          updated = await updateProposalReview(proposalId, existing.id, status, comment)
+          setReviews((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+        } else {
+          updated = await createProposalReview(proposalId, {
+            kind: 'user',
+            status,
+            comment,
+            requested_directly: false,
+          })
+          setReviews((prev) => [...prev, updated])
         }
-        if (idx >= 0) {
-          const next = [...rs]
-          next[idx] = updated
-          return next
-        }
-        return [...rs, updated]
-      })
-      setEditingOwn(false)
+        setEditingOwn(false)
+      } catch (err) {
+        console.error('Failed to submit review:', err)
+      } finally {
+        setSaving(false)
+      }
     },
-    [currentUser],
+    [proposalId, currentUser, reviews],
   )
 
   const ownReview = reviews.find(
-    (r): r is UserReview => r.kind === 'user' && r.reviewer.id === currentUserId,
+    (r): r is ProposalReviewOut =>
+      r.kind === 'user' && r.reviewer_id === currentUserId,
   )
 
   const isLocked = proposalStatus === 'accepted' || proposalStatus === 'archived'
 
-  // Render order: note reviews first, then groups and users sorted by requestedAt
   const sortedReviews = useMemo(() => {
-    const notes = reviews.filter((r): r is UserReview => r.kind === 'user' && r.status === 'note')
+    const notes = reviews.filter((r) => r.kind === 'user' && r.status === 'note')
     const rest = reviews.filter((r) => !(r.kind === 'user' && r.status === 'note'))
     return [...notes, ...rest]
   }, [reviews])
 
-  const isOwnPendingUser = (r: ReviewEntry): boolean =>
-    r.kind === 'user' && r.reviewer.id === currentUserId && r.status === 'pending'
-
-  if (!currentUser) return null
+  if (!currentUser || loading) return null
 
   return (
     <fieldset className={styles.reviewsFieldset}>
@@ -806,10 +983,18 @@ export function ReviewsSection({
             <span>no reviews yet</span>
           ) : (
             <>
-              {stats.approved > 0 && <span style={{ color: '#2e7d32' }}>{stats.approved} approved</span>}
-              {stats.revise > 0 && <span style={{ color: '#8b6508' }}>{stats.revise} revise</span>}
-              {stats.rejected > 0 && <span style={{ color: '#b71c1c' }}>{stats.rejected} rejected</span>}
-              {stats.pending > 0 && <span style={{ color: '#b25e09' }}>{stats.pending} pending</span>}
+              {stats.approved > 0 && (
+                <span style={{ color: '#2e7d32' }}>{stats.approved} approved</span>
+              )}
+              {stats.revise > 0 && (
+                <span style={{ color: '#8b6508' }}>{stats.revise} revise</span>
+              )}
+              {stats.rejected > 0 && (
+                <span style={{ color: '#b71c1c' }}>{stats.rejected} rejected</span>
+              )}
+              {stats.pending > 0 && (
+                <span style={{ color: '#b25e09' }}>{stats.pending} pending</span>
+              )}
             </>
           )}
         </div>
@@ -842,14 +1027,17 @@ export function ReviewsSection({
 
       <div className={styles.reviewList}>
         {reviews.length === 0 && (
-          <div className={`${styles.reviewBody} ${styles.reviewBodyMuted}`} style={{ padding: '0.5rem 0' }}>
+          <div
+            className={`${styles.reviewBody} ${styles.reviewBodyMuted}`}
+            style={{ padding: '0.5rem 0' }}
+          >
             No reviews yet. Request one below or add your own.
           </div>
         )}
 
         {sortedReviews.map((r) => {
-          if (isOwnPendingUser(r)) return null
-          if (editingOwn && r.kind === 'user' && r.reviewer.id === currentUserId) return null
+          if (editingOwn && r.kind === 'user' && r.reviewer_id === currentUserId)
+            return null
           if (r.kind === 'group') {
             return (
               <GroupReviewCard
@@ -857,8 +1045,7 @@ export function ReviewsSection({
                 groupRequest={r}
                 allReviews={reviews}
                 currentUserId={currentUserId}
-                groups={groups}
-                onWithdraw={() => withdrawReview(r.id)}
+                onWithdraw={() => void removeReview(r.id)}
               />
             )
           }
@@ -867,21 +1054,43 @@ export function ReviewsSection({
               key={r.id}
               review={r}
               currentUserId={currentUserId}
-              onWithdraw={() => withdrawReview(r.id)}
+              groups={groups}
+              canModerate={canModerate}
+              canDeleteReview={canDeleteReview}
+              onRemove={() => void removeReview(r.id)}
+              onWithdraw={() => void resetReviewToPending(r)}
               onEditOwn={() => setEditingOwn(true)}
             />
           )
         })}
       </div>
 
-      {!isLocked && (!ownReview || ownReview.status === 'pending' || editingOwn) && (
-        <SelfReviewComposer
-          currentUser={currentUser}
-          existing={editingOwn ? ownReview : ownReview?.status === 'pending' ? ownReview : undefined}
-          onSubmit={submitOwnReview}
-          onCancel={() => setEditingOwn(false)}
-        />
-      )}
+      {!isLocked && (ownReview?.status === 'pending' || editingOwn || (!ownReview && (canCreateReview || canModerate))) && (() => {
+        const existing = editingOwn
+          ? ownReview
+          : ownReview?.status === 'pending'
+          ? ownReview
+          : undefined
+        const wasRequested =
+          existing && (existing.requested_directly || (existing.requested_via_groups || []).length > 0)
+        const withdrawOnly = existing && wasRequested && !canDeleteReview && !canModerate
+        const dismissAction = existing
+          ? withdrawOnly
+            ? () => void resetReviewToPending(existing)
+            : () => void removeReview(existing.id)
+          : undefined
+        const dismissTitle = withdrawOnly ? 'Withdraw review' : 'Remove review'
+        return (
+          <SelfReviewComposer
+            currentUser={currentUser}
+            existing={existing}
+            onSubmit={(v) => void submitOwnReview(v)}
+            onCancel={() => setEditingOwn(false)}
+            onDismiss={dismissAction}
+            dismissTitle={dismissTitle}
+          />
+        )
+      })()}
 
       {!isLocked && canModerate && (
         <div className={styles.requestRow}>
@@ -892,7 +1101,14 @@ export function ReviewsSection({
               onPick={setPendingRequestee}
             />
             {pendingRequestee && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  flexWrap: 'wrap',
+                }}
+              >
                 <span style={{ fontSize: '0.85rem', color: '#374151' }}>
                   Request review from:{' '}
                   <strong>
@@ -901,61 +1117,29 @@ export function ReviewsSection({
                       : pendingRequestee.user.username}
                   </strong>
                 </span>
-                <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={requestReview}>
+                <button
+                  type="button"
+                  className={`${styles.btn} ${styles.btnPrimary}`}
+                  onClick={() => void requestReview()}
+                  disabled={saving}
+                >
                   + Request review
                 </button>
-                <button className={`${styles.btn} ${styles.btnGhost}`} onClick={() => setPendingRequestee(null)}>
+                <button
+                  type="button"
+                  className={`${styles.btn} ${styles.btnGhost}`}
+                  onClick={() => setPendingRequestee(null)}
+                >
                   Cancel
                 </button>
               </div>
             )}
             <span className={styles.requestHint}>
-              Pick a person or an area. Area reviews ask all members to comment.
+              Pick a person or a permission group. Group reviews let all members comment.
             </span>
           </div>
         </div>
       )}
     </fieldset>
   )
-}
-
-// ── Review gating helper (exported for ProposalTransitionButtons) ──────────────
-
-export function computeReviewGating(reviews: ReviewEntry[]): {
-  canAccept: boolean
-  hint: string | null
-} {
-  const effectiveStatuses: ReviewStatus[] = []
-
-  for (const r of reviews) {
-    if (r.kind === 'user' && r.status === 'note') continue
-    if (
-      r.kind === 'user' &&
-      !r.requestedDirectly &&
-      (r.requestedViaGroups || []).length > 0
-    ) continue
-    effectiveStatuses.push(r.kind === 'group' ? deriveGroupStatus(r.group.code, reviews) : r.status)
-  }
-
-  const pending = effectiveStatuses.filter((s) => s === 'pending').length
-  const rejected = effectiveStatuses.filter((s) => s === 'rejected').length
-  const revise = effectiveStatuses.filter((s) => s === 'revise').length
-
-  if (effectiveStatuses.length === 0) return { canAccept: true, hint: null }
-  if (rejected > 0)
-    return {
-      canAccept: false,
-      hint: `${rejected} reviewer${rejected > 1 ? 's' : ''} rejected this proposal.`,
-    }
-  if (revise > 0)
-    return {
-      canAccept: false,
-      hint: `${revise} reviewer${revise > 1 ? 's' : ''} requested changes.`,
-    }
-  if (pending > 0)
-    return {
-      canAccept: false,
-      hint: `Waiting on ${pending} pending review${pending > 1 ? 's' : ''}.`,
-    }
-  return { canAccept: true, hint: 'All reviews approved — ready to accept.' }
 }

@@ -407,7 +407,13 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
                 self.status in [self.Status.DRAFT, self.Status.REVISE]
             )
         if perm.endswith(f".view_{Proposal.__name__.lower()}"):
-            return user == self.owner or user in self.editors.all()
+            if user == self.owner or user in self.editors.all():
+                return True
+            if self.status != self.Status.DRAFT and ProposalReview.objects.filter(
+                kind=ProposalReview.KIND_USER, reviewer=user, proposal=self
+            ).exists():
+                return True
+            return False
         if perm.endswith(f".delete_{Proposal.__name__.lower()}"):
             return user == self.owner and self.status in [self.Status.DRAFT]
         if perm.endswith(f".accept_{Proposal.__name__.lower()}"):
@@ -513,6 +519,14 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
                 "moderate_proposal",
                 "Can write moderation comments on proposals",
             ),
+            (
+                "create_review_proposal",
+                "Can create unsolicited reviews on any visible proposal",
+            ),
+            (
+                "delete_review_proposal",
+                "Can fully delete requested reviews (others can only withdraw their own)",
+            ),
         ]
 
     @property
@@ -525,6 +539,91 @@ class Proposal(ExportModelOperationsMixin("proposal"), HistoricalMetaBase):
         return self.title
 
 
+class ProposalReview(MetaBase):
+    """A review or group-review-request for a proposal.
+
+    kind='user'  — an individual user's vote (including the system/migrated review)
+    kind='group' — a request directed at a ProposalArea group; individual member
+                   votes are stored as kind='user' entries with requestedViaGroups set.
+    """
+
+    KIND_USER = "user"
+    KIND_GROUP = "group"
+    KIND_CHOICES = [(KIND_USER, "User review"), (KIND_GROUP, "Group request")]
+
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+    STATUS_REVISE = "revise"
+    STATUS_NOTE = "note"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Awaiting review"),
+        (STATUS_APPROVED, "Approved"),
+        (STATUS_REJECTED, "Rejected"),
+        (STATUS_REVISE, "Revisions requested"),
+        (STATUS_NOTE, "Informational note"),
+    ]
+
+    proposal = models.ForeignKey(
+        Proposal,
+        on_delete=models.CASCADE,
+        related_name="reviews",
+    )
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+
+    # For user reviews: the reviewer (null only for the system/migrated review)
+    reviewer = models.ForeignKey(
+        OpenIDUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="proposal_reviews",
+    )
+    reviewer_is_system = models.BooleanField(
+        default=False,
+        help_text="True for the legacy moderation_comment migrated as a System review",
+    )
+
+    # For group requests: the ProposalArea.code this request is directed at
+    group_code = models.CharField(max_length=100, blank=True, default="")
+
+    # Review outcome (user reviews only; group requests leave this at defaults)
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
+    comment = models.TextField(blank=True, max_length=2000)
+
+    # Who requested this review
+    requested_by = models.ForeignKey(
+        OpenIDUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    requested_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    # Attribution (user reviews only)
+    requested_directly = models.BooleanField(default=False)
+    # JSON list of ProposalArea.code strings
+    requested_via_groups = models.JSONField(default=list, blank=True)
+
+    # Previous vote preserved across resubmissions
+    previous_status = models.CharField(max_length=10, blank=True, default="")
+    previous_comment = models.TextField(blank=True, default="")
+
+    # Set for the legacy moderation_comment migration
+    migrated = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        if self.kind == self.KIND_GROUP:
+            return f"Group request for {self.group_code} on proposal {self.proposal_id}"
+        reviewer_name = self.reviewer.username if self.reviewer else "System"
+        return f"Review by {reviewer_name} on proposal {self.proposal_id}"
 
 
 def check_proposal_required_fields(proposal: Proposal) -> dict[Any, Any]:
