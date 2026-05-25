@@ -11,7 +11,7 @@ from viewflow import fsm
 from viewflow.fsm.base import Transition
 
 import apiv1
-from apiv1.models import Event, Proposal, check_proposal_required_fields
+from apiv1.models import Event, Proposal, ProposalReview, check_proposal_required_fields
 from openid_user_management.models import OpenIDUser
 from prometheus_client import Gauge
 
@@ -90,6 +90,61 @@ class ProposalFlow:
             return True
 
         return permission_handler
+
+    @staticmethod
+    def _review_gate_message(proposal: Proposal) -> str | None:
+        """Return a disable reason if any reviews block acceptance, or None if clear."""
+        reviews = list(
+            ProposalReview.objects.filter(proposal=proposal).values(
+                "kind", "status", "reviewer_is_system",
+                "group_code", "requested_directly", "requested_via_groups",
+            )
+        )
+
+        def _derive_group(code: str) -> str:
+            member_statuses = [
+                r["status"] for r in reviews
+                if r["kind"] == "user" and code in (r["requested_via_groups"] or [])
+            ]
+            if "rejected" in member_statuses:
+                return "rejected"
+            if "revise" in member_statuses:
+                return "revise"
+            if "approved" in member_statuses:
+                return "approved"
+            return "pending"
+
+        pending_count = rejected_count = revise_count = 0
+        for r in reviews:
+            if r["kind"] == "user" and (r["status"] == "note" or r["reviewer_is_system"]):
+                continue
+            if (
+                r["kind"] == "user"
+                and not r["requested_directly"]
+                and (r["requested_via_groups"] or [])
+            ):
+                continue
+            effective = _derive_group(r["group_code"]) if r["kind"] == "group" else r["status"]
+            if effective == "pending":
+                pending_count += 1
+            elif effective == "rejected":
+                rejected_count += 1
+            elif effective == "revise":
+                revise_count += 1
+
+        if rejected_count:
+            return f"{rejected_count} reviewer{'s' if rejected_count > 1 else ''} rejected this proposal."
+        if revise_count:
+            return f"{revise_count} reviewer{'s' if revise_count > 1 else ''} requested changes."
+        if pending_count:
+            return f"Waiting on {pending_count} pending review{'s' if pending_count > 1 else ''}."
+        return None
+
+    def reviews_allow_accept(self: object) -> bool:
+        """Condition: no pending/rejected/revise reviews are blocking acceptance."""
+        if not isinstance(self, ProposalFlow):
+            return False
+        return ProposalFlow._review_gate_message(self.object) is None
 
     def has_required_information(self: object) -> bool:
         if not isinstance(self, ProposalFlow):
@@ -214,6 +269,7 @@ class ProposalFlow:
         source=Proposal.Status.SUBMITTED,
         target=Proposal.Status.ACCEPTED,
         label="Accept proposal",
+        conditions=[reviews_allow_accept],
         permission=has_permission((apiv1, "accept", Proposal)),
     )
     def accept(self):
@@ -323,21 +379,21 @@ class ProposalFlow:
                     if missing_items
                     else "incomplete information"
                 )
-                return ProposalTransition(
-                    action=action,
-                    label_id=label_id,
-                    target_status=transition.target,
-                    enabled=False,
-                    disable_reason=f"Incomplete proposal: {missing_str}",
+                disable_reason = f"Incomplete proposal: {missing_str}"
+            elif action == "accept":
+                disable_reason = (
+                    ProposalFlow._review_gate_message(self.object)
+                    or "Conditions not met for this transition"
                 )
             else:
-                return ProposalTransition(
-                    action=action,
-                    label_id=label_id,
-                    target_status=transition.target,
-                    enabled=False,
-                    disable_reason="Conditions not met for this transition",
-                )
+                disable_reason = "Conditions not met for this transition"
+            return ProposalTransition(
+                action=action,
+                label_id=label_id,
+                target_status=transition.target,
+                enabled=False,
+                disable_reason=disable_reason,
+            )
 
         # Check permissions
         has_perm = transition.has_perm(self, user)
