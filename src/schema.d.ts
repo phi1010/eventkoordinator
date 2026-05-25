@@ -1708,6 +1708,19 @@ export interface components {
             /** Timestamp */
             timestamp: string;
         };
+        /** ReviewStats */
+        ReviewStats: {
+            /** Approved */
+            approved: number;
+            /** Revise */
+            revise: number;
+            /** Rejected */
+            rejected: number;
+            /** Pending */
+            pending: number;
+            /** Total */
+            total: number;
+        };
         /** ProposalListItem */
         ProposalListItem: {
             /** Accepted Event Count */
@@ -1730,6 +1743,9 @@ export interface components {
             submission_type?: string | null;
             /** Title */
             title: string;
+            review_stats: components["schemas"]["ReviewStats"];
+            /** My Review Status */
+            my_review_status?: string | null;
         };
         /** ProposalSpeakerOut */
         ProposalSpeakerOut: {

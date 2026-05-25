@@ -16,6 +16,7 @@ import {
 import { usePermissions } from './usePermissions'
 import { translateApiError } from './apiError'
 import styles from './ProposalDashboard.module.css'
+import reviewStyles from './ProposalReviews.module.css'
 
 // ── display helpers ───────────────────────────────────────────────────────────
 
@@ -55,6 +56,38 @@ function SyncStatusBadge({ platform, status }: { platform: string; status: strin
   }
   const cls = `${styles.syncBadge} ${clsMap[status] ?? styles['syncBadge--unknown']}`
   return <span className={cls}>{platform}</span>
+}
+
+function ReviewStatsBar({ stats }: { stats: ProposalListItem['review_stats'] }) {
+  if (!stats || stats.total === 0) return <span style={{ color: '#9ca3af' }}>—</span>
+  return (
+    <div className={reviewStyles.progressBar} title={`${stats.approved}/${stats.revise}/${stats.rejected}/${stats.pending}`}>
+      {stats.approved > 0 && (
+        <div className={`${reviewStyles.progressSeg} ${reviewStyles.progressSegApproved}`}
+             style={{ width: `${(stats.approved / stats.total) * 100}%` }} />
+      )}
+      {stats.revise > 0 && (
+        <div className={`${reviewStyles.progressSeg} ${reviewStyles.progressSegRevise}`}
+             style={{ width: `${(stats.revise / stats.total) * 100}%` }} />
+      )}
+      {stats.rejected > 0 && (
+        <div className={`${reviewStyles.progressSeg} ${reviewStyles.progressSegRejected}`}
+             style={{ width: `${(stats.rejected / stats.total) * 100}%` }} />
+      )}
+      {stats.pending > 0 && (
+        <div className={reviewStyles.progressSeg}
+             style={{ width: `${(stats.pending / stats.total) * 100}%`, background: '#e5e7eb' }} />
+      )}
+    </div>
+  )
+}
+
+function MyReviewBadge({ status }: { status: string | null | undefined }) {
+  const { t } = useTranslation()
+  if (!status) return <span style={{ color: '#9ca3af' }}>—</span>
+  const label = t(`reviews.status.${status}`, status)
+  const cls = `${styles.badge} ${styles[`badge--review-${status}`] ?? styles['badge--unknown']}`
+  return <span className={cls}>{label}</span>
 }
 
 function AgreedDatesBar({ accepted, intended }: { accepted: number; intended: number }) {
@@ -115,15 +148,18 @@ const EMPTY_FILTERS: FilterValues = { callTitles: [], creators: [], types: [], s
 type ColKey =
   | 'call' | 'creator' | 'speakers' | 'type' | 'status' | 'agreedDates'
   | 'eventDatetime' | 'eventStatus' | 'eventSync'
+  | 'reviews' | 'myReview'
 
 const ALL_COLUMN_KEYS: ColKey[] = [
   'call', 'creator', 'speakers', 'type', 'status', 'agreedDates',
   'eventDatetime', 'eventStatus', 'eventSync',
+  'reviews', 'myReview',
 ]
 
 const DEFAULT_VISIBLE: Record<ColKey, boolean> = {
   call: true, creator: true, speakers: true, type: true, status: true, agreedDates: true,
   eventDatetime: true, eventStatus: true, eventSync: true,
+  reviews: true, myReview: true,
 }
 
 // ── expanded row data ─────────────────────────────────────────────────────────
@@ -298,6 +334,8 @@ export function ProposalDashboard() {
         { key: 'type',        label: t('proposalDashboard.columns.type') },
         { key: 'status',      label: t('proposalDashboard.columns.status') },
         { key: 'agreedDates', label: t('proposalDashboard.columns.agreedDates') },
+        { key: 'reviews',     label: t('proposalDashboard.columns.reviews') },
+        { key: 'myReview',    label: t('proposalDashboard.columns.myReview') },
       ],
     },
     {
@@ -486,6 +524,19 @@ export function ProposalDashboard() {
             body={(p: ProposalListItem) => (
               <AgreedDatesBar accepted={p.accepted_event_count} intended={p.occurrence_count} />
             )}
+          />
+        )}
+        {visibleColumns.reviews && (
+          <Column
+            header={t('proposalDashboard.columns.reviews')}
+            style={{ minWidth: '8rem' }}
+            body={(p: ProposalListItem) => <ReviewStatsBar stats={p.review_stats} />}
+          />
+        )}
+        {visibleColumns.myReview && (
+          <Column
+            header={t('proposalDashboard.columns.myReview')}
+            body={(p: ProposalListItem) => <MyReviewBadge status={p.my_review_status} />}
           />
         )}
       </DataTable>

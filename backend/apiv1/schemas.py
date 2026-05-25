@@ -148,6 +148,14 @@ class ProposalSummary(Schema):
     call_id: Optional[uuid.UUID] = None
 
 
+class ReviewStats(Schema):
+    approved: int = 0
+    revise: int = 0
+    rejected: int = 0
+    pending: int = 0
+    total: int = 0
+
+
 class ProposalListItem(Schema):
     id: uuid.UUID
     title: str
@@ -158,6 +166,8 @@ class ProposalListItem(Schema):
     occurrence_count: int
     accepted_event_count: int
     call_title: Optional[str] = None
+    review_stats: ReviewStats = Field(default_factory=ReviewStats)
+    my_review_status: Optional[str] = None  # None | 'requested' | 'approved' | 'rejected' | 'revise'
 
 
 class ProposalChecklistItem(Schema):

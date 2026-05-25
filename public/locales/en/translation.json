@@ -518,6 +518,7 @@
       "rejected": "Rejected",
       "revise": "Revisions requested",
       "pending": "Awaiting review",
+      "requested": "Requested",
       "note": "Comment"
     },
     "relative": {
@@ -599,6 +600,8 @@
       "type": "Type",
       "status": "Status",
       "agreedDates": "Vereinbarte Termine",
+      "reviews": "Reviews",
+      "myReview": "Your review",
       "eventDatetime": "Date / Time",
       "eventStatus": "Status",
       "eventSync": "Sync"

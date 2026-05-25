@@ -49,6 +49,7 @@ from apiv1.schemas import (
     ProposalTransitionOut,
     ProposalTransitions,
     ProposalUpdateIn,
+    ReviewStats,
     UserBasic,
 )
 
@@ -258,6 +259,64 @@ _ACCEPTED_EVENT_STATUSES = {
 }
 
 
+def _derive_group_status(group_code: str, reviews: list) -> str:
+    """Derive a group review's effective status from its member votes."""
+    member_reviews = [
+        r for r in reviews
+        if r.kind == ProposalReview.KIND_USER and group_code in (r.requested_via_groups or [])
+    ]
+    if any(r.status == "rejected" for r in member_reviews):
+        return "rejected"
+    if any(r.status == "revise" for r in member_reviews):
+        return "revise"
+    if any(r.status == "approved" for r in member_reviews):
+        return "approved"
+    return "pending"
+
+
+def _compute_review_stats(reviews: list, current_user_id) -> tuple[ReviewStats, str | None]:
+    """Compute aggregate review stats and the current user's review status."""
+    approved = revise = rejected = pending = 0
+    my_status: str | None = None
+
+    # Determine current user's review status first (before aggregation filtering)
+    for r in reviews:
+        if r.kind == ProposalReview.KIND_USER and r.reviewer_id == current_user_id:
+            if r.status == "note":
+                continue
+            if r.status == "pending" and not r.requested_directly and (r.requested_via_groups or []):
+                # Not yet voted, only requested via group — treat as "requested"
+                my_status = "requested"
+            elif r.status == "pending":
+                my_status = "requested"
+            else:
+                my_status = r.status
+            break
+
+    for r in reviews:
+        if r.kind == ProposalReview.KIND_USER and r.status == "note":
+            continue
+        if (
+            r.kind == ProposalReview.KIND_USER
+            and not r.requested_directly
+            and (r.requested_via_groups or [])
+        ):
+            # Counted via their group entry instead
+            continue
+        s = _derive_group_status(r.group_code, reviews) if r.kind == ProposalReview.KIND_GROUP else r.status
+        if s == "approved":
+            approved += 1
+        elif s == "revise":
+            revise += 1
+        elif s == "rejected":
+            rejected += 1
+        else:
+            pending += 1
+
+    total = approved + revise + rejected + pending
+    return ReviewStats(approved=approved, revise=revise, rejected=rejected, pending=pending, total=total), my_status
+
+
 @router.get(
     "/",
     response={200: list[ProposalListItem], 401: ErrorOut, 403: ErrorOut},
@@ -267,7 +326,7 @@ def list_proposals(request) -> list[ProposalListItem]:
     """List all proposals visible to the current user."""
     proposals_qs = (
         ProposalModel.objects.select_related("submission_type", "owner", "call")
-        .prefetch_related("speakers", "events")
+        .prefetch_related("speakers", "events", "reviews__reviewer")
         .order_by("title")
     )
     result = []
@@ -275,6 +334,8 @@ def list_proposals(request) -> list[ProposalListItem]:
         if not request.user.has_perm((apiv1, "view", ProposalModel), p):
             continue
         accepted = sum(1 for e in p.events.all() if e.status in _ACCEPTED_EVENT_STATUSES)
+        reviews = list(p.reviews.all())
+        review_stats, my_review_status = _compute_review_stats(reviews, request.user.pk)
         result.append(
             ProposalListItem(
                 id=p.id,
@@ -286,6 +347,8 @@ def list_proposals(request) -> list[ProposalListItem]:
                 occurrence_count=p.occurrence_count,
                 accepted_event_count=accepted,
                 call_title=p.call.title if p.call else None,
+                review_stats=review_stats,
+                my_review_status=my_review_status,
             )
         )
     return result

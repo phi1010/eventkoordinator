@@ -994,6 +994,14 @@ export interface SpeakerIn {
   biography?: string
 }
 
+export interface ReviewStats {
+  approved: number
+  revise: number
+  rejected: number
+  pending: number
+  total: number
+}
+
 export interface ProposalListItem {
   id: string
   title: string
@@ -1004,6 +1012,8 @@ export interface ProposalListItem {
   occurrence_count: number
   accepted_event_count: number
   call_title?: string | null
+  review_stats: ReviewStats
+  my_review_status?: string | null
 }
 
 export async function fetchProposalsList(): Promise<ProposalListItem[]> {

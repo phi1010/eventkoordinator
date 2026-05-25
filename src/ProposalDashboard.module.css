@@ -54,6 +54,12 @@
 .badge--rejected  { background: #fee2e2; color: #b91c1c; }
 .badge--unknown   { background: #e5e7eb; color: #374151; }
 
+/* Review status badges */
+.badge--review-approved  { background: #dcfce7; color: #15803d; }
+.badge--review-rejected  { background: #fee2e2; color: #b91c1c; }
+.badge--review-revise    { background: #fef3c7; color: #92400e; }
+.badge--review-requested { background: #dbeafe; color: #1d4ed8; }
+
 /* Event status badges */
 .badge--event-draft     { background: #e5e7eb; color: #374151; }
 .badge--event-proposed  { background: #ede9fe; color: #6d28d9; }
