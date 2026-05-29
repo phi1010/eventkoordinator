@@ -189,7 +189,7 @@ def export_excel(request):
 
     # ── write workbook ─────────────────────────────────────────────────────────
     buf = io.BytesIO()
-    with xlsxwriter.Workbook(buf) as workbook:
+    with xlsxwriter.Workbook(buf, {"strings_to_formulas": False}) as workbook:
         df_proposals.write_excel(
             workbook=workbook,
             worksheet="Proposals",
