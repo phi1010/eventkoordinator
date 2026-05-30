@@ -1,8 +1,12 @@
 """
 userdefinedmodel API — mounted at /api/udm/ in project urls.py.
+All endpoints use typed response schemas for OpenAPI compatibility:
+  - Success: response={N: SchemaType} + return (N, schema_obj)
+  - Errors:  return JsonResponse({...}, status=N) — passes through Ninja unchanged
 """
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from datetime import timedelta
@@ -11,22 +15,20 @@ from typing import Any, Optional
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.utils import OperationalError
-from django.http import HttpRequest
+from django.http import JsonResponse
 from django.utils.timezone import now
-from ninja import NinjaAPI, Router, File, UploadedFile
+from ninja import NinjaAPI, File, UploadedFile
 from ninja.security import django_auth
 
 from userdefinedmodel.schemas import (
     BulkMigrationCreateIn,
     BulkMigrationOut,
     BulkMigrationStatus,
-    ConcurrentEditError,
     ConfigDraftIn,
     ConfigLanguageOut,
     ConfigVersionOut,
     EditHistoryOut,
     EditGroupOut,
-    EditingNotAllowedError,
     EntityCreateIn,
     EntityOut,
     EntityPatchIn,
@@ -35,7 +37,6 @@ from userdefinedmodel.schemas import (
     FieldConfigUpdateIn,
     FieldDefinitionOut,
     FieldEditOut,
-    FieldErrorsOut,
     GroupAutocompleteItem,
     EntityAutocompleteItem,
     MigrationExecuteIn,
@@ -49,9 +50,9 @@ from userdefinedmodel.schemas import (
     UDMTypeOut,
     UserAutocompleteItem,
     UserRefOut,
-    WorkflowOut,
     WorkflowStateOut,
     WorkflowTransitionOut,
+    WorkflowOut,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,152 +60,37 @@ logger = logging.getLogger(__name__)
 api = NinjaAPI(urls_namespace="udm", auth=django_auth)
 
 
-def _http409_concurrent():
-    return 409, {"error": "concurrent_edit", "retry_after_ms": 500}
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def _http409_concurrent() -> JsonResponse:
+    return JsonResponse({"error": "concurrent_edit", "retry_after_ms": 500}, status=409)
 
 
-# ─── FieldConfig CRUD ─────────────────────────────────────────────────────────
-
-@api.get("/configs/", response=list[FieldConfigOut], auth=django_auth)
-def list_configs(request):
-    from userdefinedmodel.models import FieldConfig, UserDefinedModelEntity
-    from django.db.models import Count, Q
-
-    configs = FieldConfig.objects.prefetch_related("languages", "user_defined_model_types")
-    result = []
-    for cfg in configs:
-        stale_count = UserDefinedModelEntity.objects.filter(
-            user_defined_model_type__field_config=cfg
-        ).exclude(
-            config_version__config=cfg
-        ).count()
-        result.append(FieldConfigOut(
-            id=cfg.id,
-            name=cfg.name,
-            description=cfg.description,
-            stale_entity_count=stale_count,
-            type_ids=[t.id for t in cfg.user_defined_model_types.all()],
-            languages=[ConfigLanguageOut(code=l.code, label=l.label, is_default=l.is_default, sort_order=l.sort_order) for l in cfg.languages.all()],
-        ))
-    return result
-
-
-@api.post("/configs/", response={201: FieldConfigOut}, auth=django_auth)
-def create_config(request, payload: FieldConfigCreateIn):
-    from userdefinedmodel.models import FieldConfig, ConfigLanguage, ConfigVersion
-
-    if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
-
-    with transaction.atomic():
-        cfg = FieldConfig.objects.create(name=payload.name, description=payload.description)
-        for lang in payload.languages:
-            ConfigLanguage.objects.create(
-                config=cfg, code=lang.code, label=lang.label,
-                is_default=lang.is_default, sort_order=lang.sort_order,
-            )
-        # Create initial empty draft version
-        ConfigVersion.objects.create(config=cfg, status=ConfigVersion.Status.DRAFT)
-
-    return 201, FieldConfigOut(
-        id=cfg.id, name=cfg.name, description=cfg.description,
-        stale_entity_count=0, type_ids=[],
-        languages=[ConfigLanguageOut(code=l.code, label=l.label, is_default=l.is_default, sort_order=l.sort_order)
-                   for l in cfg.languages.all()],
-    )
-
-
-@api.get("/configs/{config_id}/", response=FieldConfigOut, auth=django_auth)
-def get_config(request, config_id: uuid.UUID):
-    from userdefinedmodel.models import FieldConfig, UserDefinedModelEntity
-    try:
-        cfg = FieldConfig.objects.prefetch_related("languages", "user_defined_model_types").get(id=config_id)
-    except FieldConfig.DoesNotExist:
-        return 404, {"detail": "Not found"}
-
-    stale_count = UserDefinedModelEntity.objects.filter(
-        user_defined_model_type__field_config=cfg
-    ).exclude(config_version__config=cfg).count()
-
-    return FieldConfigOut(
-        id=cfg.id, name=cfg.name, description=cfg.description,
-        stale_entity_count=stale_count,
-        type_ids=[t.id for t in cfg.user_defined_model_types.all()],
-        languages=[ConfigLanguageOut(code=l.code, label=l.label, is_default=l.is_default, sort_order=l.sort_order)
-                   for l in cfg.languages.all()],
-    )
-
-
-@api.patch("/configs/{config_id}/", response=FieldConfigOut, auth=django_auth)
-def update_config(request, config_id: uuid.UUID, payload: FieldConfigUpdateIn):
-    from userdefinedmodel.models import FieldConfig, UserDefinedModelEntity
-    if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
-    try:
-        cfg = FieldConfig.objects.get(id=config_id)
-    except FieldConfig.DoesNotExist:
-        return 404, {"detail": "Not found"}
-
-    if payload.name is not None:
-        cfg.name = payload.name
-    if payload.description is not None:
-        cfg.description = payload.description
-    cfg.save()
-
-    stale_count = UserDefinedModelEntity.objects.filter(
-        user_defined_model_type__field_config=cfg
-    ).exclude(config_version__config=cfg).count()
-
-    return FieldConfigOut(
-        id=cfg.id, name=cfg.name, description=cfg.description,
-        stale_entity_count=stale_count,
-        type_ids=[t.id for t in cfg.user_defined_model_types.all()],
-        languages=[ConfigLanguageOut(code=l.code, label=l.label, is_default=l.is_default, sort_order=l.sort_order)
-                   for l in cfg.languages.all()],
-    )
-
-
-@api.delete("/configs/{config_id}/", response={204: None}, auth=django_auth)
-def delete_config(request, config_id: uuid.UUID):
-    from userdefinedmodel.models import FieldConfig
-    if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
-    try:
-        cfg = FieldConfig.objects.get(id=config_id)
-    except FieldConfig.DoesNotExist:
-        return 404, {"detail": "Not found"}
-    if cfg.user_defined_model_types.exists():
-        return 400, {"detail": "Config is still in use by UDMTypes"}
-    if cfg.versions.filter(nodes__isnull=False).exists():
-        return 400, {"detail": "Config has entities referencing it"}
-    cfg.delete()
-    return 204, None
+def _entity_out(entity) -> EntityOut:
+    from userdefinedmodel.writer import serialize_node
+    data = serialize_node(entity)
+    return EntityOut(**data)
 
 
 def _serialize_config_version(version) -> ConfigVersionOut:
-    from userdefinedmodel.models import FieldDefinition, FieldDefinitionTranslation, FieldDefaultValue
-    from userdefinedmodel.schemas import WorkflowOut, WorkflowStateOut, WorkflowTransitionOut
-
     fields_out = []
     for fd in version.field_definitions.prefetch_related("translations", "defaults", "single_field_rules").all():
         label_dict = {t.language: t.label for t in fd.translations.all()}
         help_dict = {t.language: t.help_text for t in fd.translations.all()}
 
-        # Build save_rules summary
         save_rules = {}
         for rule in fd.single_field_rules.filter(applies_to_save=True):
             real = rule.get_real_instance()
             rule_type = real.__class__.__name__
             save_rules[rule_type] = {"id": str(rule.id), "admin_label": rule.admin_label}
 
-        # Build default
-        defaults = list(fd.defaults.all())
+        defaults_qs = list(fd.defaults.all())
         default_val = None
-        if defaults:
+        if defaults_qs:
             if fd.is_localized:
-                default_val = {d.language: d.get_value(field=fd) for d in defaults}
+                default_val = {d.language: d.get_value(field=fd) for d in defaults_qs}
             else:
-                default_val = defaults[0].get_value(field=fd)
+                default_val = defaults_qs[0].get_value(field=fd)
 
         fields_out.append(FieldDefinitionOut(
             id=fd.id,
@@ -259,13 +145,105 @@ def _serialize_config_version(version) -> ConfigVersionOut:
     )
 
 
+def _field_config_out(cfg) -> FieldConfigOut:
+    from userdefinedmodel.models import UserDefinedModelEntity
+    stale_count = UserDefinedModelEntity.objects.filter(
+        user_defined_model_type__field_config=cfg
+    ).exclude(config_version__config=cfg).count()
+    return FieldConfigOut(
+        id=cfg.id, name=cfg.name, description=cfg.description,
+        stale_entity_count=stale_count,
+        type_ids=[t.id for t in cfg.user_defined_model_types.all()],
+        languages=[
+            ConfigLanguageOut(code=l.code, label=l.label, is_default=l.is_default, sort_order=l.sort_order)
+            for l in cfg.languages.all()
+        ],
+    )
+
+
+# ─── FieldConfig CRUD ─────────────────────────────────────────────────────────
+
+@api.get("/configs/", response=list[FieldConfigOut], auth=django_auth)
+def list_configs(request):
+    from userdefinedmodel.models import FieldConfig
+    configs = FieldConfig.objects.prefetch_related("languages", "user_defined_model_types")
+    return [_field_config_out(cfg) for cfg in configs]
+
+
+@api.post("/configs/", response={201: FieldConfigOut}, auth=django_auth)
+def create_config(request, payload: FieldConfigCreateIn):
+    from userdefinedmodel.models import FieldConfig, ConfigLanguage, ConfigVersion
+    if not request.user.is_staff:
+        return JsonResponse({"detail": "Staff only"}, status=403)
+    with transaction.atomic():
+        cfg = FieldConfig.objects.create(name=payload.name, description=payload.description)
+        for lang in payload.languages:
+            ConfigLanguage.objects.create(
+                config=cfg, code=lang.code, label=lang.label,
+                is_default=lang.is_default, sort_order=lang.sort_order,
+            )
+        ConfigVersion.objects.create(config=cfg, status=ConfigVersion.Status.DRAFT)
+    return 201, FieldConfigOut(
+        id=cfg.id, name=cfg.name, description=cfg.description,
+        stale_entity_count=0, type_ids=[],
+        languages=[
+            ConfigLanguageOut(code=l.code, label=l.label, is_default=l.is_default, sort_order=l.sort_order)
+            for l in cfg.languages.all()
+        ],
+    )
+
+
+@api.get("/configs/{config_id}/", response=FieldConfigOut, auth=django_auth)
+def get_config(request, config_id: uuid.UUID):
+    from userdefinedmodel.models import FieldConfig
+    try:
+        cfg = FieldConfig.objects.prefetch_related("languages", "user_defined_model_types").get(id=config_id)
+    except FieldConfig.DoesNotExist:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    return _field_config_out(cfg)
+
+
+@api.patch("/configs/{config_id}/", response=FieldConfigOut, auth=django_auth)
+def update_config(request, config_id: uuid.UUID, payload: FieldConfigUpdateIn):
+    from userdefinedmodel.models import FieldConfig
+    if not request.user.is_staff:
+        return JsonResponse({"detail": "Staff only"}, status=403)
+    try:
+        cfg = FieldConfig.objects.prefetch_related("languages", "user_defined_model_types").get(id=config_id)
+    except FieldConfig.DoesNotExist:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    if payload.name is not None:
+        cfg.name = payload.name
+    if payload.description is not None:
+        cfg.description = payload.description
+    cfg.save()
+    return _field_config_out(cfg)
+
+
+@api.delete("/configs/{config_id}/", auth=django_auth)
+def delete_config(request, config_id: uuid.UUID):
+    from userdefinedmodel.models import FieldConfig
+    if not request.user.is_staff:
+        return JsonResponse({"detail": "Staff only"}, status=403)
+    try:
+        cfg = FieldConfig.objects.get(id=config_id)
+    except FieldConfig.DoesNotExist:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    if cfg.user_defined_model_types.exists():
+        return JsonResponse({"detail": "Config is still in use by UDMTypes"}, status=400)
+    if cfg.versions.filter(nodes__isnull=False).exists():
+        return JsonResponse({"detail": "Config has entities referencing it"}, status=400)
+    cfg.delete()
+    return JsonResponse({}, status=204)
+
+
 @api.get("/configs/{config_id}/versions/published/", response=ConfigVersionOut, auth=django_auth)
 def get_published_version(request, config_id: uuid.UUID):
     from userdefinedmodel.models import ConfigVersion
     try:
         version = ConfigVersion.objects.get(config_id=config_id, status=ConfigVersion.Status.PUBLISHED)
     except ConfigVersion.DoesNotExist:
-        return 404, {"detail": "No published version"}
+        return JsonResponse({"detail": "No published version"}, status=404)
     return _serialize_config_version(version)
 
 
@@ -273,11 +251,11 @@ def get_published_version(request, config_id: uuid.UUID):
 def get_draft_version(request, config_id: uuid.UUID):
     from userdefinedmodel.models import ConfigVersion
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         version = ConfigVersion.objects.get(config_id=config_id, status=ConfigVersion.Status.DRAFT)
     except ConfigVersion.DoesNotExist:
-        return 404, {"detail": "No draft version"}
+        return JsonResponse({"detail": "No draft version"}, status=404)
     return _serialize_config_version(version)
 
 
@@ -287,21 +265,13 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
         ConfigVersion, FieldConfig, FieldDefinition, FieldDefinitionTranslation,
         WorkflowDefinition, WorkflowState, WorkflowStateTranslation,
         WorkflowTransition, WorkflowTransitionTranslation,
-        SingleFieldValidationRule, MultiFieldValidationRule, MultiFieldRuleAssociation,
-    )
-    from userdefinedmodel.models.rules import (
-        RequiredRule, MinLengthRule, MaxLengthRule, RegexRule,
-        MinValueRule, MaxValueRule, MinItemsRule, MaxItemsRule,
-        MaxFileSizeRule, AllowedMimeTypesRule, AllowedMimeTypeEntry,
-        RequiredInLanguageRule, AtLeastOneRequiredRule, ExactlyOneRequiredRule, MutualExclusionRule,
     )
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
-
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         cfg = FieldConfig.objects.get(id=config_id)
     except FieldConfig.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
 
     with transaction.atomic():
         draft, _ = ConfigVersion.objects.get_or_create(
@@ -310,7 +280,6 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
         )
         draft.notes = payload.notes
 
-        # Replace workflow if provided
         if payload.workflow:
             wf_data = payload.workflow
             wf = WorkflowDefinition.objects.create(name=wf_data.name, description=wf_data.description)
@@ -335,19 +304,16 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
             draft.workflow = wf
 
         draft.save()
-
-        # Delete old field definitions for this draft
         draft.field_definitions.all().delete()
 
-        # Recreate field definitions
-        field_map = {}  # slug -> FieldDefinition
+        field_map = {}
         for fd_in in payload.fields:
             submodel_config = None
             if fd_in.submodel_config_version_id:
                 try:
                     submodel_config = ConfigVersion.objects.get(id=fd_in.submodel_config_version_id)
                 except ConfigVersion.DoesNotExist:
-                    return 400, {"detail": f"ConfigVersion {fd_in.submodel_config_version_id} not found"}
+                    return JsonResponse({"detail": f"ConfigVersion {fd_in.submodel_config_version_id} not found"}, status=400)
 
             fd = FieldDefinition.objects.create(
                 version=draft,
@@ -365,12 +331,9 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
                 FieldDefinitionTranslation.objects.create(
                     field=fd, language=lang, label=label, help_text=help_text
                 )
-
-            # Create single-field rules
             for rule_in in fd_in.rules:
                 _create_single_field_rule(fd, rule_in)
 
-        # Create multi-field rules
         for mfr_in in payload.multi_field_rules:
             _create_multi_field_rule(draft, field_map, mfr_in)
 
@@ -427,7 +390,6 @@ def _create_multi_field_rule(version, field_map, mfr_in):
         rule = MutualExclusionRule.objects.create(**common)
     else:
         return
-
     for slug in mfr_in.field_slugs:
         field = field_map.get(slug)
         if field:
@@ -438,25 +400,23 @@ def _create_multi_field_rule(version, field_map, mfr_in):
 def publish_draft(request, config_id: uuid.UUID):
     from userdefinedmodel.models import ConfigVersion, FieldConfig
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         cfg = FieldConfig.objects.get(id=config_id)
     except FieldConfig.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     try:
         draft = ConfigVersion.objects.get(config=cfg, status=ConfigVersion.Status.DRAFT)
     except ConfigVersion.DoesNotExist:
-        return 404, {"detail": "No draft to publish"}
-
+        return JsonResponse({"detail": "No draft to publish"}, status=404)
     try:
         draft.publish()
     except ValidationError as exc:
-        return 422, {"errors": exc.message_dict}
-
+        return JsonResponse({"errors": exc.message_dict if hasattr(exc, "message_dict") else str(exc)}, status=422)
     return _serialize_config_version(draft)
 
 
-# ─── UDMType config alias ─────────────────────────────────────────────────────
+# ─── UDMType ──────────────────────────────────────────────────────────────────
 
 @api.get("/types/{type_id}/config/", response=ConfigVersionOut, auth=django_auth)
 def get_type_config(request, type_id: uuid.UUID):
@@ -464,15 +424,13 @@ def get_type_config(request, type_id: uuid.UUID):
     try:
         udm_type = UserDefinedModelType.objects.select_related("field_config").get(id=type_id)
     except UserDefinedModelType.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     if not udm_type.field_config:
-        return 404, {"detail": "No field config assigned"}
+        return JsonResponse({"detail": "No field config assigned"}, status=404)
     try:
-        version = ConfigVersion.objects.get(
-            config=udm_type.field_config, status=ConfigVersion.Status.PUBLISHED
-        )
+        version = ConfigVersion.objects.get(config=udm_type.field_config, status=ConfigVersion.Status.PUBLISHED)
     except ConfigVersion.DoesNotExist:
-        return 404, {"detail": "No published version for this config"}
+        return JsonResponse({"detail": "No published version"}, status=404)
     return _serialize_config_version(version)
 
 
@@ -480,22 +438,18 @@ def get_type_config(request, type_id: uuid.UUID):
 def update_udm_type(request, type_id: uuid.UUID, field_config_id: Optional[uuid.UUID] = None):
     from userdefinedmodel.models import UserDefinedModelType, FieldConfig
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         udm_type = UserDefinedModelType.objects.get(id=type_id)
     except UserDefinedModelType.DoesNotExist:
-        return 404, {"detail": "Not found"}
-
+        return JsonResponse({"detail": "Not found"}, status=404)
     if field_config_id is not None:
         try:
             cfg = FieldConfig.objects.get(id=field_config_id)
         except FieldConfig.DoesNotExist:
-            return 404, {"detail": "FieldConfig not found"}
-        # Check for stale entities without a confirmed BulkMigrationPlan
+            return JsonResponse({"detail": "FieldConfig not found"}, status=404)
         from userdefinedmodel.models import BulkMigrationPlan, UserDefinedModelEntity
-        stale = UserDefinedModelEntity.objects.filter(
-            user_defined_model_type=udm_type
-        ).exclude(config_version__config=cfg)
+        stale = UserDefinedModelEntity.objects.filter(user_defined_model_type=udm_type).exclude(config_version__config=cfg)
         if stale.exists():
             confirmed_plans = BulkMigrationPlan.objects.filter(
                 target_version__config=cfg,
@@ -503,24 +457,19 @@ def update_udm_type(request, type_id: uuid.UUID, field_config_id: Optional[uuid.
                 status=BulkMigrationPlan.Status.DONE,
             )
             if not confirmed_plans.exists():
-                return 400, {"detail": "Stale entities exist without a confirmed BulkMigrationPlan"}
+                return JsonResponse({"detail": "Stale entities exist without a confirmed BulkMigrationPlan"}, status=400)
         udm_type.field_config = cfg
         udm_type.save()
-
-    return UDMTypeOut(
-        id=udm_type.id, name=udm_type.name,
-        description=udm_type.description,
-        field_config_id=udm_type.field_config_id,
-    )
+    return UDMTypeOut(id=udm_type.id, name=udm_type.name, description=udm_type.description, field_config_id=udm_type.field_config_id)
 
 
-# ─── Policy CRUD ──────────────────────────────────────────────────────────────
+# ─── Policies ─────────────────────────────────────────────────────────────────
 
 @api.get("/policies/", response=list[PolicyOut], auth=django_auth)
 def list_policies(request):
     from userdefinedmodel.models import Policy
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     return [PolicyOut(slug=p.slug, source=p.source) for p in Policy.objects.all()]
 
 
@@ -528,7 +477,7 @@ def list_policies(request):
 def create_policy(request, payload: PolicyCreateIn):
     from userdefinedmodel.models import Policy
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     policy = Policy.objects.create(slug=payload.slug, source=payload.source)
     return 201, PolicyOut(slug=policy.slug, source=policy.source)
 
@@ -539,7 +488,7 @@ def get_policy(request, slug: str):
     try:
         p = Policy.objects.get(slug=slug)
     except Policy.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     return PolicyOut(slug=p.slug, source=p.source)
 
 
@@ -547,29 +496,29 @@ def get_policy(request, slug: str):
 def update_policy(request, slug: str, payload: PolicyUpdateIn):
     from userdefinedmodel.models import Policy
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         p = Policy.objects.get(slug=slug)
     except Policy.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     p.source = payload.source
     p.save()
     return PolicyOut(slug=p.slug, source=p.source)
 
 
-@api.delete("/policies/{slug}/", response={204: None}, auth=django_auth)
+@api.delete("/policies/{slug}/", auth=django_auth)
 def delete_policy(request, slug: str):
     from userdefinedmodel.models import Policy
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         p = Policy.objects.get(slug=slug)
     except Policy.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     if p.type_assignments.exists():
-        return 400, {"detail": "Policy is assigned to UDMTypes"}
+        return JsonResponse({"detail": "Policy is assigned to UDMTypes"}, status=400)
     p.delete()
-    return 204, None
+    return JsonResponse({}, status=204)
 
 
 @api.get("/types/{type_id}/policies/", response=list[PolicyOut], auth=django_auth)
@@ -578,7 +527,7 @@ def list_type_policies(request, type_id: uuid.UUID):
     try:
         udm_type = UserDefinedModelType.objects.get(id=type_id)
     except UserDefinedModelType.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     return [PolicyOut(slug=tp.policy.slug, source=tp.policy.source)
             for tp in udm_type.type_policies.select_related("policy").order_by("sort_order")]
 
@@ -587,43 +536,36 @@ def list_type_policies(request, type_id: uuid.UUID):
 def assign_policy(request, type_id: uuid.UUID, payload: PolicyAssignIn):
     from userdefinedmodel.models import UserDefinedModelType, Policy, UserDefinedModelTypePolicy
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         udm_type = UserDefinedModelType.objects.get(id=type_id)
     except UserDefinedModelType.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     try:
         policy = Policy.objects.get(slug=payload.policy_slug)
     except Policy.DoesNotExist:
-        return 404, {"detail": "Policy not found"}
-    tp, _ = UserDefinedModelTypePolicy.objects.get_or_create(
+        return JsonResponse({"detail": "Policy not found"}, status=404)
+    UserDefinedModelTypePolicy.objects.get_or_create(
         user_defined_model_type=udm_type, policy=policy,
         defaults={"sort_order": payload.sort_order},
     )
     return 201, PolicyOut(slug=policy.slug, source=policy.source)
 
 
-@api.delete("/types/{type_id}/policies/{slug}/", response={204: None}, auth=django_auth)
+@api.delete("/types/{type_id}/policies/{slug}/", auth=django_auth)
 def remove_policy(request, type_id: uuid.UUID, slug: str):
     from userdefinedmodel.models import UserDefinedModelType, UserDefinedModelTypePolicy
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         udm_type = UserDefinedModelType.objects.get(id=type_id)
     except UserDefinedModelType.DoesNotExist:
-        return 404, {"detail": "Not found"}
-    UserDefinedModelTypePolicy.objects.filter(
-        user_defined_model_type=udm_type, policy__slug=slug
-    ).delete()
-    return 204, None
+        return JsonResponse({"detail": "Not found"}, status=404)
+    UserDefinedModelTypePolicy.objects.filter(user_defined_model_type=udm_type, policy__slug=slug).delete()
+    return JsonResponse({}, status=204)
 
 
 # ─── Entities ─────────────────────────────────────────────────────────────────
-
-def _entity_out(entity) -> dict:
-    from userdefinedmodel.writer import serialize_node
-    return serialize_node(entity)
-
 
 @api.post("/entities/", response={201: EntityOut}, auth=django_auth)
 def create_entity(request, payload: EntityCreateIn):
@@ -631,32 +573,23 @@ def create_entity(request, payload: EntityCreateIn):
     try:
         udm_type = UserDefinedModelType.objects.select_related("field_config").get(id=payload.user_defined_model_type_id)
     except UserDefinedModelType.DoesNotExist:
-        return 404, {"detail": "UDMType not found"}
+        return JsonResponse({"detail": "UDMType not found"}, status=404)
     if not udm_type.field_config:
-        return 400, {"detail": "UDMType has no field config"}
-
+        return JsonResponse({"detail": "UDMType has no field config"}, status=400)
     try:
-        version = ConfigVersion.objects.get(
-            config=udm_type.field_config, status=ConfigVersion.Status.PUBLISHED
-        )
+        version = ConfigVersion.objects.get(config=udm_type.field_config, status=ConfigVersion.Status.PUBLISHED)
     except ConfigVersion.DoesNotExist:
-        return 400, {"detail": "No published config version"}
-
+        return JsonResponse({"detail": "No published config version"}, status=400)
     with transaction.atomic():
         entity = UserDefinedModelEntity.objects.create(
-            config_version=version,
-            user_defined_model_type=udm_type,
-            owner=request.user,
+            config_version=version, user_defined_model_type=udm_type, owner=request.user,
         )
-        # Assign initial workflow state
         if version.workflow_id:
             initial_state = version.workflow.states.filter(is_initial=True).first()
             if initial_state:
                 entity.current_state = initial_state
                 entity.save(update_fields=["current_state"])
-
         entity.materialize_defaults()
-
     return 201, _entity_out(entity)
 
 
@@ -668,16 +601,15 @@ def get_entity(request, entity_id: uuid.UUID):
             "config_version", "user_defined_model_type", "owner", "current_state"
         ).prefetch_related("editors", "field_values__field", "children").get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     return _entity_out(entity)
 
 
-@api.patch("/entities/{entity_id}/", auth=django_auth)
+@api.patch("/entities/{entity_id}/", response=EntityOut, auth=django_auth)
 def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn):
     from userdefinedmodel.models import UserDefinedModelEntity
     from userdefinedmodel.writer import apply_patch
     from userdefinedmodel.engine import TransitionError
-
     try:
         with transaction.atomic():
             try:
@@ -686,43 +618,40 @@ def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn):
                           .select_related("config_version", "current_state")
                           .get(id=entity_id))
             except UserDefinedModelEntity.DoesNotExist:
-                return 404, {"detail": "Not found"}
+                return JsonResponse({"detail": "Not found"}, status=404)
             except OperationalError:
                 return _http409_concurrent()
-
             try:
                 apply_patch(entity, payload.changed_fields, request.user)
             except TransitionError as e:
                 if e.http_status == 409:
-                    return 409, {"error": e.args[0], **e.details}
-                return e.http_status, {"error": str(e)}
+                    return JsonResponse({"error": e.args[0], **e.details}, status=409)
+                return JsonResponse({"error": str(e)}, status=e.http_status)
             except ValidationError as exc:
-                return 400, {"errors": exc.message_dict if hasattr(exc, "message_dict") else {"__all__": [str(exc)]}}
-
+                errors = exc.message_dict if hasattr(exc, "message_dict") else {"__all__": [str(exc)]}
+                return JsonResponse({"errors": errors}, status=400)
     except OperationalError:
         return _http409_concurrent()
+    return _entity_out(entity)
 
-    return 200, _entity_out(entity)
 
-
-@api.delete("/entities/{entity_id}/", response={204: None}, auth=django_auth)
+@api.delete("/entities/{entity_id}/", auth=django_auth)
 def delete_entity(request, entity_id: uuid.UUID):
     from userdefinedmodel.models import UserDefinedModelEntity
     try:
         entity = UserDefinedModelEntity.objects.get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     if entity.owner_id != request.user.id and not request.user.is_staff:
-        return 403, {"detail": "Only owner can delete"}
+        return JsonResponse({"detail": "Only owner can delete"}, status=403)
     entity.delete()
-    return 204, None
+    return JsonResponse({}, status=204)
 
 
-@api.post("/entities/{entity_id}/transition/", auth=django_auth)
+@api.post("/entities/{entity_id}/transition/", response=EntityOut, auth=django_auth)
 def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn):
     from userdefinedmodel.models import UserDefinedModelEntity
     from userdefinedmodel.engine import execute_transition, TransitionError
-
     try:
         with transaction.atomic():
             try:
@@ -731,32 +660,31 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn):
                           .select_related("config_version__workflow", "current_state")
                           .get(id=entity_id))
             except UserDefinedModelEntity.DoesNotExist:
-                return 404, {"detail": "Not found"}
+                return JsonResponse({"detail": "Not found"}, status=404)
             except OperationalError:
                 return _http409_concurrent()
-
             try:
                 execute_transition(entity, payload.transition, request.user)
             except TransitionError as e:
-                return e.http_status, {"error": str(e), **e.details}
-
+                return JsonResponse({"error": str(e), **e.details}, status=e.http_status)
     except OperationalError:
         return _http409_concurrent()
-
-    return 200, _entity_out(entity)
+    return _entity_out(entity)
 
 
 @api.get("/entities/{entity_id}/history/", response=EditHistoryOut, auth=django_auth)
 def entity_history(request, entity_id: uuid.UUID, page: int = 1, page_size: int = 20):
     from userdefinedmodel.models import UserDefinedModelEntity
-    from userdefinedmodel.models.history import EditGroup, FieldEdit
+    from userdefinedmodel.models.history import EditGroup
     try:
         entity = UserDefinedModelEntity.objects.get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
 
     qs = EditGroup.objects.filter(root_entity=entity).prefetch_related(
-        "field_edits__field", "field_edits__old_attachment", "field_edits__new_attachment",
+        "field_edits__field__translations",
+        "field_edits__old_attachment",
+        "field_edits__new_attachment",
         "saved_by",
     ).order_by("-saved_at")
 
@@ -773,7 +701,6 @@ def entity_history(request, entity_id: uuid.UUID, page: int = 1, page_size: int 
             if fe.field:
                 trans = fe.field.translations.first()
                 label = trans.label if trans else slug
-
             edits.append(FieldEditOut(
                 change_kind=fe.change_kind,
                 field_slug=slug,
@@ -813,18 +740,22 @@ def entity_history(request, entity_id: uuid.UUID, page: int = 1, page_size: int 
 def entity_policy_document(request, entity_id: uuid.UUID):
     from userdefinedmodel.models import UserDefinedModelEntity
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         entity = UserDefinedModelEntity.objects.get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
-        return 404, {"detail": "Not found"}
-    return entity.to_policy_document()
+        return JsonResponse({"detail": "Not found"}, status=404)
+    return JsonResponse(entity.to_policy_document())
 
 
 # ─── Staging files ────────────────────────────────────────────────────────────
 
 @api.post("/staging-files/", response={201: StagingFileOut}, auth=django_auth)
-def upload_staging_file(request, file: UploadedFile = File(...), intended_field_id: Optional[uuid.UUID] = None):
+def upload_staging_file(
+    request,
+    file: UploadedFile = File(...),
+    intended_field_id: Optional[uuid.UUID] = None,
+):
     from userdefinedmodel.models.node import StagingFile
     staging = StagingFile.objects.create(
         uploader=request.user,
@@ -844,16 +775,16 @@ def upload_staging_file(request, file: UploadedFile = File(...), intended_field_
     )
 
 
-@api.delete("/staging-files/{staging_id}/", response={204: None}, auth=django_auth)
+@api.delete("/staging-files/{staging_id}/", auth=django_auth)
 def delete_staging_file(request, staging_id: uuid.UUID):
     from userdefinedmodel.models.node import StagingFile
     try:
         staging = StagingFile.objects.get(id=staging_id, uploader=request.user)
     except StagingFile.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     staging.file.delete(save=False)
     staging.delete()
-    return 204, None
+    return JsonResponse({}, status=204)
 
 
 # ─── Autocomplete ─────────────────────────────────────────────────────────────
@@ -861,18 +792,16 @@ def delete_staging_file(request, staging_id: uuid.UUID):
 @api.get("/users/", response=list[UserAutocompleteItem], auth=django_auth)
 def search_users(request, q: str = "", group_ids: str = "", ids: str = ""):
     from openid_user_management.models import OpenIDUser
-    from django.db.models import Q
-
+    from django.db.models import Q as DQ
     qs = OpenIDUser.objects.filter(is_active=True)
     if group_ids:
         gids = [int(x) for x in group_ids.split(",") if x.strip().isdigit()]
         qs = qs.filter(groups__id__in=gids)
     if q:
-        qs = qs.filter(Q(username__icontains=q) | Q(email__icontains=q))
+        qs = qs.filter(DQ(username__icontains=q) | DQ(email__icontains=q))
     if ids:
         uid_list = [x.strip() for x in ids.split(",") if x.strip()]
         qs = OpenIDUser.objects.filter(id__in=uid_list)
-
     return [UserAutocompleteItem(id=u.id, display_name=u.username) for u in qs[:50]]
 
 
@@ -888,7 +817,7 @@ def search_groups(request, q: str = "", ids: str = ""):
     return [GroupAutocompleteItem(id=g.id, name=g.name) for g in qs[:50]]
 
 
-@api.get("/entities/", response=list[EntityAutocompleteItem], auth=django_auth)
+@api.get("/entity-search/", response=list[EntityAutocompleteItem], auth=django_auth)
 def search_entities(request, q: str = "", type_ids: str = "", ids: str = ""):
     from userdefinedmodel.models import UserDefinedModelEntity
     qs = UserDefinedModelEntity.objects.select_related("config_version", "user_defined_model_type")
@@ -898,45 +827,45 @@ def search_entities(request, q: str = "", type_ids: str = "", ids: str = ""):
     if ids:
         id_list = [x.strip() for x in ids.split(",") if x.strip()]
         qs = UserDefinedModelEntity.objects.filter(id__in=id_list)
-    result = []
-    for entity in qs[:50]:
-        result.append(EntityAutocompleteItem(
-            id=entity.id, display=str(entity.id),
-            type_id=entity.user_defined_model_type_id,
-        ))
-    return result
+    return [EntityAutocompleteItem(id=entity.id, display=str(entity.id), type_id=entity.user_defined_model_type_id)
+            for entity in qs[:50]]
 
 
-# ─── Migration ───────────────────────────────────────────────────────────────
+# ─── Migration ────────────────────────────────────────────────────────────────
 
 @api.get("/entities/{entity_id}/migration-preview/", response=MigrationPreviewOut, auth=django_auth)
-def migration_preview(request, entity_id: uuid.UUID, target_user_defined_model_type: Optional[uuid.UUID] = None, target_version: Optional[uuid.UUID] = None):
-    from userdefinedmodel.models import UserDefinedModelEntity, ConfigVersion, UserDefinedModelType, UserDefinedModelEntityMigration
-
+def migration_preview(
+    request,
+    entity_id: uuid.UUID,
+    target_user_defined_model_type: Optional[uuid.UUID] = None,
+    target_version: Optional[uuid.UUID] = None,
+):
+    from userdefinedmodel.models import (
+        UserDefinedModelEntity, ConfigVersion, UserDefinedModelType, UserDefinedModelEntityMigration,
+    )
+    from userdefinedmodel.schemas import MigrationAction, MigrationPreviewFieldOut
     try:
         entity = UserDefinedModelEntity.objects.select_related("config_version").get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
 
     if target_version:
         try:
             tgt_version = ConfigVersion.objects.get(id=target_version)
         except ConfigVersion.DoesNotExist:
-            return 404, {"detail": "Target version not found"}
+            return JsonResponse({"detail": "Target version not found"}, status=404)
         tgt_type = entity.user_defined_model_type
     elif target_user_defined_model_type:
         try:
             tgt_type = UserDefinedModelType.objects.select_related("field_config").get(id=target_user_defined_model_type)
         except UserDefinedModelType.DoesNotExist:
-            return 404, {"detail": "Target type not found"}
+            return JsonResponse({"detail": "Target type not found"}, status=404)
         try:
-            tgt_version = ConfigVersion.objects.get(
-                config=tgt_type.field_config, status=ConfigVersion.Status.PUBLISHED
-            )
+            tgt_version = ConfigVersion.objects.get(config=tgt_type.field_config, status=ConfigVersion.Status.PUBLISHED)
         except ConfigVersion.DoesNotExist:
-            return 404, {"detail": "Target type has no published config"}
+            return JsonResponse({"detail": "Target type has no published config"}, status=404)
     else:
-        return 400, {"detail": "Either target_user_defined_model_type or target_version is required"}
+        return JsonResponse({"detail": "Either target_user_defined_model_type or target_version is required"}, status=400)
 
     migration = UserDefinedModelEntityMigration.objects.create(
         user_defined_model_entity=entity,
@@ -945,43 +874,34 @@ def migration_preview(request, entity_id: uuid.UUID, target_user_defined_model_t
         target_version=tgt_version,
     )
 
-    # Build preview
     source_fields = {f.slug: f for f in entity.config_version.field_definitions.all()}
     target_fields = {f.slug: f for f in tgt_version.field_definitions.all()}
-
-    previews = []
-    _ALLOWED_CONVERSIONS = {
-        ("integer", "float"), ("text_short", "text_long"),
-        ("text_long", "text_markdown"), ("select_single", "select_multi"),
-        ("user_select", "user_select_multi"), ("group_select", "group_select_multi"),
-        ("entity_select", "entity_select_multi"),
+    _ALLOWED = {
+        ("integer", "float"), ("text_short", "text_long"), ("text_long", "text_markdown"),
+        ("select_single", "select_multi"), ("user_select", "user_select_multi"),
+        ("group_select", "group_select_multi"), ("entity_select", "entity_select_multi"),
     }
 
+    previews = []
     for slug, src_field in source_fields.items():
-        suggested_target = None
-        conflict_reason = None
         if slug in target_fields:
             tgt_field = target_fields[slug]
-            if src_field.data_type == tgt_field.data_type:
-                action = "map"
-                suggested_target = slug
-            elif (src_field.data_type, tgt_field.data_type) in _ALLOWED_CONVERSIONS:
-                action = "map"
-                suggested_target = slug
+            if src_field.data_type == tgt_field.data_type or (src_field.data_type, tgt_field.data_type) in _ALLOWED:
+                previews.append(MigrationPreviewFieldOut(
+                    source_slug=slug, source_data_type=src_field.data_type,
+                    suggested_action=MigrationAction.MAP, suggested_target_slug=slug, conflict_reason=None,
+                ))
             else:
-                action = "overflow"
-                conflict_reason = f"Incompatible types: {src_field.data_type} → {tgt_field.data_type}"
+                previews.append(MigrationPreviewFieldOut(
+                    source_slug=slug, source_data_type=src_field.data_type,
+                    suggested_action=MigrationAction.OVERFLOW, suggested_target_slug=None,
+                    conflict_reason=f"Incompatible: {src_field.data_type} → {tgt_field.data_type}",
+                ))
         else:
-            action = "overflow"
-
-        from userdefinedmodel.schemas import MigrationAction
-        previews.append({
-            "source_slug": slug,
-            "source_data_type": src_field.data_type,
-            "suggested_action": action,
-            "suggested_target_slug": suggested_target,
-            "conflict_reason": conflict_reason,
-        })
+            previews.append(MigrationPreviewFieldOut(
+                source_slug=slug, source_data_type=src_field.data_type,
+                suggested_action=MigrationAction.OVERFLOW, suggested_target_slug=None, conflict_reason=None,
+            ))
 
     return MigrationPreviewOut(
         migration_id=migration.id,
@@ -991,22 +911,21 @@ def migration_preview(request, entity_id: uuid.UUID, target_user_defined_model_t
     )
 
 
-@api.post("/entities/{entity_id}/migrate/", auth=django_auth)
+@api.post("/entities/{entity_id}/migrate/", response=EntityOut, auth=django_auth)
 def execute_migration(request, entity_id: uuid.UUID, payload: MigrationExecuteIn):
-    from userdefinedmodel.models import UserDefinedModelEntity, UserDefinedModelEntityMigration, MigrationFieldMapping, FieldDefinition, FieldValue
-    from django.utils.timezone import now
-
+    from userdefinedmodel.models import (
+        UserDefinedModelEntity, UserDefinedModelEntityMigration, MigrationFieldMapping, FieldValue,
+    )
     try:
         entity = UserDefinedModelEntity.objects.get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
-        return 404, {"detail": "Not found"}
-
+        return JsonResponse({"detail": "Not found"}, status=404)
     try:
         migration = UserDefinedModelEntityMigration.objects.select_related(
             "target_version", "target_user_defined_model_type"
         ).get(id=payload.migration_id, user_defined_model_entity=entity)
     except UserDefinedModelEntityMigration.DoesNotExist:
-        return 404, {"detail": "Migration not found"}
+        return JsonResponse({"detail": "Migration not found"}, status=404)
 
     with transaction.atomic():
         try:
@@ -1019,93 +938,87 @@ def execute_migration(request, entity_id: uuid.UUID, payload: MigrationExecuteIn
         tgt_version = migration.target_version
         source_field_map = {f.slug: f for f in entity.config_version.field_definitions.all()}
         target_field_map = {f.slug: f for f in tgt_version.field_definitions.all()}
-
         overflow = {}
+
         for mapping_in in payload.field_mappings:
             src_field = source_field_map.get(mapping_in.source_field_slug)
-            if src_field is None:
+            if not src_field:
                 continue
-
             fv = entity.field_values.filter(field=src_field).first()
-            if fv is None:
+            if not fv:
                 continue
-
             action = mapping_in.action.value
             if action == "map" and mapping_in.target_field_slug:
                 tgt_field = target_field_map.get(mapping_in.target_field_slug)
                 if tgt_field:
-                    new_fv, _ = FieldValue.objects.get_or_create(
-                        node=entity, field=tgt_field, language=fv.language
-                    )
+                    new_fv, _ = FieldValue.objects.get_or_create(node=entity, field=tgt_field, language=fv.language)
                     new_fv.set_value(fv.get_value(), field=tgt_field)
                     new_fv.save()
             elif action == "overflow":
                 overflow[src_field.slug] = str(fv.get_value())
-            # discard: do nothing
-
-        # Create field mapping records
-        for mapping_in in payload.field_mappings:
-            src_field = source_field_map.get(mapping_in.source_field_slug)
-            if src_field:
-                tgt_field = target_field_map.get(mapping_in.target_field_slug) if mapping_in.target_field_slug else None
-                MigrationFieldMapping.objects.create(
-                    migration=migration,
-                    source_field=src_field,
-                    action=mapping_in.action.value,
-                    target_field=tgt_field,
-                )
+            MigrationFieldMapping.objects.create(
+                migration=migration,
+                source_field=src_field,
+                action=action,
+                target_field=target_field_map.get(mapping_in.target_field_slug) if mapping_in.target_field_slug else None,
+            )
 
         if overflow:
             entity.overflow_data = {**entity.overflow_data, **overflow}
-
         entity.config_version = tgt_version
         entity.user_defined_model_type = migration.target_user_defined_model_type
         entity.save(update_fields=["config_version", "user_defined_model_type", "overflow_data"])
-
         migration.executed_at = now()
         migration.executed_by = request.user
         migration.save(update_fields=["executed_at", "executed_by"])
 
-    return 200, _entity_out(entity)
+    return _entity_out(entity)
 
 
 # ─── Bulk migration ───────────────────────────────────────────────────────────
 
 @api.post("/bulk-migrations/preview/", auth=django_auth)
-def bulk_migration_preview(request, source_version_id: uuid.UUID, target_version_id: uuid.UUID, type_filter_id: Optional[uuid.UUID] = None):
+def bulk_migration_preview(
+    request,
+    source_version_id: uuid.UUID,
+    target_version_id: uuid.UUID,
+    type_filter_id: Optional[uuid.UUID] = None,
+):
     from userdefinedmodel.models import ConfigVersion, UserDefinedModelEntity
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         src = ConfigVersion.objects.get(id=source_version_id)
         tgt = ConfigVersion.objects.get(id=target_version_id)
     except ConfigVersion.DoesNotExist:
-        return 404, {"detail": "Version not found"}
-
+        return JsonResponse({"detail": "Version not found"}, status=404)
     qs = UserDefinedModelEntity.objects.filter(config_version=src)
     if type_filter_id:
         qs = qs.filter(user_defined_model_type_id=type_filter_id)
-
-    return {"affected_entity_count": qs.count(), "source_version_id": str(src.id), "target_version_id": str(tgt.id)}
+    return JsonResponse({
+        "affected_entity_count": qs.count(),
+        "source_version_id": str(src.id),
+        "target_version_id": str(tgt.id),
+    })
 
 
 @api.post("/bulk-migrations/", response={201: BulkMigrationOut}, auth=django_auth)
 def create_bulk_migration(request, payload: BulkMigrationCreateIn):
     from userdefinedmodel.models import ConfigVersion, UserDefinedModelType, BulkMigrationPlan, BulkMigrationFieldMapping
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         src = ConfigVersion.objects.get(id=payload.source_version_id)
         tgt = ConfigVersion.objects.get(id=payload.target_version_id)
     except ConfigVersion.DoesNotExist:
-        return 404, {"detail": "Version not found"}
+        return JsonResponse({"detail": "Version not found"}, status=404)
 
     type_filter = None
     if payload.user_defined_model_type_filter_id:
         try:
             type_filter = UserDefinedModelType.objects.get(id=payload.user_defined_model_type_filter_id)
         except UserDefinedModelType.DoesNotExist:
-            return 404, {"detail": "Type filter not found"}
+            return JsonResponse({"detail": "Type filter not found"}, status=404)
 
     with transaction.atomic():
         plan = BulkMigrationPlan.objects.create(
@@ -1117,11 +1030,11 @@ def create_bulk_migration(request, payload: BulkMigrationCreateIn):
         tgt_fields = {f.slug: f for f in tgt.field_definitions.all()}
         for mapping in payload.field_mappings:
             src_field = src_fields.get(mapping.source_field_slug)
-            tgt_field = tgt_fields.get(mapping.target_field_slug) if mapping.target_field_slug else None
             if src_field:
                 BulkMigrationFieldMapping.objects.create(
                     plan=plan, source_field=src_field,
-                    action=mapping.action.value, target_field=tgt_field,
+                    action=mapping.action.value,
+                    target_field=tgt_fields.get(mapping.target_field_slug) if mapping.target_field_slug else None,
                 )
 
     return 201, BulkMigrationOut(
@@ -1142,7 +1055,7 @@ def get_bulk_migration(request, plan_id: uuid.UUID):
     try:
         plan = BulkMigrationPlan.objects.get(id=plan_id)
     except BulkMigrationPlan.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     return BulkMigrationOut(
         id=plan.id, status=BulkMigrationStatus(plan.status),
         source_version_id=plan.source_version_id,
@@ -1160,12 +1073,12 @@ def execute_bulk_migration_plan(request, plan_id: uuid.UUID):
     from userdefinedmodel.models import BulkMigrationPlan
     from userdefinedmodel.tasks import execute_bulk_migration
     if not request.user.is_staff:
-        return 403, {"detail": "Staff only"}
+        return JsonResponse({"detail": "Staff only"}, status=403)
     try:
         plan = BulkMigrationPlan.objects.get(id=plan_id)
     except BulkMigrationPlan.DoesNotExist:
-        return 404, {"detail": "Not found"}
+        return JsonResponse({"detail": "Not found"}, status=404)
     if plan.status in (BulkMigrationPlan.Status.RUNNING, BulkMigrationPlan.Status.DONE):
-        return 409, {"detail": f"Plan is already {plan.status}"}
+        return JsonResponse({"detail": f"Plan is already {plan.status}"}, status=409)
     execute_bulk_migration.delay(str(plan_id))
-    return 202, {"status": "accepted", "plan_id": str(plan_id)}
+    return JsonResponse({"status": "accepted", "plan_id": str(plan_id)}, status=202)

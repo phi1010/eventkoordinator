@@ -303,7 +303,7 @@ class FieldDefinitionTranslation(MetaBase):
 class TypedValue(models.Model):
     value_text = models.TextField(null=True, blank=True)
     value_decimal = models.DecimalField(max_digits=30, decimal_places=10, null=True, blank=True)
-    value_bool = models.BooleanField(null=True)
+    value_bool = models.BooleanField(null=True, blank=True)
     value_date = models.DateField(null=True, blank=True)
     value_time = models.TimeField(null=True, blank=True)
     value_datetime = models.DateTimeField(null=True, blank=True)
@@ -462,7 +462,7 @@ class TypedValue(models.Model):
 
 class FieldDefaultValue(TypedValue, MetaBase):
     field = models.ForeignKey(FieldDefinition, on_delete=models.CASCADE, related_name="defaults")
-    language = models.CharField(max_length=10, default="")
+    language = models.CharField(max_length=10, default="", blank=True)
 
     class Meta:
         constraints = [

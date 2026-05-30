@@ -653,17 +653,17 @@ class SubmodelTests(BaseAPITest):
             FieldConfig, ConfigLanguage, ConfigVersion, FieldDefinition,
             FieldDefinitionTranslation, UserDefinedModelType,
         )
-        self.config = FieldConfig.objects.create(name="Submodel Config")
-        ConfigLanguage.objects.create(config=self.config, code="en", label="English", is_default=True)
-
-        # Speaker submodel config
-        self.sub_version = ConfigVersion.objects.create(config=self.config, status="published")
+        # Use separate configs for submodel and root to avoid unique_published_per_config violation
+        self.sub_config = FieldConfig.objects.create(name="Speaker Submodel Config")
+        ConfigLanguage.objects.create(config=self.sub_config, code="en", label="English", is_default=True)
+        self.sub_version = ConfigVersion.objects.create(config=self.sub_config, status="published")
         self.name_field = FieldDefinition.objects.create(
             version=self.sub_version, slug="name", data_type="text_short", sort_order=0
         )
         FieldDefinitionTranslation.objects.create(field=self.name_field, language="en", label="Name")
 
-        # Root entity config
+        self.config = FieldConfig.objects.create(name="Submodel Root Config")
+        ConfigLanguage.objects.create(config=self.config, code="en", label="English", is_default=True)
         self.version = ConfigVersion.objects.create(config=self.config, status="published")
         self.speakers_field = FieldDefinition.objects.create(
             version=self.version, slug="speakers", data_type="submodel_list",
@@ -714,9 +714,11 @@ class MigrationTests(BaseAPITest):
         udm_type = UserDefinedModelTypeFactory(field_config=config)
         entity = UserDefinedModelEntityFactory(config_version=version, user_defined_model_type=udm_type, owner=self.staff)
 
-        # Create a second version
-        from userdefinedmodel.models import ConfigVersion, FieldDefinition, FieldDefinitionTranslation
-        v2 = ConfigVersion.objects.create(config=config, status="published")
+        # Create a second version (use a separate config to avoid unique_published_per_config violation)
+        from userdefinedmodel.models import ConfigVersion, FieldDefinition, FieldDefinitionTranslation, FieldConfig, ConfigLanguage
+        config2 = FieldConfig.objects.create(name="Config2")
+        ConfigLanguage.objects.create(config=config2, code="en", label="English", is_default=True)
+        v2 = ConfigVersion.objects.create(config=config2, status="published")
         f2 = FieldDefinition.objects.create(version=v2, slug="content", data_type="text_short", sort_order=0)
         FieldDefinitionTranslation.objects.create(field=f2, language="en", label="Content")
 
@@ -747,7 +749,7 @@ class AutocompleteTests(BaseAPITest):
 
     def test_search_entities(self):
         entity, udm_type, version, config = make_entity_with_type()
-        resp = self.get("/entities/?type_ids=" + str(udm_type.id))
+        resp = self.get("/entity-search/?type_ids=" + str(udm_type.id))
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(any(e["id"] == str(entity.id) for e in resp.json()))
 
@@ -833,3 +835,5 @@ class ConcurrentWriteTests(TransactionTestCase):
 
         # Should be 409 if lock was held, or 200 if test timing was off
         self.assertIn(resp.status_code, [200, 409])
+
+

@@ -147,11 +147,25 @@ class UserDefinedModelEntityNode(MetaBase):
         if errors:
             raise ValidationError(errors)
 
+    def _json_safe_value(self, val):
+        """Convert a typed value to a JSON-serializable form."""
+        import decimal
+        import datetime
+        if val is None:
+            return None
+        if isinstance(val, decimal.Decimal):
+            return float(val)
+        if isinstance(val, (datetime.datetime, datetime.date, datetime.time)):
+            return val.isoformat()
+        if hasattr(val, "pk"):  # model instance
+            return str(val.pk)
+        return val
+
     def to_policy_document(self) -> dict:
         fields_data = {}
         for fv in self.field_values.select_related("field").all():
             slug = fv.field.slug
-            val = fv.get_value()
+            val = self._json_safe_value(fv.get_value())
             if fv.language:
                 if slug not in fields_data:
                     fields_data[slug] = {
@@ -266,7 +280,7 @@ class FieldValue(TypedValue, MetaBase):
         UserDefinedModelEntityNode, on_delete=models.CASCADE, related_name="field_values"
     )
     field = models.ForeignKey(FieldDefinition, on_delete=models.PROTECT, related_name="values")
-    language = models.CharField(max_length=10, default="")
+    language = models.CharField(max_length=10, default="", blank=True)
 
     class Meta:
         constraints = [

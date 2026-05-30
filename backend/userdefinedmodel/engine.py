@@ -24,7 +24,12 @@ logger = logging.getLogger(__name__)
 # ─── Policy evaluation (§16) ──────────────────────────────────────────────────
 
 def build_policy_input(node: "UserDefinedModelEntityNode", user: "OpenIDUser", action: str, **kwargs) -> dict:
-    """Build the input document passed to regorus for a given action."""
+    """Build the input document passed to regorus for a given action.
+
+    For SAVE action, pass changed_fields=<incoming_dict> so Rego can see both
+    the old entity state (input.entity) and the new values (input.changed_fields).
+    Unchanged fields are visible via input.entity.fields.
+    """
     policy_doc = node.to_policy_document()
 
     user_doc = {
@@ -38,9 +43,12 @@ def build_policy_input(node: "UserDefinedModelEntityNode", user: "OpenIDUser", a
 
     input_doc = {
         "action": action,
-        "entity": policy_doc,
+        "entity": policy_doc,      # current (old) values + unchanged fields
         "user": user_doc,
         "type_id": policy_doc.get("type_id"),
+        "changed_fields": None,    # overridden for SAVE action
+        "transition": None,        # overridden for TRANSITION action
+        "field": None,
         **kwargs,
     }
     return input_doc
@@ -77,20 +85,35 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
         input_doc = build_policy_input(node, user, action, **kwargs)
         eng.set_input_json(json.dumps(input_doc))
 
-        allow = eng.eval_rule("data.udm.allow")
-        if allow is None:
-            allow = True
-        elif isinstance(allow, list):
-            allow = bool(allow[0]) if allow else False
-        else:
-            allow = bool(allow)
+        def _eval_list(rule_path: str, default=None) -> list:
+            """Evaluate a Rego rule that should return a list; return default on undefined."""
+            try:
+                raw = json.loads(eng.eval_rule_as_json(rule_path))
+                if isinstance(raw, list):
+                    return raw
+                return default if default is not None else []
+            except Exception:
+                return default if default is not None else []
 
-        deny = eng.eval_rule("data.udm.deny") or []
-        messages = eng.eval_rule("data.udm.messages") or []
-        viewable_fields = list(eng.eval_rule("data.udm.viewable_fields") or [])
-        editable_fields = list(eng.eval_rule("data.udm.editable_fields") or [])
+        def _eval_bool(rule_path: str, default: bool = True) -> bool:
+            """Evaluate a Rego rule that should return a bool; return default on undefined."""
+            try:
+                raw = json.loads(eng.eval_rule_as_json(rule_path))
+                if raw is None:
+                    return default
+                if isinstance(raw, list):
+                    return bool(raw[0]) if raw else default
+                return bool(raw)
+            except Exception:
+                return default
 
-        all_messages = list(deny) + list(messages)
+        # Deny by default: undefined allow rule = false (secure by default)
+        allow = _eval_bool("data.udm.allow", default=False)
+        deny = _eval_list("data.udm.deny")
+        messages = _eval_list("data.udm.messages")
+        viewable_fields = _eval_list("data.udm.viewable_fields")
+        editable_fields = _eval_list("data.udm.editable_fields")
+        all_messages = deny + messages
 
         return {
             "allow": allow,
@@ -205,7 +228,15 @@ def execute_transition(node: "UserDefinedModelEntityNode", name: str, user: "Ope
 
 def _validate_subtree(node: "UserDefinedModelEntityNode") -> None:
     """Re-run save rules on every node in the subtree (§4)."""
-    errors = {}
-    node.validate_for_save()
+    from django.core.exceptions import ValidationError
+    try:
+        node.validate_for_save()
+    except ValidationError as exc:
+        errors = exc.message_dict if hasattr(exc, "message_dict") else {"__all__": exc.messages}
+        raise TransitionError(
+            "Subtree validation failed",
+            http_status=422,
+            details={"field_errors": errors},
+        )
     for child in node.children.all():
         _validate_subtree(child)

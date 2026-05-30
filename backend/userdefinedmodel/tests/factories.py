@@ -265,7 +265,9 @@ def make_simple_config(data_type="text_short", required=True, max_length=None):
     FieldDefinitionTranslation.objects.create(field=field, language="en", label="Content")
 
     if required:
-        RequiredRule.objects.create(field=field, applies_to_save=True)
+        # applies_to_save=False per spec: "save-time is permissive, never requires a field to be filled"
+        # RequiredRule runs at transition time only
+        RequiredRule.objects.create(field=field, applies_to_save=False)
     if max_length:
         MaxLengthRule.objects.create(field=field, applies_to_save=True, max_length=max_length)
 

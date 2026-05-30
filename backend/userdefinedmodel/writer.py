@@ -128,9 +128,6 @@ def apply_patch(
         else:
             scalar_changes[slug] = (field, value)
 
-    # 7. Validate for save
-    node.validate_for_save()
-
     # Build or reuse edit group
     try:
         root_entity = node.userdefinedmodelentity
@@ -140,7 +137,7 @@ def apply_patch(
     if edit_group is None:
         edit_group = EditGroup.objects.create(node=node, root_entity=root_entity, saved_by=user)
 
-    # 8. Apply scalar writes
+    # 8. Apply scalar writes first (so validate_for_save sees the new values)
     for slug, (field, value) in scalar_changes.items():
         _apply_scalar_write(node, field, value, user, edit_group)
 
@@ -150,7 +147,56 @@ def apply_patch(
         if isinstance(ops, list):
             _apply_submodel_ops(node, field, ops, user, edit_group)
 
+    # 7. Validate for save (runs on the new state; transaction rolls back on failure)
+    node.validate_for_save()
+
+    # Evaluate policy for SAVE with changed_fields (gives Rego access to old+new values)
+    # Note: entity.to_policy_document() already includes unchanged fields (old values)
+    # and changed_fields contains the new values being written.
+    _evaluate_save_policy(node, user, changed_fields)
+
     return edit_group
+
+
+def _evaluate_save_policy(node, user, changed_fields: dict) -> None:
+    """Evaluate Rego policy for SAVE action. Raises ValidationError on blocking messages."""
+    from userdefinedmodel.engine import evaluate_policy, get_udm_type_for_node
+    from django.core.exceptions import ValidationError
+
+    udm_type = get_udm_type_for_node(node)
+    if udm_type is None or not udm_type.type_policies.exists():
+        return
+
+    # Serialize changed_fields to JSON-safe form
+    import json, decimal, datetime
+
+    def _safe(v):
+        if isinstance(v, decimal.Decimal):
+            return float(v)
+        if isinstance(v, (datetime.datetime, datetime.date, datetime.time)):
+            return v.isoformat()
+        if hasattr(v, "pk"):
+            return str(v.pk)
+        return v
+
+    safe_changed = {slug: _safe(val) for slug, val in changed_fields.items()}
+
+    output = evaluate_policy(node, user, "save", changed_fields=safe_changed)
+    if not output["allow"]:
+        raise ValidationError({"policy": ["Save denied by policy."]})
+
+    # critical messages block save
+    blocking = [
+        m for m in output["messages"]
+        if isinstance(m, dict) and m.get("level") == "critical"
+    ]
+    if blocking:
+        errors = {}
+        for msg in blocking:
+            slug = msg.get("field_slug") or "__all__"
+            text = msg.get("message", {}).get("en", "Policy error") if isinstance(msg.get("message"), dict) else str(msg.get("message", ""))
+            errors.setdefault(slug, []).append(text)
+        raise ValidationError(errors)
 
 
 def _apply_scalar_write(node, field, value, user, edit_group) -> None:
