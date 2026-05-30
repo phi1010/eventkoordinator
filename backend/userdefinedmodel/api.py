@@ -148,10 +148,18 @@ def _serialize_config_version(version) -> ConfigVersionOut:
 
 
 def _field_config_out(cfg) -> FieldConfigOut:
-    from userdefinedmodel.models import UserDefinedModelEntity
-    stale_count = UserDefinedModelEntity.objects.filter(
-        user_defined_model_type__field_config=cfg
-    ).exclude(config_version__config=cfg).count()
+    from userdefinedmodel.models import UserDefinedModelEntity, ConfigVersion
+    # "Stale" = entity pinned to a config version of this config that is not the
+    # current published one (i.e. on an archived/draft version awaiting migration).
+    # Mirrors the staleness definition used in ConfigVersion.publish().
+    published_id = (
+        ConfigVersion.objects.filter(config=cfg, status=ConfigVersion.Status.PUBLISHED)
+        .values_list("id", flat=True).first()
+    )
+    stale_qs = UserDefinedModelEntity.objects.filter(config_version__config=cfg)
+    if published_id is not None:
+        stale_qs = stale_qs.exclude(config_version_id=published_id)
+    stale_count = stale_qs.count()
     return FieldConfigOut(
         id=cfg.id, name=cfg.name, description=cfg.description,
         stale_entity_count=stale_count,
@@ -241,12 +249,22 @@ def delete_config(request, config_id: uuid.UUID):
 
 @api.get("/configs/{config_id}/versions/", auth=django_auth)
 def list_config_versions(request, config_id: uuid.UUID):
+    from django.db.models import Count, Q
     from userdefinedmodel.models import ConfigVersion, FieldConfig
     try:
         FieldConfig.objects.get(id=config_id)
     except FieldConfig.DoesNotExist:
         return JsonResponse({"detail": "Not found"}, status=404)
-    versions = ConfigVersion.objects.filter(config_id=config_id).order_by("-published_at", "-created_at")
+    # Count only root entities pinned to each version (exclude submodel child nodes).
+    versions = (
+        ConfigVersion.objects.filter(config_id=config_id)
+        .annotate(entity_count=Count(
+            "nodes",
+            filter=Q(nodes__userdefinedmodelentity__isnull=False),
+            distinct=True,
+        ))
+        .order_by("-published_at", "-created_at")
+    )
     return JsonResponse([
         {
             "id": str(v.id),
@@ -254,6 +272,7 @@ def list_config_versions(request, config_id: uuid.UUID):
             "notes": v.notes,
             "published_at": v.published_at.isoformat() if v.published_at else None,
             "created_at": v.created_at.isoformat(),
+            "entity_count": v.entity_count,
         }
         for v in versions
     ], safe=False)
@@ -266,6 +285,18 @@ def get_published_version(request, config_id: uuid.UUID):
         version = ConfigVersion.objects.get(config_id=config_id, status=ConfigVersion.Status.PUBLISHED)
     except ConfigVersion.DoesNotExist:
         return JsonResponse({"detail": "No published version"}, status=404)
+    return _serialize_config_version(version)
+
+
+@api.get("/config-versions/{version_id}/", response=ConfigVersionOut, auth=django_auth)
+def get_config_version(request, version_id: uuid.UUID):
+    """Fetch a single config version by id (any status). Used to render an
+    entity's form against its actual pinned version, even when archived."""
+    from userdefinedmodel.models import ConfigVersion
+    try:
+        version = ConfigVersion.objects.get(id=version_id)
+    except ConfigVersion.DoesNotExist:
+        return JsonResponse({"detail": "Config version not found"}, status=404)
     return _serialize_config_version(version)
 
 

@@ -43,11 +43,11 @@ export class UdmApiError extends Error {
     this.fieldErrors = fieldErrors
   }
 
-  /** All human-readable error strings, deduplicated. */
+  /** All human-readable error strings. Falls back to the raw message when
+   *  the response has no structured Pydantic / field errors (e.g. TransitionError). */
   get allMessages(): string[] {
     const msgs: string[] = []
     for (const e of this.pydanticErrors) {
-      // Strip the leading "body" / "payload" segments that are noise
       const loc = e.loc
         .filter(s => s !== 'body' && s !== 'payload')
         .join(' → ')
@@ -57,6 +57,11 @@ export class UdmApiError extends Error {
       for (const err of errs) {
         msgs.push(field === '__all__' ? err : `${field}: ${err}`)
       }
+    }
+    // Ensure there is always at least the top-level message so callers never
+    // get an empty array (which would silently swallow errors).
+    if (msgs.length === 0 && this.message) {
+      msgs.push(this.message)
     }
     return msgs
   }
@@ -90,6 +95,10 @@ function throwApiError(errorBody: unknown, fallback: string): never {
       if (!pydanticErrors.length) {
         message = Object.values(fieldErrors).flat().join('; ') || fallback
       }
+    }
+    // TransitionError / general backend error: {"error": "some_code", ...}
+    if (message === fallback && typeof body['error'] === 'string') {
+      message = body['error']
     }
   }
 
@@ -137,6 +146,11 @@ export type EntityAutocompleteItem = components['schemas']['EntityAutocompleteIt
 export type StagingFileOut = components['schemas']['StagingFileOut']
 export type MultiFieldRuleIn = components['schemas']['MultiFieldRuleIn']
 export type MigrationPreviewOut = components['schemas']['MigrationPreviewOut']
+export type MigrationPreviewFieldOut = components['schemas']['MigrationPreviewFieldOut']
+export type MigrationFieldMappingIn = components['schemas']['MigrationFieldMappingIn']
+export type MigrationExecuteIn = components['schemas']['MigrationExecuteIn']
+export type MigrationAction = components['schemas']['MigrationAction']
+export type BulkMigrationCreateIn = components['schemas']['BulkMigrationCreateIn']
 export type RequiredRuleIn = components['schemas']['RequiredRuleIn']
 export type MinLengthRuleIn = components['schemas']['MinLengthRuleIn']
 export type MaxLengthRuleIn = components['schemas']['MaxLengthRuleIn']
@@ -162,6 +176,8 @@ export interface ConfigVersionListItem {
   notes: string
   published_at: string | null
   created_at: string
+  /** Number of root entities currently pinned to this version. */
+  entity_count: number
 }
 
 // ── FieldConfig ───────────────────────────────────────────────────────────────
@@ -224,6 +240,14 @@ export async function udmGetPublishedVersion(configId: string): Promise<ConfigVe
   })
   if (error || !response.ok || !data) throw new Error('No published version')
   return data as ConfigVersionOut
+}
+
+/** Fetch a single config version by id (any status). The backend route is
+ *  not in the generated schema, so this uses a raw fetch. */
+export async function udmGetConfigVersion(versionId: string): Promise<ConfigVersionOut> {
+  const response = await fetch(`/api/udm/config-versions/${versionId}/`, { credentials: 'include' })
+  if (!response.ok) return throwRawFetchError(response, 'Config version not found')
+  return response.json() as Promise<ConfigVersionOut>
 }
 
 export async function udmReplaceDraft(configId: string, payload: ConfigDraftIn): Promise<ConfigVersionOut> {
@@ -405,6 +429,81 @@ export async function udmEntityHistory(entityId: string, page = 1): Promise<Edit
   })
   if (error || !response.ok || !data) throw new Error('Failed to load history')
   return data as EditHistoryOut
+}
+
+// ── Migration ─────────────────────────────────────────────────────────────────
+
+/** Build a migration preview for one entity. Targets either the published config
+ *  of a UDM type, or an explicit target config version. NOTE: each call creates a
+ *  migration row server-side, so only invoke on explicit user action. */
+export async function udmMigrationPreview(
+  entityId: string,
+  opts: { targetTypeId?: string; targetVersionId?: string },
+): Promise<MigrationPreviewOut> {
+  const { data, error, response } = await udmClient.GET('/api/udm/entities/{entity_id}/migration-preview/', {
+    params: {
+      path: { entity_id: entityId },
+      query: {
+        target_user_defined_model_type: opts.targetTypeId ?? null,
+        target_version: opts.targetVersionId ?? null,
+      },
+    },
+  })
+  if (error || !response.ok || !data) throwApiError(error, 'Failed to build migration preview')
+  return data as MigrationPreviewOut
+}
+
+export async function udmExecuteMigration(
+  entityId: string,
+  migrationId: string,
+  fieldMappings: MigrationFieldMappingIn[],
+): Promise<EntityOut> {
+  const { data, error, response } = await udmClient.POST('/api/udm/entities/{entity_id}/migrate/', {
+    params: { path: { entity_id: entityId } },
+    body: { migration_id: migrationId, confirmed: true, field_mappings: fieldMappings },
+  })
+  if (error || !response.ok || !data) throwApiError(error, 'Migration failed')
+  return data as EntityOut
+}
+
+export interface BulkMigrationPreviewResult {
+  affected_entity_count: number
+  source_version_id: string
+  target_version_id: string
+}
+
+export async function udmBulkMigrationPreview(
+  sourceVersionId: string,
+  targetVersionId: string,
+  typeFilterId?: string,
+): Promise<BulkMigrationPreviewResult> {
+  // Endpoint returns a bare JsonResponse (no response schema), so use raw fetch.
+  const params = new URLSearchParams({
+    source_version_id: sourceVersionId,
+    target_version_id: targetVersionId,
+  })
+  if (typeFilterId) params.set('type_filter_id', typeFilterId)
+  const token = await getCsrfToken()
+  const response = await fetch(`/api/udm/bulk-migrations/preview/?${params.toString()}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: token ? { [CSRF_HEADER_NAME]: token } : {},
+  })
+  if (!response.ok) return throwRawFetchError(response, 'Bulk preview failed')
+  return response.json() as Promise<BulkMigrationPreviewResult>
+}
+
+export async function udmCreateBulkMigration(payload: BulkMigrationCreateIn): Promise<BulkMigrationOut> {
+  const { data, error, response } = await udmClient.POST('/api/udm/bulk-migrations/', { body: payload })
+  if (error || !response.ok || !data) throwApiError(error, 'Failed to create bulk migration')
+  return data as unknown as BulkMigrationOut
+}
+
+export async function udmExecuteBulkMigration(planId: string): Promise<void> {
+  const { error, response } = await udmClient.POST('/api/udm/bulk-migrations/{plan_id}/execute/', {
+    params: { path: { plan_id: planId } },
+  })
+  if (error || !response.ok) throwApiError(error, 'Failed to start bulk migration')
 }
 
 // ── Autocomplete ──────────────────────────────────────────────────────────────

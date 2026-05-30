@@ -320,9 +320,18 @@ class EntityPatchTests(BaseAPITest):
         fvs = {fv["field_slug"]: fv["value"] for fv in data["field_values"]}
         self.assertEqual(fvs["content"], "Hello World")
 
-    def test_patch_unknown_field_ignored(self):
+    def test_patch_unknown_field_rejected(self):
         resp = self.patch(f"/entities/{self.entity.id}/", {
-            "changed_fields": {"nonexistent_field": "ignored"}
+            "changed_fields": {"nonexistent_field": "rejected"}
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("nonexistent_field", resp.json()["errors"])
+
+    def test_patch_reserved_control_key_ignored(self):
+        # Keys prefixed with "_" (e.g. the submodel "Restore" marker) are not
+        # treated as unknown fields and must not trigger a 400.
+        resp = self.patch(f"/entities/{self.entity.id}/", {
+            "changed_fields": {"content": "ok", "_undelete": True}
         })
         self.assertEqual(resp.status_code, 200)
 
@@ -670,6 +679,11 @@ class SubmodelTests(BaseAPITest):
             sort_order=0, submodel_config=self.sub_version,
         )
         FieldDefinitionTranslation.objects.create(field=self.speakers_field, language="en", label="Speakers")
+        self.chair_field = FieldDefinition.objects.create(
+            version=self.version, slug="chair", data_type="submodel_select",
+            sort_order=1, submodel_config=self.sub_version,
+        )
+        FieldDefinitionTranslation.objects.create(field=self.chair_field, language="en", label="Chair")
 
         self.udm_type = UserDefinedModelType.objects.create(name="Submodel Type", field_config=self.config)
         self.entity = UserDefinedModelEntityFactory(
@@ -688,6 +702,33 @@ class SubmodelTests(BaseAPITest):
         data = resp.json()
         self.assertIn("speakers", data["children"])
         self.assertEqual(len(data["children"]["speakers"]), 1)
+
+    def test_create_and_update_submodel_select_via_patch(self):
+        from userdefinedmodel.models.node import SubmodelInstance
+        # Create a submodel_select child with an initial field value.
+        resp = self.patch(f"/entities/{self.entity.id}/", {
+            "changed_fields": {"chair": {"op": "create", "fields": {"name": "Bob"}}}
+        })
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        self.assertIn("chair", data["children"])
+        self.assertEqual(len(data["children"]["chair"]), 1)
+        # Update the referenced child's fields with a single dict op (not a list).
+        resp = self.patch(f"/entities/{self.entity.id}/", {
+            "changed_fields": {"chair": {"op": "update", "fields": {"name": "Carol"}}}
+        })
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        names = [fv["value"] for c in data["children"]["chair"] for fv in c["field_values"] if fv["field_slug"] == "name"]
+        self.assertIn("Carol", names)
+
+    def test_submodel_select_rejects_list_value(self):
+        # The submodel_list ops shape must not be accepted for a submodel_select.
+        resp = self.patch(f"/entities/{self.entity.id}/", {
+            "changed_fields": {"chair": [{"op": "update", "id": "x", "fields": {"name": "y"}}]}
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("chair", resp.json()["errors"])
 
     def test_delete_submodel_via_patch(self):
         from userdefinedmodel.models.node import SubmodelInstance

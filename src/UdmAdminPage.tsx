@@ -36,9 +36,10 @@ import {
   type UserAutocompleteItem,
 } from './apiUdm'
 import { usePermissions } from './usePermissions'
+import { BulkMigrationTab } from './UdmMigration'
 import styles from './UdmAdminPage.module.css'
 
-type AdminTab = 'configs' | 'policies' | 'types'
+type AdminTab = 'configs' | 'policies' | 'types' | 'migrations'
 type ConfigView = 'list' | 'detail'
 
 const DATA_TYPES: DataType[] = [
@@ -1687,6 +1688,7 @@ export function UdmAdminPage() {
           { key: 'configs', label: 'Field Configs' },
           { key: 'types', label: 'UDM Types' },
           { key: 'policies', label: 'Rego Policies' },
+          { key: 'migrations', label: 'Bulk Migration' },
         ] as const).map(({ key, label }) => (
           <button key={key} type="button"
             className={`${styles.tab} ${tab === key ? styles.tabActive : ''}`}
@@ -1699,6 +1701,7 @@ export function UdmAdminPage() {
       {tab === 'configs' && <ConfigsTab />}
       {tab === 'types' && <TypesTab />}
       {tab === 'policies' && <PoliciesTab />}
+      {tab === 'migrations' && <BulkMigrationTab />}
     </div>
   )
 }

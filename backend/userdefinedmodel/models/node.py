@@ -151,12 +151,15 @@ class UserDefinedModelEntityNode(MetaBase):
         """Convert a typed value to a JSON-serializable form."""
         import decimal
         import datetime
+        import uuid
         if val is None:
             return None
         if isinstance(val, decimal.Decimal):
             return float(val)
         if isinstance(val, (datetime.datetime, datetime.date, datetime.time)):
             return val.isoformat()
+        if isinstance(val, uuid.UUID):  # e.g. submodel_select FK target node id
+            return str(val)
         if hasattr(val, "pk"):  # model instance
             return str(val.pk)
         return val

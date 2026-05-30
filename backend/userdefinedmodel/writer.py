@@ -6,7 +6,9 @@ with the root UserDefinedModelEntity lock already held.
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+import uuid
+from datetime import timedelta, datetime, date, time
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
@@ -84,6 +86,8 @@ def _serialize_value(val, field: "FieldDefinition") -> Any:
         return None
     if isinstance(val, FileAttachment):
         return {"id": str(val.id), "original_name": val.original_name, "mime_type": val.mime_type}
+    if isinstance(val, uuid.UUID):  # e.g. submodel_select FK target node id
+        return str(val)
     # Defensive: if an ORM object slipped through, return its PK as string
     if hasattr(val, "pk") and not isinstance(val, (str, int, float, bool, list, dict)):
         return str(val.pk)
@@ -122,14 +126,29 @@ def apply_patch(
     # Split into scalar vs submodel_list entries
     scalar_changes = {}
     submodel_changes = {}
+    unknown_slugs = []
     for slug, value in changed_fields.items():
+        # Keys prefixed with "_" are reserved UI control markers (e.g. "_undelete"
+        # sent by the submodel "Restore" button), never real field slugs.
+        if slug.startswith("_"):
+            continue
         field = field_map.get(slug)
         if field is None:
-            continue  # unknown slug: silently skip
+            unknown_slugs.append(slug)
+            continue
         if field.data_type == FieldDefinition.DataType.SUBMODEL_LIST:
             submodel_changes[slug] = value
         else:
             scalar_changes[slug] = (field, value)
+
+    # Reject unknown slugs instead of silently dropping them: a PATCH against a
+    # config version that lacks the field (e.g. an entity pinned to an archived
+    # version) must fail loudly rather than appear to save and write nothing.
+    if unknown_slugs:
+        raise ValidationError({
+            slug: ["Unknown field for this entity's config version."]
+            for slug in unknown_slugs
+        })
 
     # Build or reuse edit group
     try:
@@ -244,13 +263,31 @@ def _write_field_value(node, field, value, language, user, edit_group) -> None:
                 parent_field=field,
                 sort_order=0,
             )
+            child.materialize_defaults()
+            # Apply caller-supplied field values before setting the initial state
+            op_fields = value.get("fields") or {}
+            if op_fields:
+                apply_patch(child, op_fields, user, edit_group)
+            # Assign initial workflow state after initial field values are written
             if field.submodel_config and field.submodel_config.workflow_id:
                 initial = field.submodel_config.workflow.states.filter(is_initial=True).first()
                 if initial:
                     child.current_state = initial
                     child.save(update_fields=["current_state"])
-            child.materialize_defaults()
             value = child.id  # fall through to set value_node_id
+        elif op == "update":
+            # Update the fields of the currently-referenced child; the FK itself
+            # does not change, so write nothing to value_node and return early.
+            if fv and fv.value_node_id:
+                from userdefinedmodel.models.node import SubmodelInstance
+                try:
+                    child = SubmodelInstance.objects.get(id=fv.value_node_id, parent_node=node)
+                except SubmodelInstance.DoesNotExist:
+                    child = None
+                op_fields = value.get("fields") or {}
+                if child and op_fields:
+                    apply_patch(child, op_fields, user, edit_group)
+            return
         elif op == "delete":
             if fv and fv.value_node_id:
                 from userdefinedmodel.models.node import SubmodelInstance
@@ -259,6 +296,12 @@ def _write_field_value(node, field, value, language, user, edit_group) -> None:
                 except SubmodelInstance.DoesNotExist:
                     pass
             value = None  # clear the FK
+
+    # Defensive: single-value FK fields must never receive a list (that is the
+    # submodel_list ops shape). Fail with a clear message instead of a cryptic
+    # "not a valid UUID" deep in model validation.
+    if field.data_type in ("submodel_select", "entity_select", "user_select", "group_select") and isinstance(value, list):
+        raise ValidationError({field.slug: f"{field.data_type} expects a single value, not a list."})
 
     # Handle file staging promotion
     if isinstance(value, dict) and "staging_id" in value:
@@ -324,6 +367,12 @@ def _record_field_edit(edit_group, field, old_value, new_value, *, old_attachmen
             return None
         if hasattr(v, "pk"):
             return str(v.pk)
+        # Bare UUIDs (e.g. a submodel_select FK target) and other non-JSON
+        # scalars must be stringified before hitting the JSONField.
+        if isinstance(v, uuid.UUID):
+            return str(v)
+        if isinstance(v, (datetime, date, time, Decimal)):
+            return str(v)
         return v
 
     FieldEdit.objects.create(
@@ -362,14 +411,21 @@ def _apply_submodel_ops(parent_node, field, ops, user, edit_group) -> None:
                 parent_field=field,
                 sort_order=sort_order,
             )
-            # Assign initial workflow state
+
+            child.materialize_defaults()
+
+            # Apply caller-supplied field values while current_state is still None
+            # (so the allows_edit check in apply_patch never blocks initial values).
+            # The initial workflow state is assigned afterwards.
+            if op_fields:
+                apply_patch(child, op_fields, user, edit_group=edit_group)
+
+            # Assign initial workflow state after initial field values are written
             if field.submodel_config and field.submodel_config.workflow_id:
                 initial = field.submodel_config.workflow.states.filter(is_initial=True).first()
                 if initial:
                     child.current_state = initial
                     child.save(update_fields=["current_state"])
-
-            child.materialize_defaults()
 
             FieldEdit.objects.create(
                 group=edit_group,
@@ -377,9 +433,6 @@ def _apply_submodel_ops(parent_node, field, ops, user, edit_group) -> None:
                 field=field,
                 affected_node=child,
             )
-
-            if op_fields:
-                apply_patch(child, op_fields, user, edit_group=edit_group)
 
         elif op == "update":
             try:

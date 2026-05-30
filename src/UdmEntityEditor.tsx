@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   udmGetEntity,
-  udmGetTypeConfig,
+  udmGetConfigVersion,
   udmPatchEntity,
   udmTransitionEntity,
   udmEntityHistory,
@@ -22,6 +22,7 @@ import {
   type GroupAutocompleteItem,
   type EntityAutocompleteItem,
 } from './apiUdm'
+import { MigrationAssistant } from './UdmMigration'
 import styles from './UdmEntityEditor.module.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -267,9 +268,13 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
   const [items, setItems] = useState<LocalChild[]>(() => toItems(existingChildren))
   const nextKeyRef = useRef(0)
 
-  // Sync when the server refreshes the entity (existingChildren IDs change after save)
+  // Sync when the server refreshes the entity (existingChildren IDs change after save).
+  // Only relevant for submodel_list; the submodel_select branch manages its own
+  // pending state below and must NOT emit a list-shaped [] op (which would be
+  // written into the single FK column and rejected as "not a valid UUID").
   const prevServerIds = useRef(new Set((existingChildren as ChildNode[]).map(c => c.id)))
   useEffect(() => {
+    if (!isList) return
     const incoming = existingChildren as ChildNode[]
     const incomingIds = new Set(incoming.map(c => c.id))
     const same =
@@ -322,13 +327,19 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
   const [selectExpanded, setSelectExpanded] = useState(false)
   // pendingNew = user clicked "Create", form shown optimistically before save
   const [pendingNew, setPendingNew] = useState(false)
+  // pendingRemoval = user clicked Delete/Clear; hide the form before the save round-trip
+  const [pendingRemoval, setPendingRemoval] = useState(false)
 
   // When the entity refreshes after save, clear the pending state
   const prevSelectNodeId = useRef(selectNodeId)
   useEffect(() => {
-    if (pendingNew && selectNodeId && selectNodeId !== prevSelectNodeId.current) {
-      setPendingNew(false)
-      setSelectDirty({})
+    if (selectNodeId !== prevSelectNodeId.current) {
+      if (pendingNew && selectNodeId) {
+        setPendingNew(false)
+        setSelectDirty({})
+      }
+      // FK cleared by the server → drop the optimistic removal flag
+      if (!selectNodeId) setPendingRemoval(false)
     }
     prevSelectNodeId.current = selectNodeId
   }, [selectNodeId, pendingNew])
@@ -368,6 +379,7 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
   // ── submodel_select UI ──
   function handleCreate() {
     setPendingNew(true)
+    setPendingRemoval(false)
     setSelectDirty({})
     setSelectExpanded(true)
     onChange({ op: 'create', fields: {} })
@@ -380,10 +392,14 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
   }
 
   function handleDelete() {
+    setPendingRemoval(true)
+    setSelectExpanded(false)
     onChange({ op: 'delete' })
   }
 
   function handleClear() {
+    setPendingRemoval(true)
+    setSelectExpanded(false)
     onChange(null)
   }
 
@@ -407,12 +423,15 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
       // still creating — carry the fields along with the create op
       onChange({ op: 'create', fields: updated })
     } else if (ownedChild) {
-      onChange([{ op: 'update', id: ownedChild.id, fields: updated }] as unknown as SubmodelOp[])
+      // submodel_select expects a single dict op, never a list (that is the
+      // submodel_list shape and would be written into the FK column).
+      onChange({ op: 'update', fields: updated })
     }
   }
 
-  // Show the form when: pending new creation, OR already has a saved/owned child
-  const showForm = pendingNew || ownedChild !== null || selectNodeId !== null
+  // Show the form when: pending new creation, OR already has a saved/owned child.
+  // An optimistic delete/clear hides it immediately.
+  const showForm = !pendingRemoval && (pendingNew || ownedChild !== null || selectNodeId !== null)
 
   return (
     <div style={{ border: '1px solid #e0e0e0', borderRadius: '6px', padding: '0.75rem', background: '#fafafa' }}>
@@ -1126,10 +1145,11 @@ export function UdmEntityEditor() {
     try {
       const e = await udmGetEntity(entityId)
       setEntity(e)
-      if (e.user_defined_model_type_id) {
-        const cfg = await udmGetTypeConfig(e.user_defined_model_type_id)
-        setConfig(cfg)
-      }
+      // Load the entity's ACTUAL pinned config version (not the type's current
+      // published config). This keeps the form aligned with the stored data even
+      // when the entity is stuck on an archived version awaiting migration.
+      const cfg = await udmGetConfigVersion(e.config_version_id)
+      setConfig(cfg)
     } catch (err) {
       setErrors([err instanceof Error ? err.message : 'Failed to load entity'])
     }
@@ -1149,12 +1169,16 @@ export function UdmEntityEditor() {
   // entityId is now narrowed to string (not undefined) below this point
   const resolvedEntityId: string = entityId
 
-  // Determine editability from workflow state
+  // An entity pinned to a non-published (archived) config version is read-only
+  // until it is migrated to the current version.
+  const isArchived = config?.status === 'archived'
+
+  // Determine editability from workflow state (archived overrides everything)
   const currentStateName = entity.current_state
   const workflowState: WorkflowStateOut | null = config?.workflow?.states.find(
     s => s.name === currentStateName
   ) ?? null
-  const editable = workflowState ? workflowState.allows_edit : true
+  const editable = !isArchived && (workflowState ? workflowState.allows_edit : true)
 
   // Available transitions from current state
   const availableTransitions: WorkflowTransitionOut[] = config?.workflow
@@ -1246,7 +1270,16 @@ export function UdmEntityEditor() {
         {config && ` · Config version: ${entity.config_version_id.slice(0, 8)}…`}
       </div>
 
-      {!editable && (
+      {isArchived && (
+        <MigrationAssistant
+          entityId={resolvedEntityId}
+          targetTypeId={entity.user_defined_model_type_id}
+          sourceConfig={config}
+          onMigrated={updated => { setEntity(updated); setDirty({}); void load() }}
+        />
+      )}
+
+      {!editable && !isArchived && (
         <div className={styles.readonlyNote}>
           This entity is in state "{stateLabel ?? currentStateName}" which does not allow editing.
           {availableTransitions.length > 0 && ' Use a workflow transition to change the state.'}
