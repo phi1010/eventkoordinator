@@ -8,6 +8,7 @@
 - Multiple calls may share the same field configuration → §2.1, §3
 - A call's configuration can be switched to a different one → §5.5, §6
 - `TEXT_RICHTEXT` content is sanitised with **`nh3`** on write → §2.1
+- Each field may carry an admin-chosen default value (per-language for localized fields); new proposals start pre-filled from these defaults, and publish is blocked unless the default combination passes save-time validation → §2.8
 
 ### Config versioning
 - Field configuration is versioned with an explicit DRAFT → PUBLISHED → ARCHIVED lifecycle → §3
@@ -36,8 +37,8 @@
 - Single-field rules are attached to exactly one field via FK; reuse on another field requires an explicit copy → §2.5
 - Incompatible (rule type, field type) pairs are rejected in `SingleFieldValidationRule.clean()` via an `APPLICABLE_TYPES` class variable → §2.5
 - Multi-field rules are associated with multiple fields via a join table; cross-version integrity (all fields must belong to the same `ConfigVersion`) is enforced at the application level → §2.5
-- Each rule independently declares whether it applies at save time, submit time, or both → §2.5, §4
-- Save-time rules are permissive (allow partial/incomplete data); submit-time rules are strict → §4
+- A rule's `applies_to_save` flag controls whether it runs on every save (PATCH); save-time validation is permissive (allows partial/incomplete data) → §2.5, §4
+- Stricter "submit-time" validation is not a rule flag: submission is a workflow transition, and the strict rules are attached to that transition as validators (`TransitionValidatorAssignment`) / mandatory fields (`TransitionMandatoryField`) → §2.6, §4, §15
 
 ### Migration
 - Proposals can be migrated to a different call or re-bound to a newer config version → §5.1–§5.4
@@ -68,11 +69,11 @@
 - The PATCH payload uses a `{language_code: value}` dict for localized fields; omitting a language leaves that language's stored value untouched → §6, §12
 
 ### Concurrent write safety
-- All relevant rows are locked (`SELECT FOR UPDATE NOWAIT`) before any validation runs, and locks are held through the write → §14
+- The root `Proposal` row is locked (`SELECT FOR UPDATE NOWAIT`) before any validation runs and held through the write; it is the single mutex for the whole proposal tree → §14, §14.2
 - Validation results are never cached across a transaction boundary → §14.1
-- Lock acquisition follows a fixed order (Proposal → SubmodelInstance → FieldValue by PK) to prevent deadlocks → §14.2
-- Status transitions lock the proposal row so no concurrent field edit can race against the status change → §14.3
-- Lock contention returns HTTP 409 immediately; the frontend retries → §14.6
+- Only one row is ever write-locked, so there is no lock-ordering or deadlock concern between proposal writes → §14.2
+- Status transitions hold the root lock so no concurrent field edit can race against the status change → §14.3
+- Lock contention returns HTTP 409 immediately; the frontend retries → §14.5
 - The test suite uses **PostgreSQL exclusively** (SQLite dropped); no conditional locking guards needed → §14
 
 ---
@@ -105,7 +106,6 @@ applies to proposals and all submodel instances through a shared base model.
 | **BulkMigrationPlan** | A staff-configured mapping applied to many proposals at once (config switch or republish) |
 | **ConfigLanguage** | A supported BCP-47 language code registered on a `FieldConfig`; one is marked as default fallback |
 | **FieldDefinitionTranslation** | A translated `label` / `help_text` for one `FieldDefinition` in one language |
-| **Validation lock set** | The minimal set of rows that must be locked before validation can be treated as authoritative for a given write |
 
 ---
 
@@ -342,7 +342,10 @@ class ProposalNode(HistoricalMetaBase):
 
     def get_field_value(self, slug: str) -> "FieldValue | None": ...
     def validate_for_save(self): ...
-    def validate_for_submit(self): ...
+    def to_policy_document(self) -> dict: ...   # canonical JSON for Rego authz, see §16
+    # No validate_for_submit(): strict submit validation is performed by the
+    # workflow transition engine (§15), which recursively re-runs each node's
+    # save rules plus its submit-transition validators across the subtree.
 ```
 
 **`Proposal`** extends `ProposalNode` via multi-table inheritance.
@@ -378,8 +381,58 @@ class SubmodelInstance(ProposalNode):
 
 **`FieldValue`**
 
+The typed value columns and their accessors are shared with the default-value
+model (§2.8), so they live on an abstract base:
+
 ```python
-class FieldValue(MetaBase):
+class TypedValue(models.Model):
+    """Abstract holder of one typed value, selected by an associated
+    FieldDefinition's data_type. Reused by FieldValue and FieldDefaultValue."""
+
+    # The value is stored in exactly one typed column selected by
+    # field.data_type (see the mapping table below). A single untyped
+    # JSONField is deliberately NOT used: it stores Decimals via float
+    # (precision loss on money like material_cost_eur), can't sort/filter
+    # dates or numbers at the SQL level (needed for the staff review /
+    # export views), and gives no referential integrity for user/group/
+    # submodel references. Typed columns fix all three; the unused columns
+    # are NULL and cost ~nothing (Postgres stores trailing NULLs as a bitmap).
+    value_text     = models.TextField(null=True, blank=True)        # text_*, select_single (choice key)
+    value_decimal  = models.DecimalField(max_digits=30, decimal_places=10,
+                                          null=True, blank=True)     # integer + float, exact
+    value_bool     = models.BooleanField(null=True)
+    value_date     = models.DateField(null=True, blank=True)
+    value_time     = models.TimeField(null=True, blank=True)
+    value_datetime = models.DateTimeField(null=True, blank=True)
+    value_json     = models.JSONField(null=True, blank=True)        # select_multi, *_multi PK lists
+    # Real FKs for single references → DB-level integrity + correct on_delete,
+    # which makes the USER_SELECT/GROUP_SELECT existence check in §2.1 redundant.
+    value_user     = models.ForeignKey(OpenIDUser, on_delete=models.SET_NULL,
+                                        null=True, blank=True, related_name="+")  # user_select
+    value_group    = models.ForeignKey("auth.Group", on_delete=models.SET_NULL,
+                                        null=True, blank=True, related_name="+")  # group_select
+    value_node     = models.ForeignKey(ProposalNode, on_delete=models.SET_NULL,
+                                        null=True, blank=True, related_name="+")  # submodel_select
+    # SUBMODEL_LIST has no value column — children are ProposalNode rows via parent_node.
+
+    class Meta:
+        abstract = True
+
+    # Logical accessor: read/write the correct typed column for the field's
+    # data_type. The validation engine (§4), history diffing (§13) and the
+    # API serialiser all go through these instead of touching columns directly.
+    def get_value(self): ...
+    def set_value(self, value): ...
+
+    def _clean_typed_value(self, field: "FieldDefinition"):
+        """Validate the value matches field.data_type and type_config, and that
+        exactly the one column for this data_type is populated. The 'exactly one
+        column' rule is enforced here, NOT as a CheckConstraint: a DB constraint
+        interacts badly with clearing-to-null and per-language rows."""
+        ...
+
+
+class FieldValue(TypedValue, MetaBase):
     node       = models.ForeignKey(ProposalNode, on_delete=models.CASCADE,
                                    related_name="field_values")
     field      = models.ForeignKey(FieldDefinition, on_delete=models.PROTECT,
@@ -388,8 +441,6 @@ class FieldValue(MetaBase):
     # Empty string for non-localized fields — this lets a single unique
     # constraint cover both cases without a nullable column.
     language   = models.CharField(max_length=10, default="")
-    # Scalar types (text, number, bool, date, datetime, time, select) stored here.
-    value      = models.JSONField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -400,9 +451,30 @@ class FieldValue(MetaBase):
         ]
 
     def clean(self):
-        """Validate `value` matches field.data_type and type_config constraints."""
-        ...
+        self._clean_typed_value(self.field)
 ```
+
+**Value column by `data_type`:**
+
+| `data_type` | Column |
+|---|---|
+| `text_short`, `text_long`, `text_markdown`, `text_richtext` | `value_text` |
+| `select_single` | `value_text` (stores the choice key) |
+| `integer`, `float` | `value_decimal` (exact NUMERIC; no float round-trip) |
+| `boolean` | `value_bool` |
+| `date` / `time` / `datetime` | `value_date` / `value_time` / `value_datetime` |
+| `select_multi`, `user_select_multi`, `group_select_multi` | `value_json` (list of keys / PKs) |
+| `user_select` / `group_select` / `submodel_select` | `value_user` / `value_group` / `value_node` |
+| `image`, `file` | *(no column — the `FileAttachment` FK points at this `FieldValue`)* |
+| `submodel_list` | *(no `FieldValue` row — children are `ProposalNode`s via `parent_node`)* |
+
+Localisation is unaffected: there is still one `FieldValue` row per language
+(`language` column), and the typed-column choice is the same for every language.
+
+Typed columns make per-field SQL filtering and sorting possible for the staff
+review/export views, e.g.
+`FieldValue.objects.filter(field__slug="duration_days", value_decimal__gt=3)`,
+with a real index — something a single JSON column cannot do.
 
 **`FileAttachment`** — created only when a save is committed, never on file selection.
 When a file/image field is overwritten the old `FileAttachment` row is **soft-deleted**
@@ -565,10 +637,11 @@ Rules are owned by a `ConfigVersion` through their field(s):
   cascade-delete and the frozen check without traversing the join table).
 
 **Copy-on-write on publish:** `ConfigVersion.publish()` deep-copies all
-`FieldDefinition` rows and all attached rules into the new DRAFT. Single-field rule
-copies get new PKs and point to the new field copies. Multi-field rule copies get new
-PKs, a new `config_version` FK, and new `MultiFieldRuleAssociation` rows pointing to
-the new field copies.
+`FieldDefinition` rows, all attached rules, and all `FieldDefaultValue` rows (§2.8)
+into the new DRAFT. Single-field rule copies get new PKs and point to the new field
+copies. Multi-field rule copies get new PKs, a new `config_version` FK, and new
+`MultiFieldRuleAssociation` rows pointing to the new field copies. Default copies get
+new PKs pointing to the new field copies.
 
 Copying a single-field rule to attach it to a *different* field in the same version
 is also supported (the admin provides a "copy to field…" action) — this is the
@@ -584,8 +657,10 @@ class SingleFieldValidationRule(PolymorphicMetaBase):
         FieldDefinition, on_delete=models.CASCADE,
         related_name="single_field_rules",
     )
+    # Runs on every save (PATCH) when True. When False the rule only runs where
+    # it is explicitly referenced by a WorkflowTransition (§2.6) — this is how a
+    # submit-only rule avoids firing on every keystroke-level save.
     applies_to_save   = models.BooleanField(default=False)
-    applies_to_submit = models.BooleanField(default=True)
     # Human-readable label shown in the admin rule list.
     admin_label       = models.CharField(max_length=200, blank=True)
 
@@ -657,8 +732,8 @@ class MultiFieldValidationRule(PolymorphicMetaBase):
         ConfigVersion, on_delete=models.CASCADE,
         related_name="multi_field_rules",
     )
+    # See SingleFieldValidationRule.applies_to_save above for semantics.
     applies_to_save   = models.BooleanField(default=False)
-    applies_to_submit = models.BooleanField(default=True)
     admin_label       = models.CharField(max_length=200, blank=True)
 
     # All fields must belong to config_version — enforced at the application level.
@@ -784,14 +859,26 @@ class WorkflowTransition(HistoricalMetaBase):
     # Django permission codename that the triggering user must hold.
     # Null = any authenticated user with proposal access may trigger it.
     permission_codename = models.CharField(max_length=200, blank=True)
+    # Optional Rego rule-path override for authorising this transition (§16).
+    # When blank, §15.1 step 4 evaluates the default `data.proposals.allow` rule
+    # (action="transition", transition=<name>), which can branch on the name. Set
+    # this only to point a specific transition at a different rule.
+    policy_rule         = models.CharField(max_length=300, blank=True)
 ```
 
 #### Transition validators
 
+**This is where strict "submit-time" validation lives.** There is no separate
+submit-rule flag on the rule models; instead the strict checks that must hold before
+a proposal can be submitted (or accepted, etc.) are attached to the relevant
+`WorkflowTransition` — typically the `submit` transition. A rule used only at submit
+sets `applies_to_save=False` so it does not fire on every PATCH, and is referenced
+from the transition via a `TransitionValidatorAssignment`.
+
 Transition validators reuse the same `SingleFieldValidationRule` /
-`MultiFieldValidationRule` polymorphic hierarchy. A `TransitionValidatorAssignment`
-attaches a rule to a transition; the rule is evaluated as part of the transition
-execution (step 4 in §15):
+`MultiFieldValidationRule` polymorphic hierarchy and the same evaluation engine as
+`validate_for_save()` (§4). A `TransitionValidatorAssignment` attaches a rule to a
+transition; the rule is evaluated as part of the transition execution (§15):
 
 ```python
 class TransitionValidatorAssignment(MetaBase):
@@ -824,6 +911,12 @@ class TransitionMandatoryField(MetaBase):
     required_value  = models.JSONField(null=True, blank=True)
     sort_order      = models.PositiveSmallIntegerField(default=0)
 ```
+
+**Canonical way to express "required at submit"** — to avoid two overlapping
+mechanisms, use `TransitionMandatoryField` for plain required-ness (and fixed-value
+requirements), and `TransitionValidatorAssignment` for everything else
+(`MinLengthRule`, `RegexRule`, multi-field rules, …). The config UI should present
+required-ness only through `TransitionMandatoryField`.
 
 #### Transition actions (pre and post)
 
@@ -986,12 +1079,12 @@ top-level value.
 }
 ```
 
-#### Lock set for localized fields
+#### Localized fields and locking
 
-When a localized field slug is in `changed_fields`, `_compute_validation_lock_set`
-(§14.4) locks the `FieldValue` rows for **all languages** of that field (not just
-the ones included in the payload). This ensures `RequiredInLanguageRule` sees a
-consistent snapshot of the full language set during validation.
+No special handling is needed. The root-proposal lock (§14.2) serialises the whole
+tree, so a PATCH that touches only some languages of a localized field still sees a
+consistent snapshot of **all** that field's language rows during validation — which
+is what `RequiredInLanguageRule` relies on.
 
 #### Config schema representation
 
@@ -1018,6 +1111,77 @@ languages:
   ]
 }
 ```
+
+---
+
+### 2.8 Default values
+
+A `FieldDefinition` may carry an admin-chosen default. When a new `ProposalNode`
+is created the defaults are materialised into real `FieldValue` rows, so every
+proposal starts from a complete, admin-approved combination of values rather than
+an empty form.
+
+Defaults are part of the config and are therefore **versioned** with it: a default
+belongs to a `FieldDefinition` in a specific `ConfigVersion`, is deep-copied on
+publish (§3), and converts under the §2.1 datatype-change rules like any stored
+value. A default is stored in a `FieldDefaultValue` row that reuses the same typed
+columns as `FieldValue` via the shared `TypedValue` base (§2.3), so defaults are
+type-correct and per-language out of the box.
+
+```python
+class FieldDefaultValue(TypedValue, MetaBase):
+    field    = models.ForeignKey(FieldDefinition, on_delete=models.CASCADE,
+                                 related_name="defaults")
+    # Per-language defaults for localized fields; "" for non-localized (mirrors
+    # FieldValue.language). A localized field may define a default per language.
+    language = models.CharField(max_length=10, default="")
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=["field", "language"],
+                name="unique_default_per_field_language",
+            )
+        ]
+
+    def clean(self):
+        self._clean_typed_value(self.field)
+```
+
+**Which types support a default**
+
+- All scalar types (`text_*`, `integer`, `float`, `boolean`, `date`, `time`,
+  `datetime`), the select types, and the user/group reference types support a
+  default.
+- `image` / `file`: **no default** — there is no sensible config-owned file to
+  pre-fill. A `FieldDefaultValue` for these types is rejected in `clean()`.
+- `submodel_select`: not supported — a default would have to point at a concrete
+  instance that does not exist until a proposal is created.
+- `submodel_list`: a field with no default starts with zero children. Optional
+  default children are out of scope for the first cut (a `min_items` rule plus a
+  publish-time check is the simpler way to guarantee at least one child); revisit
+  only if a concrete need appears.
+
+**Materialisation on create**
+
+`POST /api/proposals/` and `POST /api/proposals/{id}/nodes/` build the new node's
+`FieldValue` rows by copying every `FieldDefaultValue` of the node's
+`ConfigVersion` (one row per language for localized fields). Fields without a
+default are simply left unset. Materialisation runs inside the create transaction;
+the resulting node is then saved through the normal write path so `FieldValue.clean()`
+runs on each materialised value.
+
+**Guaranteeing a valid starting combination**
+
+So an admin cannot publish defaults that contradict the field rules, `ConfigVersion.publish()`
+(§3) builds a transient in-memory node from the defaults and runs **save-context**
+validation on it (`validate_for_save`, i.e. all `applies_to_save` rules, including
+multi-field rules such as `MutualExclusionRule` / `ExactlyOneRequiredRule`).
+Publishing is blocked with field-keyed errors if the default combination is invalid.
+
+Save-context — not submit-context — is intentional: a freshly created draft must be
+*saveable*, but it is legitimately allowed to be incomplete for *submission* (e.g. a
+required-at-submit field with no default stays empty until the user fills it).
 
 ---
 
@@ -1051,7 +1215,10 @@ languages:
 ```
 
 - Publishing atomically archives the current PUBLISHED version.
-- The new DRAFT is an automatic deep-copy of the just-published version.
+- Publishing first validates that the field defaults form a valid save-time
+  combination and is blocked with field errors otherwise (§2.8).
+- The new DRAFT is an automatic deep-copy of the just-published version
+  (field definitions, rules, workflow, and field defaults).
 - Proposals created before a republish continue to reference their original
   `ConfigVersion`; they are **not** silently upgraded.
 - A proposal can be voluntarily upgraded to the new config version via the
@@ -1066,36 +1233,47 @@ languages:
 ## 4. Validation Rules
 
 Rules are stored as model instances in the polymorphic hierarchy described in §2.5.
-Each rule has `applies_to_save` and `applies_to_submit` boolean fields — a rule can
-apply to one or both contexts. There are no separate "save rule set" and "submit rule
-set" containers; context membership is a property of the rule itself.
+There are two places a rule can run:
+
+1. **Save time** — every rule with `applies_to_save=True` runs on each PATCH / admin
+   save of the node it belongs to. Save-time validation is *permissive*: it never
+   requires a field to be filled (use a transition for that), it only rejects values
+   that are actively wrong (bad type, too long, regex mismatch, a violated mutual
+   exclusion, …).
+2. **Workflow transitions** — strict checks (the old "submit rules") are attached to
+   a `WorkflowTransition` via `TransitionValidatorAssignment` / `TransitionMandatoryField`
+   (§2.6) and run only when that transition fires (§15). Submission is just the
+   `submit` transition. A submit-only rule sets `applies_to_save=False` so it does not
+   fire on every save.
+
+There is no `validate_for_submit()` and no `applies_to_submit` flag.
 
 ### Validation entry points on `ProposalNode`
 
 | Method | Trigger | Rules fetched |
 |---|---|---|
-| `validate_for_save()` | API PATCH, Django admin save | all rules where `applies_to_save=True` |
-| `validate_for_submit()` | API POST /submit | all rules where `applies_to_submit=True` |
+| `validate_for_save()` | API PATCH, Django admin save | rules where `applies_to_save=True` |
+| transition engine (§15) | `POST /transition` (incl. `submit`) | the transition's `TransitionValidatorAssignment` rules + `TransitionMandatoryField`s, **plus** each node's save rules re-run across the subtree |
 | `FieldValue.clean()` | Always, on every write | data-type correctness only (no rule models) |
 
-`validate_for_submit()` recurses into all `SubmodelInstance` children.
+The single-field / multi-field evaluation loop below is shared: `validate_for_save()`
+passes its save-rule queryset, and the transition engine passes the transition's
+assigned rules. Both build the same `errors` dict.
 
-### Execution inside `validate_for_save()` / `validate_for_submit()`
+### Shared rule-evaluation loop
 
 ```python
-def _validate(self, context: str):  # context = "save" or "submit"
+def _evaluate_rules(self, single_rules, multi_rules):
+    """single_rules / multi_rules are already-filtered querysets (save rules,
+    or a transition's assigned rules). Returns a field-keyed error dict."""
     errors: dict[str, list[str]] = defaultdict(list)
-    filter_kwarg = {"applies_to_save": True} if context == "save" \
-                   else {"applies_to_submit": True}
 
     # Single-field rules — one DB query with select_related
-    for rule in SingleFieldValidationRule.objects.filter(
-        field__version=self.config_version, **filter_kwarg
-    ).select_related("field"):
+    for rule in single_rules.select_related("field"):
         if rule.field.is_localized:
             # Run the rule independently for each stored language value.
             for fv in self.field_values.filter(field=rule.field):
-                for msg in rule.get_real_instance().validate(fv.value):
+                for msg in rule.get_real_instance().validate(fv.get_value()):
                     errors[f"{rule.field.slug}[{fv.language}]"].append(msg)
         else:
             value = self.get_field_value(rule.field.slug)
@@ -1103,14 +1281,12 @@ def _validate(self, context: str):  # context = "save" or "submit"
                 errors[rule.field.slug].append(msg)
 
     # Multi-field rules — one DB query with prefetch
-    for rule in MultiFieldValidationRule.objects.filter(
-        config_version=self.config_version, **filter_kwarg
-    ).prefetch_related("associations__field"):
+    for rule in multi_rules.prefetch_related("associations__field"):
         # Multi-field rules receive non-localized values only; localized fields
         # are passed as {language: value} dicts so the rule can inspect them.
         field_values = {
             a.field.slug: (
-                {fv.language: fv.value
+                {fv.language: fv.get_value()
                  for fv in self.field_values.filter(field=a.field)}
                 if a.field.is_localized
                 else self.get_field_value(a.field.slug)
@@ -1122,17 +1298,50 @@ def _validate(self, context: str):  # context = "save" or "submit"
             for slug in field_values:
                 errors[slug].append(msg)
 
+    return errors
+
+
+def validate_for_save(self):
+    single = SingleFieldValidationRule.objects.filter(
+        field__version=self.config_version, applies_to_save=True)
+    multi = MultiFieldValidationRule.objects.filter(
+        config_version=self.config_version, applies_to_save=True)
+    errors = self._evaluate_rules(single, multi)
     if errors:
         raise ValidationError(dict(errors))
 ```
 
+### Strict (submit / transition) validation across the subtree
+
+A transition does not have its own copy of the field rules — it carries only the
+strict extras. To produce today's "submit checks the whole proposal" behaviour while
+respecting that each node (proposal or submodel) lives in its **own** `ConfigVersion`
+(and rules may not cross versions, §2.5), the transition engine validates the entire
+subtree, **validation-only**, in one transaction (§15):
+
+- For **every** node in the subtree (root + all descendants), re-run that node's own
+  save rules (`applies_to_save=True`) via `_evaluate_rules`. This is the *save-rule
+  floor* — it guarantees a workflow-less submodel (e.g. a migrated `Speaker`) is still
+  checked against its own constraints at submit.
+- **Additionally**, for any node whose `ConfigVersion` has a workflow with a transition
+  of the same name (e.g. `submit`), run that transition's
+  `TransitionValidatorAssignment` rules + `TransitionMandatoryField`s.
+- No descendant changes state during this — only the node the transition was invoked
+  on transitions. Any error anywhere aborts the whole transition (no partial submit).
+
+Cascading a child's *state* (not just validating it) is a separate, explicit concern
+handled by `TriggerChildTransitionAction` (§2.6), never an implicit side effect of
+the parent transition.
+
 ### Data-type enforcement
 
-`FieldValue.clean()` always verifies that `value` is structurally valid for
-`field.data_type` (e.g., an `INTEGER` field rejects the string `"hello"`).
-This check runs unconditionally — it is not a `ValidationRule` instance and
-cannot be disabled. The rule-based checks (required, min/max, regex, …) are
-layered on top and are context-dependent.
+`FieldValue.clean()` always verifies that the value is structurally valid for
+`field.data_type` (e.g., an `INTEGER` field rejects the string `"hello"`) and that
+the value lives in the one typed column mapped to that `data_type` (§2.3), with all
+other value columns NULL. This check runs unconditionally — it is not a
+`ValidationRule` instance and cannot be disabled. The rule-based checks (required,
+min/max, regex, …) are layered on top — at save time (`applies_to_save`) and/or at a
+workflow transition (§2.6, §15).
 
 ---
 
@@ -1375,8 +1584,8 @@ These are read-only shortcuts; all writes go to `/api/configs/`.
       "label": "Abstract",
       "data_type": "text_markdown",
       "type_config": { "max_length": 500 },
-      "save_rules": { "required": false },
-      "submit_rules": { "required": true, "min_length": 50 },
+      "default": "Describe your session…",
+      "save_rules": { "max_length": 500 },
       "sort_order": 1
     },
     {
@@ -1388,13 +1597,38 @@ These are read-only shortcuts; all writes go to `/api/configs/`.
         "version_id": 12,
         "fields": [ ... ]
       },
-      "save_rules": { "required": false, "min_items": 0 },
-      "submit_rules": { "required": true, "min_items": 1 },
+      "save_rules": {},
       "sort_order": 2
     }
-  ]
+  ],
+  "workflow": {
+    "initial_state": "draft",
+    "states": [ { "name": "draft", ... }, { "name": "submitted", ... } ],
+    "transitions": [
+      {
+        "name": "submit",
+        "from_state": "draft",
+        "to_state": "submitted",
+        "permission_codename": "submit_proposal",
+        "mandatory_fields": [ { "field_slug": "abstract" } ],
+        "validators": [
+          { "field_slug": "abstract", "rule": { "min_length": 50 } },
+          { "field_slug": "speakers", "rule": { "min_items": 1 } }
+        ]
+      }
+    ]
+  }
 }
 ```
+
+Per-field `save_rules` carry only the rules with `applies_to_save=True`. The strict
+checks that were previously `submit_rules` now live under `workflow.transitions[]`
+as `mandatory_fields` (required-ness) and `validators` (everything else). A config
+with no workflow has no `workflow` key and therefore only save-time validation.
+
+The `default` key (§2.8) is omitted when the field has no default. For a localized
+field it is a `{language_code: value}` dict, mirroring the PATCH payload convention
+(§2.7); for `image`/`file`/`submodel_*` fields it is never present.
 
 ### User and group autocomplete
 
@@ -1420,12 +1654,13 @@ param for bulk-resolving already-stored PKs on form load.
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/proposals/` | Create draft; binds to call's active published config |
+| `POST` | `/api/proposals/` | Create draft; binds to call's active published config; materialises field defaults (§2.8) into starting `FieldValue` rows |
 | `GET` | `/api/proposals/{id}/` | Retrieve with all field values and child nodes |
 | `PATCH` | `/api/proposals/{id}/` | Partial update — only send changed fields (see below) |
-| `POST` | `/api/proposals/{id}/submit/` | Submit (submit-validates) |
+| `POST` | `/api/proposals/{id}/transition/` | Fire a workflow transition by name, e.g. `{ "transition": "submit" }`; runs the subtree validation (§15). Submission is just the `submit` transition — there is no separate `/submit/` endpoint |
 | `DELETE` | `/api/proposals/{id}/` | Delete (DRAFT only, owner only) |
 | `GET` | `/api/proposals/{id}/history/` | Edit history (EditGroups + FieldEdits, newest first) |
+| `GET` | `/api/proposals/{id}/policy-document/` | Canonical full-tree JSON used as Rego `input` (§16); staff-only, for policy authoring/tests |
 
 ### PATCH payload — partial update format
 
@@ -1463,7 +1698,7 @@ Each submodel operation creates its own `EditGroup` on the child node and sets
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/proposals/{id}/nodes/` | Create child SubmodelInstance (NODE_ADDED edit recorded) |
+| `POST` | `/api/proposals/{id}/nodes/` | Create child SubmodelInstance (materialises submodel field defaults §2.8; NODE_ADDED edit recorded) |
 | `PATCH` | `/api/proposals/{id}/nodes/{nid}/` | Partial update of child (same format as proposal PATCH) |
 | `DELETE` | `/api/proposals/{id}/nodes/{nid}/` | Delete child (NODE_REMOVED edit recorded) |
 
@@ -1619,24 +1854,25 @@ transaction, and records a `FieldEdit` with `old_file_name` set and
 ### Server behaviour
 
 The PATCH handler on `ProposalNode` applies **field-level last-write-wins** inside a
-single `transaction.atomic()` block. Locks are acquired **before** validation so that
-the validated state is guaranteed to still hold when the write executes. See §14 for
-the full locking design.
+single `transaction.atomic()` block. The root-proposal lock is acquired **before**
+validation so that the validated state is guaranteed to still hold when the write
+executes. See §14 for the full locking design.
 
 1. Parse `changed_fields` from the request body.
 2. Open `transaction.atomic()`.
-3. **Acquire locks** (see §14.3):
-   a. Lock the root `Proposal` row (`SELECT FOR UPDATE NOWAIT`).
-   b. If editing a `SubmodelInstance`, also lock its `ProposalNode` row.
-   c. Compute the validation lock set from `changed_fields` and the multi-field
-      rules that reference them.
-   d. Lock all existing `FieldValue` rows in the lock set, ordered by PK.
-4. Load current `FieldValue` rows under the acquired locks (these are the `old_value`
-   entries for history).
-5. Run `validate_for_save()` — now authoritative because all relevant rows are locked.
-6. Apply writes (create/update/delete `FieldValue` rows, promote staging files).
-7. Create `EditGroup` + `FieldEdit` rows for fields whose value actually changed.
-8. Return the complete current state of **all** fields on the node.
+3. **Lock the root `Proposal` row** (`SELECT FOR UPDATE NOWAIT, of=("self",)`; §14.2).
+   For a submodel PATCH the root is found by walking `parent_node` up to the
+   `Proposal`. This single lock serialises the whole tree — no `FieldValue` rows
+   are locked.
+4. **Authorize the edit** — compute `authz.editable_fields(node, user)` (§16.3) and
+   reject the whole PATCH with `403` (naming the offending slugs) if any key in
+   `changed_fields` is not in that set. Runs after the lock, before any write.
+5. Load current `FieldValue` rows (these are the `old_value` entries for history).
+6. Run `validate_for_save()` — authoritative because the root lock blocks any
+   concurrent write to this tree.
+7. Apply writes (create/update/delete `FieldValue` rows, promote staging files).
+8. Create `EditGroup` + `FieldEdit` rows for fields whose value actually changed.
+9. Return the complete current state of **all** fields on the node.
 
 Fields absent from `changed_fields` are never written; concurrent edits by another
 user to those fields are preserved exactly as-is.
@@ -1763,135 +1999,90 @@ row locks before running any validation, holds them through the write, and relea
 them only when the transaction commits. Validation is never cached across a transaction
 boundary.
 
-### 14.2 Deadlock prevention — consistent lock order
+### 14.2 The root proposal row is the mutex
 
-All code that acquires multiple row locks must do so in this fixed order:
+Every write to any node in a proposal tree — a field PATCH on the proposal or on
+any nested `SubmodelInstance`, a submit, a workflow transition, a submodel
+add/delete, and each per-proposal step of a bulk migration — **first** acquires a
+`SELECT FOR UPDATE NOWAIT` lock on the single root `Proposal` row. Submodel
+instances belong to exactly one root proposal (walk `parent_node` up to the
+`Proposal`), so this one row serialises the entire tree.
 
-1. Root `Proposal` rows — ordered by PK ascending
-2. `SubmodelInstance` / `ProposalNode` rows — ordered by PK ascending
-3. `FieldValue` rows — ordered by PK ascending
+That single lock alone defeats all three races in §14.1: each requires two
+transactions committing concurrently against the same proposal, and the root lock
+makes them mutually exclusive. There is therefore **no** per-`FieldValue` lock set
+and **no** lock-ordering problem to manage — only one row is ever locked for write
+serialisation, so deadlock between two proposal writes is impossible.
 
-Any path that deviates from this order risks a deadlock.
+This is a deliberate trade-off: concurrent writes to *disjoint* fields of the same
+proposal are serialised rather than allowed in parallel. That is acceptable — a
+proposal is edited by its owner plus a small number of editors, contention is rare,
+and the design already rejects contended writes outright via `NOWAIT` + 409 (§14.5)
+rather than queueing them.
 
-### 14.3 Lock sets per operation
+> **MTI note.** `Proposal` is multi-table-inherited from `ProposalNode`, so a plain
+> `Proposal.objects.select_for_update()` joins and locks *both* the `proposal` and
+> `proposalnode` rows. Lock only the child row, consistently, with `of=("self",)`
+> so the mutex is one unambiguous row:
+> `Proposal.objects.select_for_update(nowait=True, of=("self",)).get(pk=root_id)`.
+
+### 14.3 Lock acquisition per operation
 
 #### PATCH (save field values on any node)
 
 ```python
 with transaction.atomic():
-    # 1. Root proposal — always first
-    proposal = Proposal.objects.select_for_update(nowait=True).get(pk=root_proposal_id)
+    # The root proposal row is the only write lock. For a submodel PATCH,
+    # root_proposal_id is resolved by walking parent_node up from the node.
+    proposal = (Proposal.objects
+                .select_for_update(nowait=True, of=("self",))
+                .get(pk=root_proposal_id))
 
-    # 2. Node being edited (only when it's a SubmodelInstance, not the proposal itself)
-    if node_id != proposal.proposalnode_ptr_id:
-        ProposalNode.objects.select_for_update(nowait=True).get(pk=node_id)
-
-    # 3. Validation lock set: changed fields + all fields touched by any multi-field
-    #    save-rule that references at least one changed field
-    lock_slugs = _compute_validation_lock_set(changed_slugs, proposal.config_version)
-
-    # 4. Lock existing FieldValue rows in PK order (non-existent rows are covered
-    #    by the proposal lock + UniqueConstraint insert-serialisation; see §14.5)
-    list(FieldValue.objects.select_for_update(nowait=True)
-         .filter(node_id=node_id, field__slug__in=lock_slugs)
-         .order_by("pk"))
-
-    # 5. Validate under lock, then write
+    # Validate under the lock, then write. No FieldValue rows are locked:
+    # the root lock already serialises every write to this tree.
     node.validate_for_save(context_fields=changed_slugs)
     # ... apply writes, create EditGroup ...
 ```
 
-#### POST /submit
+#### POST /transition (incl. submit)
+
+Every state change — including submission — is a workflow transition (§15). The
+single root lock blocks any concurrent PATCH/transition on the tree, so the recursive
+subtree validation (§4) sees a stable snapshot.
 
 ```python
 with transaction.atomic():
-    proposal = Proposal.objects.select_for_update(nowait=True).get(pk=proposal_id)
+    proposal = (Proposal.objects
+                .select_for_update(nowait=True, of=("self",))
+                .get(pk=proposal_id))
 
-    # Lock all descendant SubmodelInstance rows
-    list(ProposalNode.objects.select_for_update(nowait=True)
-         .filter(parent_node__in=proposal.all_node_pks())
-         .order_by("pk"))
-
-    # Lock all FieldValue rows across the whole proposal tree
-    list(FieldValue.objects.select_for_update(nowait=True)
-         .filter(node__in=proposal.all_node_pks())
-         .order_by("pk"))
-
-    # Validate under full lock, then transition status
-    proposal.validate_for_submit()
-    proposal.status = Proposal.Status.SUBMITTED
-    proposal.save()
+    execute_transition(proposal, name=request.data["transition"], user=request.user)  # §15.1
 ```
 
-#### Status transitions (accept / reject / revise)
-
-```python
-with transaction.atomic():
-    proposal = Proposal.objects.select_for_update(nowait=True).get(pk=proposal_id)
-    # Verify permission + transition; no field data read needed.
-    proposal.status = new_status
-    proposal.save()
-```
-
-Locking the proposal row here prevents a concurrent PATCH from reading the old
-status between this transition and the commit.
+This one block covers submit, accept, reject, revise and every other transition:
+each runs under the root lock and sets `current_state` (the removed `Status` field
+no longer exists). Holding the root lock prevents a concurrent PATCH from racing the
+state change.
 
 #### Submodel add / delete
 
 ```python
 with transaction.atomic():
-    proposal = Proposal.objects.select_for_update(nowait=True).get(pk=root_proposal_id)
+    proposal = (Proposal.objects
+                .select_for_update(nowait=True, of=("self",))
+                .get(pk=root_proposal_id))
     # Create or delete SubmodelInstance; validate parent-level min/max_items rules.
 ```
 
-### 14.4 Validation lock set computation
+### 14.4 Concurrent inserts of a new FieldValue
 
-```python
-def _compute_validation_lock_set(
-    changed_slugs: set[str],
-    config_version: ConfigVersion,
-) -> set[str]:
-    """
-    Return the set of field slugs whose FieldValue rows must be locked before
-    save-time validation is authoritative for the given changed fields.
-    """
-    lock_set = set(changed_slugs)
+Because the root lock serialises every write to the tree, two requests can never
+both be inside the critical section for the same proposal, so they cannot race to
+INSERT the same `(node, field, language)` row. The
+`UniqueConstraint(fields=["node", "field", "language"])` (§2.3) remains as a
+defensive backstop only; if it ever fires, the handler returns a 409.
 
-    # Multi-field save-rules that touch any changed field pull in all their fields.
-    rules = (
-        MultiFieldValidationRule.objects
-        .filter(
-            config_version=config_version,
-            applies_to_save=True,
-            associations__field__slug__in=changed_slugs,
-        )
-        .prefetch_related("associations__field")
-        .distinct()
-    )
-    for rule in rules:
-        for assoc in rule.associations.all():
-            lock_set.add(assoc.field.slug)
-
-    return lock_set
-```
-
-Single-field rules affect only one field; that field is already in `changed_slugs`
-(you can only trigger a single-field rule by changing the field it is attached to),
-so no additional fields need to be added for them.
-
-### 14.5 Non-existent FieldValue rows
-
-`SELECT FOR UPDATE` cannot lock a row that does not yet exist. When a field has
-never been set, no `FieldValue` row is present to lock. This is safe because:
-
-- The **root Proposal lock** prevents any status transition from racing with the
-  INSERT of a new `FieldValue`.
-- If two concurrent requests both attempt to INSERT a `FieldValue` for the same
-  `(node, field)` pair, the `UniqueConstraint(fields=["node", "field"])` causes
-  one to fail with an `IntegrityError`, which the handler retries once or returns
-  as a 409.
-
-### 14.6 Lock contention — API response
+### 14.5 Lock contention — API response
 
 All `SELECT FOR UPDATE` calls use `nowait=True`. If a lock cannot be immediately
 acquired, Django raises `django.db.utils.OperationalError`. The API catches this
@@ -1908,13 +2099,12 @@ HTTP 409 Conflict
 The frontend displays a transient "Someone else is saving right now — please try
 again" message and retries after `retry_after_ms`.
 
-### 14.7 Interaction with bulk migration
+### 14.6 Interaction with bulk migration
 
 The `BulkMigrationPlan` executor already holds a `SELECT FOR UPDATE` on the plan
 row to prevent concurrent runs (§5.5). For each proposal within a batch, the
-executor opens its own `transaction.atomic()` and follows the PATCH lock order
-(§14.3) for that proposal. Proposals in a batch are processed sequentially, not
-in parallel, to avoid cross-proposal deadlocks.
+executor opens its own `transaction.atomic()` and takes the root-proposal lock
+(§14.3) for that proposal. Proposals in a batch are processed sequentially.
 
 ---
 
@@ -1929,24 +2119,31 @@ Proposal row locked first (§14.3).
 ```
 POST /api/proposals/{id}/transition/   { "transition": "submit" }
 
-1.  Lock root Proposal (SELECT FOR UPDATE NOWAIT) + node if submodel.
+1.  Lock the root Proposal row (SELECT FOR UPDATE NOWAIT, of=("self",); §14.2).
+    This single lock covers the whole tree for the duration of the transition.
 2.  Load WorkflowTransition by name within node.config_version.workflow.
     → 404 if no such transition exists in the workflow.
 3.  Check from_state: node.current_state must match transition.from_state
     (or from_state is null = "any").
     → 409 if the node is in the wrong state.
-4.  Check permission: request.user must hold transition.permission_codename
-    (if set).
-    → 403 if permission is missing.
+4.  Check permission via the Rego authz evaluator (§16.3):
+    authz.allows(node, "transition", user, transition=name), using
+    transition.policy_rule if set, else the default data.proposals.allow rule.
+    (permission_codename is consulted only as a fallback when no Rego rule exists.)
+    → 403 if the policy denies.
 5.  Execute PRE-phase TransitionActions (sorted by sort_order).
-6.  Validate mandatory fields: every TransitionMandatoryField must be satisfied
-    by the node's current FieldValues.
-    → 400 with field-keyed errors if any mandatory field is missing/wrong.
-7.  Run TransitionValidatorAssignments (same engine as validate_for_save / 
-    validate_for_submit from §4), in sort_order.
-    → 400 with field-keyed errors on failure.
-8.  Lock all FieldValue rows referenced by transition validators (§14.4).
-9.  Atomically:
+6.  **Subtree validation (validation-only; §4 "Strict validation across the subtree").**
+    For every node in the subtree (root + all descendants), in one pass under the
+    root lock from step 1:
+      - re-run that node's save rules (the save-rule floor), and
+      - if the node's ConfigVersion has a workflow transition of this same name,
+        run that transition's TransitionMandatoryFields + TransitionValidatorAssignments.
+    → 400 with field-keyed errors (slug, and node id for descendants) on any failure.
+      Nothing has changed state yet, so the whole transition simply aborts.
+7.  (Covered by step 6 — the transition's own validators are evaluated there as part
+    of the root node's contribution.)
+8.  (No additional locking — the root lock from step 1 already serialises the tree.)
+9.  Atomically (only the invoked node transitions; descendants do not):
       a. Apply any SetFieldValueAction writes.
       b. Set node.current_state = transition.to_state.
       c. Save the node.
@@ -1970,7 +2167,7 @@ NODE_TRANSITION = "node_transition"
 ### 15.3 `WorkflowState.allows_edit` enforcement
 
 Every PATCH request checks `node.current_state.allows_edit` after acquiring the
-proposal lock (§14.3 step 1). If `False`, the request is rejected with
+root-proposal lock (§14.2). If `False`, the request is rejected with
 `HTTP 409 { "error": "editing_not_allowed_in_state" }` before any validation runs.
 
 ### 15.4 Nodes without a workflow
@@ -1981,10 +2178,193 @@ configs that have not yet been assigned a workflow.
 
 ---
 
+## 16. Authorization (Rego via regorus)
+
+Authorization decisions — **view / create / edit / delete** on a node (proposal or
+submodel) and on individual **fields**, plus workflow transitions — are evaluated
+with [microsoft/regorus](https://github.com/microsoft/regorus), an **in-process**
+Rego engine. There is no OPA server, no network call, and no `OPA_URL`: regorus is
+embedded via its Python bindings and policies are compiled once at startup. The
+proposal is serialised to a canonical JSON document (§16.1) that becomes the Rego
+`input` (§16.2); decisions are evaluated by a small `authz` module (§16.3) and
+enforced at the points listed in §16.4.
+
+### 16.1 Node serialisation
+
+`ProposalNode.to_policy_document()` returns a plain, JSON-safe `dict` describing one
+node and, recursively, its whole subtree. It reuses the typed-value accessor
+(`FieldValue.get_value()`, §2.3) and resolves reference fields to bare PKs (policy
+matching wants identifiers, not display names — see §16.2 for where attributes go).
+
+```python
+class ProposalNode(HistoricalMetaBase):
+    ...
+    def to_policy_document(self) -> dict:
+        """Canonical, deterministic JSON-safe representation of this node + subtree.
+        Keys are sorted; children are ordered by (parent_field.slug, sort_order, id);
+        datetimes are ISO-8601 UTC strings; Decimals are stringified. Determinism
+        matters so policy decisions can be cached and diffed."""
+        ...
+```
+
+Shape (root proposal example; submodel nodes use the same shape minus
+`call_id` / `owner` / `editors`):
+
+```jsonc
+{
+  "id": "0c1f…",
+  "type": "proposal",                  // or "submodel:<parent_field_slug>"
+  "config_version_id": "8a2d…",
+  "config_id": "4b9e…",
+  "call_id": "1f30…",                  // null for an unassigned proposal
+  "owner": { "id": "5c…", "username": "alice", "is_active": true },
+  "editors": [ { "id": "9d…", "username": "bob" } ],
+  "current_state": "submitted",        // WorkflowState.name, null if no workflow
+  "fields": {
+    // key = field slug; value carries data_type so Rego need not look it up
+    "abstract":  { "data_type": "text_markdown", "localized": false, "value": "…" },
+    "title_i18n":{ "data_type": "text_short", "localized": true,
+                   "value": { "en": "…", "de": "…" } },
+    "duration_days": { "data_type": "integer", "localized": false, "value": 3 },
+    "material_cost_eur": { "data_type": "float", "localized": false, "value": "12.50" },
+    "reviewers": { "data_type": "user_select_multi", "localized": false, "value": ["5c…","9d…"] },
+    "photo":     { "data_type": "image", "localized": false,
+                   "value": { "attachment_id": "aa…", "mime_type": "image/png", "size_bytes": 40213 } }
+  },
+  "children": {
+    // grouped by the parent SUBMODEL_LIST field slug, each ordered by sort_order
+    "speakers": [ { "id": "…", "type": "submodel:speakers", "fields": { … }, "children": {} } ]
+  },
+  "overflow_data": {},
+  "created_at": "2026-05-30T14:32:11Z",
+  "updated_at": "2026-05-30T14:40:02Z"
+}
+```
+
+Notes:
+- Localized fields serialise as a `{language_code: value}` dict, matching the PATCH
+  and config-schema conventions (§2.7).
+- `file` / `image` values carry attachment metadata (not the bytes) so size/MIME
+  policies are expressible without a second fetch.
+- `submodel_select` serialises as the referenced node's `id`; the referenced node is
+  **not** inlined (it may live under a different proposal tree) — follow the id if a
+  policy needs it.
+- The document is value-only: it deliberately excludes edit history and validation
+  rules, which are config/audit concerns, not policy inputs.
+
+### 16.2 Policy input
+
+`build_policy_input(node, action, user, field=None)` wraps the document with the
+subject and the attempted action. The whole **root** proposal is always included
+(even for a submodel action) so policies can reason about the tree; `node_id` points
+at the targeted node, and `field` is the slug for field-level actions (null for
+node-level ones).
+
+```jsonc
+{
+  "action": "edit",                 // one of: view | create | edit | delete | transition
+  "transition": null,               // transition name when action == "transition", else null
+  "node_id": "0c1f…",               // node the action targets (root or a submodel)
+  "node_type": "proposal",          // or "submodel:<slug>"
+  "field": null,                    // field slug for field-level checks; null otherwise
+  "user": {
+    "id": "5c…",
+    "username": "alice",
+    "is_active": true,
+    "is_staff": false,
+    "groups": [3, 7],               // auth.Group PKs the user belongs to
+    "permissions": ["apiv1.submit_proposal", "apiv1.moderate_proposal"]
+  },
+  "proposal": { /* root node document from §16.1 */ }
+}
+```
+
+The user's group memberships and Django permissions live on `user`, so reference
+fields inside the proposal can stay as bare PKs and the policy joins the two. The
+node's `current_state` is in the document, so state-dependent rules (e.g. "no edits
+once submitted") are expressible in Rego — this subsumes `WorkflowState.allows_edit`
+(§15.3), which remains only as an optional fast pre-check.
+
+### 16.3 The `authz` evaluator
+
+A single module owns regorus. Policies (`.rego` files shipped in the repo, e.g.
+`backend/apiv1/policies/`) and any static `data` are loaded into one base
+`regorus.Engine` **once** at startup. Per request the base engine is `clone()`d
+(cheap; avoids recompiling policies and keeps evaluation thread-safe), the input is
+set, and the relevant rule is evaluated:
+
+```python
+# Built once at process start.
+_BASE = regorus.Engine()
+for path in sorted(POLICY_DIR.glob("*.rego")):
+    _BASE.add_policy_from_file(str(path))
+# _BASE.add_data_json(...)  # optional static data (role tables, etc.)
+
+def _eval(rule: str, input: dict):
+    eng = _BASE.clone()
+    eng.set_input_json(json.dumps(input))
+    return eng.eval_rule(rule)          # returns the rule's value (bool / set / …)
+
+def allows(node, action, user, *, field=None, transition=None) -> bool:
+    inp = build_policy_input(node, action, user, field=field)
+    inp["transition"] = transition
+    return _eval("data.proposals.allow", inp) is True
+
+def viewable_fields(node, user) -> set[str]:
+    return set(_eval("data.proposals.viewable_fields",
+                     build_policy_input(node, "view", user)))
+
+def editable_fields(node, user) -> set[str]:
+    return set(_eval("data.proposals.editable_fields",
+                     build_policy_input(node, "edit", user)))
+```
+
+Rego entry points the policies must define:
+
+| Rule | Returns | Used for |
+|---|---|---|
+| `data.proposals.allow` | boolean | node-level view / create / delete, and transitions (`action`/`transition` in input) |
+| `data.proposals.viewable_fields` | set of slugs | which fields appear in a GET response |
+| `data.proposals.editable_fields` | set of slugs | which fields a PATCH may write |
+
+`viewable_fields` / `editable_fields` are returned as **sets in one evaluation** (not
+one call per field) so field-level decisions cost a single `clone()`+`eval` per
+request, not one per field.
+
+### 16.4 Enforcement points
+
+| Action | Enforced in | Rule | On deny |
+|---|---|---|---|
+| **view node** | `GET /api/proposals/{id}/`, and list querysets | `allow` (`action="view"`) | 404 (list: filtered out) |
+| **create node** | `POST /api/proposals/`, `POST …/nodes/` | `allow` (`action="create"`) | 403 |
+| **delete node** | `DELETE …/{id}/`, `DELETE …/nodes/{nid}/` | `allow` (`action="delete"`) | 403 |
+| **view field** | GET serialiser | `viewable_fields` | field omitted from response |
+| **edit field** | PATCH (§12), per slug in `changed_fields` | `editable_fields` | 403 listing the rejected slugs |
+| **transition** | §15.1 step 4 | `allow` (`action="transition"`, `transition=<name>`) | 403 |
+
+PATCH gating runs **before** validation (§12 step 4, after the lock is taken): any
+slug in `changed_fields` not in `editable_fields` aborts the whole PATCH with a 403
+naming the rejected fields — partial silent dropping is avoided so the client never
+believes an edit was saved when it was refused. GET field filtering instead silently
+omits non-viewable fields (a viewer simply does not see them).
+
+This replaces the keyword-matching `Proposal.has_object_permission` (existing code)
+and the per-transition `permission_codename` as the **primary** authorization path for
+proposal nodes and fields. `permission_codename` is retained only as a coarse fallback
+for transitions whose config has no Rego rule yet (during migration); when a Rego
+policy is present it is authoritative.
+
+The serialiser is reusable for offline policy authoring and tests:
+`GET /api/proposals/{id}/policy-document/` (staff-only) returns the §16.1 document so
+it can be fed to `regorus eval` / unit tests as `input` while writing `.rego` rules.
+
+---
+
 ## 9. Implementation Phases
 
 ### Phase 1 — Config infrastructure (no UI changes yet)
 - [ ] `FieldConfig`, `ConfigVersion` (+ `workflow` FK), `FieldDefinition` (+ `is_localized`) models + migrations
+- [ ] `TypedValue` abstract base + `FieldDefaultValue` model (§2.8)
 - [ ] `ConfigLanguage` model (supported languages per `FieldConfig`)
 - [ ] `FieldDefinitionTranslation`, `WorkflowStateTranslation`, `WorkflowTransitionTranslation` models
 - [ ] `field_config` FK added to `Call`
@@ -1992,22 +2372,24 @@ configs that have not yet been assigned a workflow.
 - [ ] `SingleFieldValidationRule` root (+ `clean()` type-check) + all concrete single-field subclasses including `RequiredInLanguageRule`
 - [ ] `AllowedMimeTypeEntry` child model
 - [ ] `MultiFieldValidationRule` root + `MultiFieldRuleAssociation` + concrete subclasses
-- [ ] `ConfigVersion.publish()` atomic method: deep-copies field defs, rules, and workflow into new DRAFT; auto-creates `BulkMigrationPlan` stubs for stale proposals
+- [ ] `ConfigVersion.publish()` atomic method: validates the default combination (save-context, §2.8); deep-copies field defs, rules, workflow, and defaults into new DRAFT; auto-creates `BulkMigrationPlan` stubs for stale proposals
 - [ ] Config + workflow admin (Django admin for staff)
 - [ ] `/api/configs/` CRUD endpoints + `/api/calls/{id}/config/` read alias
 - [ ] Config JSON schema includes serialised rules and workflow states/transitions
 
 ### Phase 2 — ProposalNode base + FieldValue storage
 - [ ] `ProposalNode` (+ `current_state` FK), `Proposal` (MTI), `SubmodelInstance` models
-- [ ] `FieldValue` (+ `language` column, updated unique constraint), `FileAttachment` (soft-delete with `deleted_at`) models
-- [ ] `validate_for_save()` / `validate_for_submit()` on `ProposalNode`
+- [ ] `FieldValue` (extends `TypedValue`, `language` column, unique constraint), `FileAttachment` (soft-delete with `deleted_at`) models
+- [ ] `validate_for_save()` + shared `_evaluate_rules()` on `ProposalNode`; recursive subtree (submit/transition) validation in the transition engine (§4, §15)
 - [ ] `FieldValue.clean()` data-type enforcement
 - [ ] Data migration: import existing hardcoded fields as `FieldDefinition` + `SingleFieldValidationRule` instances; convert existing `Proposal` / `Speaker` rows
+  - [ ] Map today's always-on validators (`Speaker.biography`/`abstract`/`description` `MinLengthValidator(50)`, etc.) to `applies_to_save=True` rules so workflow-less submodels keep being checked (save-rule floor, §4)
+  - [ ] Build a default `WorkflowDefinition` from the current `Proposal.Status` choices + permission verbs (`submit`/`accept`/`reject`/`revise`/`moderate`), and attach the proposal's submit-strict rules to its `submit` transition so the root keeps today's submit behaviour (§2.6)
 
 ### Phase 3 — Proposal CRUD API
-- [ ] Create / retrieve / update proposal endpoints (partial PATCH, §12)
-- [ ] Lock acquisition in every write path per §14.3 (`select_for_update(nowait=True)`)
-- [ ] `_compute_validation_lock_set()` utility + 409 handler for `OperationalError`
+- [ ] Create / retrieve / update proposal endpoints (partial PATCH, §12); create materialises field defaults into starting `FieldValue` rows (§2.8)
+- [ ] Root-proposal lock in every write path per §14.2/§14.3 (`select_for_update(nowait=True, of=("self",))`), including a helper to resolve the root `Proposal` from any submodel node
+- [ ] 409 handler for `OperationalError` (lock contention)
 - [ ] `WorkflowState.allows_edit` check in PATCH (§15.3)
 - [ ] Transition endpoint (`POST /api/proposals/{id}/transition/`) with full §15.1 sequence
 - [ ] Staging file upload endpoint + `cleanup_staging_files` management command
@@ -2016,6 +2398,10 @@ configs that have not yet been assigned a workflow.
 - [ ] Submodel nested endpoints (create / partial-update / delete / transition)
 - [ ] Edit history models with `old_attachment` / `new_attachment` FKs and `NODE_TRANSITION` kind
 - [ ] History list endpoint (`GET /api/proposals/{id}/history/`)
+- [ ] `ProposalNode.to_policy_document()` + `build_policy_input()` serialiser and `GET /api/proposals/{id}/policy-document/` endpoint (§16.1–16.2)
+- [ ] `authz` module embedding regorus: startup policy load, per-request `clone()`+eval, `allows()` / `viewable_fields()` / `editable_fields()` (§16.3)
+- [ ] Enforce authz at every decision point (§16.4): view/create/delete node, GET field filtering, PATCH per-field gating (before validation), transition check in §15.1 step 4
+- [ ] Seed `.rego` policies reproducing current permissions (owner/editor edit in editable states, reviewer/staff visibility) + tests using the policy-document endpoint
 
 ### Phase 4 — Migration system
 - [ ] `ProposalMigration` + `MigrationFieldMapping` models (with `bulk_plan` FK)
@@ -2031,7 +2417,7 @@ configs that have not yet been assigned a workflow.
 - [ ] Workflow designer (states + transitions) with per-language label editor
 - [ ] Transition editor: permissions, validator assignments, mandatory fields, pre/post actions
 - [ ] Rule editor: add / edit / delete / copy single-field rules (including `RequiredInLanguageRule`); multi-field rule picker
-- [ ] `FieldDefinition` form with `is_localized` toggle and per-language label/help_text editing
+- [ ] `FieldDefinition` form with `is_localized` toggle, per-language label/help_text editing, and a per-language default-value editor (§2.8)
 - [ ] Publish flow with diff preview (fields, rules, workflow changes) + bulk migration notice
 - [ ] Datatype-change dry-run endpoint
 - [ ] Bulk migration mapping UI
