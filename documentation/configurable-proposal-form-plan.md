@@ -7,26 +7,35 @@
 - Supported types: `text_short`, `text_long`, `text_markdown`, `text_richtext`, `integer`, `float`, `boolean`, `date`, `time`, `datetime`, `select_single`, `select_multi`, `image`, `file`, `user_select`, `user_select_multi`, `group_select`, `group_select_multi`, `submodel_select`, `submodel_list` → §2.1
 - Multiple calls may share the same field configuration → §2.1, §3
 - A call's configuration can be switched to a different one → §5.5, §6
+- `TEXT_RICHTEXT` content is sanitised with **`nh3`** on write → §2.1
 
 ### Config versioning
 - Field configuration is versioned with an explicit DRAFT → PUBLISHED → ARCHIVED lifecycle → §3
 - Published versions are immutable; editing creates a new draft automatically → §3
 - A call's proposals remain bound to the version they were created under until migrated → §3, §5
+- Orphaned archived `FieldConfig` versions (no living proposals) may only be deleted by explicit staff action → §6
 
 ### Submodels
 - Submodel instances (e.g. Speakers) are stored as separate Django model rows → §2.2
 - Submodels share a common base (`ProposalNode`) with proposals for reuse of validation and migration logic → §2.2
-- Submodels may be nested to any depth; the UI warns beyond 2 levels → §2.2, §10
+- Submodels may be nested to any depth; the UI warns beyond 2 levels, with no hard model limit → §2.2
 
 ### File and image attachments
 - File and image fields are supported on proposals and submodels at any nesting level → §2.3
 - Files are only permanently stored when the user explicitly saves; selections are held in a temporary staging area until then → §2.3, §11
-- Storage backend is configurable (filesystem default, S3 via django-storages) → §2.3
+- Staged files use the same storage backend as committed files (staging/ prefix), configurable via django-storages → §2.3
+- When a file/image field is overwritten the previous `FileAttachment` row is **soft-deleted** (not physically removed), so the edit history can show the prior version → §2.3, §13
+
+### Configurable workflow
+- Every `ProposalNode` (both `Proposal` and `SubmodelInstance`) can have a configurable workflow with named states and transitions; the hardcoded `Proposal.Status` choices are replaced by `WorkflowState` instances → §2.2, §2.6, §15
+- A `WorkflowDefinition` is assigned per `ConfigVersion`; different config versions (and therefore different submodel types) may have different workflows → §2.6
+- Each transition carries: permission checks, additional validators, mandatory field updates (fields that must be filled on transition), pre-actions (before validation + save), and post-actions (after save) → §2.6, §15
 
 ### Validation rules
 - Validation rules are stored as model instances in a polymorphic hierarchy, not as JSON → §2.5
 - Single-field rules are attached to exactly one field via FK; reuse on another field requires an explicit copy → §2.5
-- Multi-field rules are associated with multiple fields via a join table → §2.5
+- Incompatible (rule type, field type) pairs are rejected in `SingleFieldValidationRule.clean()` via an `APPLICABLE_TYPES` class variable → §2.5
+- Multi-field rules are associated with multiple fields via a join table; cross-version integrity (all fields must belong to the same `ConfigVersion`) is enforced at the application level → §2.5
 - Each rule independently declares whether it applies at save time, submit time, or both → §2.5, §4
 - Save-time rules are permissive (allow partial/incomplete data); submit-time rules are strict → §4
 
@@ -34,6 +43,8 @@
 - Proposals can be migrated to a different call or re-bound to a newer config version → §5.1–§5.4
 - Migration is user-confirmed per field: each orphaned source field can be mapped, discarded, or kept in an overflow store → §5.3
 - Config republish and call config-switch both trigger a bulk migration flow: one field mapping is defined once and applied to all affected proposals → §5.5
+- Bulk migration always executes asynchronously via a **Celery task** → §5.5
+- A config-switch always rolls back entirely if any proposal migration fails; no partial switch → §5.5
 - Orphaned field values from any migration are preserved in `ProposalNode.overflow_data` for staff review → §5.3
 
 ### Partial saves and per-field undo
@@ -42,16 +53,19 @@
 - Unchanged fields retain their stored value even if another user modified them in the meantime → §12
 
 ### Edit history
-- All field changes within a single save are grouped together as one `EditGroup` → §2.4, §13
+- All field changes within a single save are grouped together as one `EditGroup`; workflow state transitions are also recorded → §2.4, §13
 - History is scoped to the root proposal and includes edits from nested submodel instances → §2.4, §13
-- File/image edits record the old and new filenames; rich-text/markdown edits store the full old and new strings for client-side diff rendering → §13
+- File/image edits carry FK references to the soft-deleted old and active new `FileAttachment` rows, enabling the history UI to show the previous version inline → §2.3, §13
+- Rich-text/markdown edits store the full old and new strings for client-side diff rendering → §13
+- Edit history is retained indefinitely → §13
 
 ### Concurrent write safety
 - All relevant rows are locked (`SELECT FOR UPDATE NOWAIT`) before any validation runs, and locks are held through the write → §14
 - Validation results are never cached across a transaction boundary → §14.1
 - Lock acquisition follows a fixed order (Proposal → SubmodelInstance → FieldValue by PK) to prevent deadlocks → §14.2
-- Status transitions (submit, accept, reject, revise) lock the proposal row so no concurrent field edit can race against the status change → §14.3
+- Status transitions lock the proposal row so no concurrent field edit can race against the status change → §14.3
 - Lock contention returns HTTP 409 immediately; the frontend retries → §14.6
+- The test suite uses **PostgreSQL exclusively** (SQLite dropped); no conditional locking guards needed → §14
 
 ---
 
@@ -136,6 +150,12 @@ class ConfigVersion(HistoricalMetaBase):
                                     default=Status.DRAFT)
     published_at = models.DateTimeField(null=True, blank=True)
     notes        = models.TextField(blank=True)  # human change-log entry
+    # Workflow governing nodes created under this version. Null = no workflow,
+    # all field edits are always permitted regardless of state.
+    workflow     = models.ForeignKey(
+        "WorkflowDefinition", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="config_versions",
+    )
 
     class Meta:
         # At most one DRAFT and one PUBLISHED per FieldConfig at any time.
@@ -298,48 +318,32 @@ class ProposalNode(HistoricalMetaBase):
     )
     # Orphaned field values from a migration land here for staff review.
     overflow_data  = models.JSONField(default=dict)
+    # Current position in the node's workflow. Null until the workflow's
+    # initial state is assigned on first save (see §2.6).
+    current_state  = models.ForeignKey(
+        "WorkflowState", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="nodes_in_state",
+    )
 
     def get_field_value(self, slug: str) -> "FieldValue | None": ...
-
-    def validate_for_save(self):
-        """Run save_rules for all fields in this node's config_version."""
-        ...
-
-    def validate_for_submit(self):
-        """Run submit_rules for all fields; recurse into child nodes."""
-        ...
-
-    def _validate_with_rules(self, rule_key: str):
-        """
-        For each FieldDefinition in config_version:
-          1. Fetch the FieldValue (or None).
-          2. Build a validator instance from field.{rule_key}.
-          3. Run it; collect ValidationErrors.
-        Raise ValidationError with all collected errors if any.
-        """
-        ...
+    def validate_for_save(self): ...
+    def validate_for_submit(self): ...
 ```
 
-**`Proposal`** extends `ProposalNode` via multi-table inheritance:
+**`Proposal`** extends `ProposalNode` via multi-table inheritance.
+The hardcoded `Status` choices are removed — states are now `WorkflowState`
+instances (see §2.6):
 
 ```python
 class Proposal(ProposalNode):
-    class Status(models.TextChoices):
-        DRAFT     = "draft"
-        SUBMITTED = "submitted"
-        REVISE    = "revise"
-        ACCEPTED  = "accepted"
-        REJECTED  = "rejected"
-
     call    = models.ForeignKey(Call, on_delete=models.SET_NULL,
                                 null=True, blank=True, related_name="proposals")
     owner   = models.ForeignKey(OpenIDUser, on_delete=models.SET_NULL,
                                 null=True, blank=True, related_name="owned_proposals")
     editors = models.ManyToManyField(OpenIDUser, blank=True,
                                      related_name="edited_proposals")
-    status  = models.CharField(max_length=20, choices=Status, default=Status.DRAFT)
-    moderation_comment = models.TextField(blank=True)
-    # ... existing permission logic migrated here
+    # ... existing permission logic migrated here; permission checks now
+    # consult current_state and its outgoing WorkflowTransitions
 ```
 
 **`SubmodelInstance`** extends `ProposalNode`:
@@ -379,11 +383,17 @@ class FieldValue(MetaBase):
 ```
 
 **`FileAttachment`** — created only when a save is committed, never on file selection.
+When a file/image field is overwritten the old `FileAttachment` row is **soft-deleted**
+(its `field_value` FK is set to null and `deleted_at` is stamped) so the previous
+version remains accessible from the edit history timeline. Physical file deletion
+happens via a separate `cleanup_deleted_attachments` management command.
 
 ```python
 class FileAttachment(MetaBase):
-    field_value   = models.OneToOneField(FieldValue, on_delete=models.CASCADE,
-                                         related_name="attachment")
+    # Null when this attachment has been replaced and is kept only for history.
+    field_value   = models.ForeignKey(FieldValue, on_delete=models.SET_NULL,
+                                      null=True, blank=True,
+                                      related_name="attachments")
     file          = models.FileField(upload_to=UUIDFilenameUploadTo("proposal_files"))
     original_name = models.CharField(max_length=255)
     mime_type     = models.CharField(max_length=100)
@@ -391,7 +401,23 @@ class FileAttachment(MetaBase):
     # For IMAGE types, also store dimensions:
     image_width   = models.PositiveSmallIntegerField(null=True, blank=True)
     image_height  = models.PositiveSmallIntegerField(null=True, blank=True)
+    # Soft-delete: set when this attachment is superseded by a newer upload.
+    deleted_at    = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        # Exactly one active (non-deleted) attachment per FieldValue at any time.
+        constraints = [
+            UniqueConstraint(
+                fields=["field_value"],
+                condition=Q(deleted_at__isnull=True),
+                name="unique_active_attachment_per_field_value",
+            )
+        ]
 ```
+
+`FieldEdit.old_file_attachment` and `new_file_attachment` (replacing the plain name
+strings) now carry FKs to `FileAttachment` so the history UI can render the previous
+image inline. See §13.
 
 **`StagingFile`** — temporary holding area for uploaded files before save.
 
@@ -470,9 +496,16 @@ class FieldEdit(MetaBase):
     old_value     = models.JSONField(null=True, blank=True)  # null = field did not exist before
     new_value     = models.JSONField(null=True, blank=True)  # null = field was cleared
 
-    # File/image fields store names instead of (possibly large) values:
-    old_file_name = models.CharField(max_length=255, blank=True)
-    new_file_name = models.CharField(max_length=255, blank=True)
+    # File/image fields: FK to soft-deleted (old) and active (new) FileAttachment rows.
+    # Null when the field is not a file/image type or the attachment did not exist.
+    old_attachment = models.ForeignKey(
+        "FileAttachment", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="as_old_in_edits",
+    )
+    new_attachment = models.ForeignKey(
+        "FileAttachment", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="as_new_in_edits",
+    )
 
     # For NODE_ADDED / NODE_REMOVED / NODE_REORDERED:
     affected_node = models.ForeignKey(ProposalNode, on_delete=models.SET_NULL,
@@ -537,6 +570,17 @@ class SingleFieldValidationRule(PolymorphicMetaBase):
     def validate(self, value) -> list[str]:
         """Return a (possibly empty) list of error strings for *value*."""
         raise NotImplementedError
+
+    def clean(self):
+        """Reject incompatible (rule subclass, field data_type) combinations."""
+        # Each concrete subclass declares APPLICABLE_TYPES: frozenset[str].
+        # Base implementation checks membership and raises ValidationError if violated.
+        applicable = getattr(self.__class__, "APPLICABLE_TYPES", None)
+        if applicable and self.field_id and self.field.data_type not in applicable:
+            raise ValidationError(
+                f"{self.__class__.__name__} cannot be applied to a "
+                f"{self.field.data_type} field."
+            )
 
     def clone_to(self, target_field: FieldDefinition) -> "SingleFieldValidationRule":
         """Return a new, unsaved copy of this rule bound to *target_field*."""
@@ -657,6 +701,152 @@ MultiFieldValidationRule (PolymorphicMetaBase)
    ├── AtLeastOneRequiredRule
    ├── ExactlyOneRequiredRule
    └── MutualExclusionRule
+```
+
+---
+
+### 2.6 Configurable workflow
+
+Every `ProposalNode` participates in a workflow defined by the `ConfigVersion` it
+belongs to. A workflow governs which states a node can be in, which transitions are
+allowed, and what must happen at each transition. Submodels and proposals may have
+entirely different workflows because they have separate `ConfigVersion`s (via
+`submodel_config`).
+
+#### Model hierarchy
+
+```
+WorkflowDefinition  ──1:N──  WorkflowState
+                    ──1:N──  WorkflowTransition
+```
+
+```python
+class WorkflowDefinition(HistoricalMetaBase):
+    name        = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    # Assigned to a ConfigVersion (one version → one workflow, or null = no workflow).
+    # Set as FK on ConfigVersion: config_version.workflow = FK(WorkflowDefinition)
+```
+
+```python
+class WorkflowState(HistoricalMetaBase):
+    workflow    = models.ForeignKey(WorkflowDefinition, on_delete=models.CASCADE,
+                                    related_name="states")
+    name        = models.CharField(max_length=100)   # e.g. "draft", "submitted"
+    label       = models.CharField(max_length=200)   # display name
+    is_initial  = models.BooleanField(default=False)  # assigned to new nodes on creation
+    # Nodes in this state can have their field values edited (if False, PATCH is blocked).
+    allows_edit = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["workflow"], condition=Q(is_initial=True),
+                             name="one_initial_state_per_workflow"),
+            UniqueConstraint(fields=["workflow", "name"],
+                             name="unique_state_name_per_workflow"),
+        ]
+```
+
+```python
+class WorkflowTransition(HistoricalMetaBase):
+    workflow        = models.ForeignKey(WorkflowDefinition, on_delete=models.CASCADE,
+                                        related_name="transitions")
+    name            = models.CharField(max_length=100)   # e.g. "submit", "accept"
+    label           = models.CharField(max_length=200)
+    # Null from_state = transition is valid from any state.
+    from_state      = models.ForeignKey(WorkflowState, on_delete=models.CASCADE,
+                                        null=True, blank=True,
+                                        related_name="outgoing_transitions")
+    to_state        = models.ForeignKey(WorkflowState, on_delete=models.CASCADE,
+                                        related_name="incoming_transitions")
+    # Django permission codename that the triggering user must hold.
+    # Null = any authenticated user with proposal access may trigger it.
+    permission_codename = models.CharField(max_length=200, blank=True)
+```
+
+#### Transition validators
+
+Transition validators reuse the same `SingleFieldValidationRule` /
+`MultiFieldValidationRule` polymorphic hierarchy. A `TransitionValidatorAssignment`
+attaches a rule to a transition; the rule is evaluated as part of the transition
+execution (step 4 in §15):
+
+```python
+class TransitionValidatorAssignment(MetaBase):
+    transition = models.ForeignKey(WorkflowTransition, on_delete=models.CASCADE,
+                                   related_name="validator_assignments")
+    # Exactly one of these two FKs is non-null:
+    single_field_rule = models.ForeignKey(
+        SingleFieldValidationRule, on_delete=models.CASCADE,
+        null=True, blank=True, related_name="+",
+    )
+    multi_field_rule  = models.ForeignKey(
+        MultiFieldValidationRule, on_delete=models.CASCADE,
+        null=True, blank=True, related_name="+",
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+```
+
+#### Mandatory field updates
+
+Fields that must be non-empty (or set to a specific value) for the transition to
+be accepted:
+
+```python
+class TransitionMandatoryField(MetaBase):
+    transition      = models.ForeignKey(WorkflowTransition, on_delete=models.CASCADE,
+                                        related_name="mandatory_fields")
+    field           = models.ForeignKey(FieldDefinition, on_delete=models.CASCADE,
+                                        related_name="+")
+    # Null = field must merely be non-empty. Non-null = field must equal this value.
+    required_value  = models.JSONField(null=True, blank=True)
+    sort_order      = models.PositiveSmallIntegerField(default=0)
+```
+
+#### Transition actions (pre and post)
+
+Actions are a polymorphic hierarchy of things to execute before or after a
+transition. Pre-actions run before validation; post-actions run after the state
+change is saved.
+
+```python
+class TransitionAction(PolymorphicMetaBase):
+    class Phase(models.TextChoices):
+        PRE  = "pre"   # before field validation and saving
+        POST = "post"  # after state change is saved
+
+    transition = models.ForeignKey(WorkflowTransition, on_delete=models.CASCADE,
+                                   related_name="actions")
+    phase      = models.CharField(max_length=4, choices=Phase)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    def execute(self, node: "ProposalNode", triggered_by) -> None:
+        raise NotImplementedError
+```
+
+Initial concrete action subclasses:
+
+| Class | Phase | Description |
+|---|---|---|
+| `SendNotificationAction` | `post` | Send an email/notification to configured recipients |
+| `SetFieldValueAction` | `pre` | Forcibly set a field to a fixed value before the transition saves (e.g. clear `internal_notes` on submission) |
+| `TriggerChildTransitionAction` | `post` | Fire a named transition on all child `SubmodelInstance` nodes |
+
+#### Diagram
+
+```
+WorkflowDefinition ──1:N── WorkflowState
+                   ──1:N── WorkflowTransition
+                                │
+                    ┌───────────┼────────────────┐
+                    │           │                │
+          TransitionValidatorAssignment  TransitionMandatoryField
+                    │
+          TransitionAction (PolymorphicMetaBase)
+                    │
+          ├── SendNotificationAction
+          ├── SetFieldValueAction
+          └── TriggerChildTransitionAction
 ```
 
 ---
@@ -917,19 +1107,25 @@ When `Call.field_config` is changed (via `PATCH /api/calls/{id}/` with a new
 If a call currently has no proposals, step 1–4 are skipped and the assignment
 takes effect immediately.
 
-**Execution**
+**Execution — always via Celery**
+
+`POST /api/bulk-migrations/{id}/execute/` enqueues a Celery task and returns
+`HTTP 202 Accepted` immediately. Progress is polled via
+`GET /api/bulk-migrations/{id}/`. The task:
 
 ```
-POST /api/bulk-migrations/{id}/execute/
-  server-side, inside transaction.atomic():
-    1. Lock the plan row (SELECT FOR UPDATE) to prevent concurrent runs.
-    2. Set status = RUNNING, total_proposals = count of affected proposals.
-    3. For each affected Proposal (batched):
-         a. Create ProposalMigration(bulk_plan=plan, ...).
-         b. Copy BulkMigrationFieldMapping entries → MigrationFieldMapping.
-         c. Execute single-proposal migration (§5.3 steps 5a–5g).
-         d. Increment done_proposals or failed_proposals.
-    4. Set status = DONE or PARTIAL.
+celery task: execute_bulk_migration(plan_id)
+  1. Lock the plan row (SELECT FOR UPDATE NOWAIT).
+     → If already RUNNING, raise and discard (idempotent).
+  2. Set status = RUNNING, total_proposals = count of affected proposals.
+  3. For each affected Proposal (one transaction per proposal):
+       a. Create ProposalMigration(bulk_plan=plan, ...).
+       b. Copy BulkMigrationFieldMapping → MigrationFieldMapping.
+       c. Execute single-proposal migration (§5.3 steps 5a–5g),
+          with full proposal locking per §14.3.
+       d. Atomically increment done_proposals or failed_proposals.
+  4. Set status = DONE (all succeeded) or PARTIAL (any failed).
+     PARTIAL leaves the call's field_config unchanged (see §5.5 trigger 4).
 ```
 
 The preview endpoint (`GET /api/bulk-migrations/{id}/preview/`) returns the
@@ -1344,15 +1540,24 @@ to the child node.
 
 ### History for submitted proposals
 
-`EditGroup` rows created after `Proposal.status` transitions to SUBMITTED are
+`EditGroup` rows created after a node transitions to any non-initial state are
 preserved for audit. They are readable by proposal owners and by staff, not by
 reviewers.
+
+### File / image diffs
+
+`FieldEdit.old_attachment` and `new_attachment` carry FKs to the soft-deleted
+previous and the active current `FileAttachment` rows respectively. The history
+timeline API includes a pre-signed download URL for both so the frontend can
+render the old and new image side by side. Physical cleanup of soft-deleted
+attachments is handled by the `cleanup_deleted_attachments` management command
+(runs on a schedule; configurable retention before physical deletion).
 
 ### Rich-text / markdown diffs
 
 For `TEXT_MARKDOWN` and `TEXT_RICHTEXT` fields the history stores the full
-`old_value` and `new_value` strings. The frontend is responsible for rendering
-a character-level or line-level diff if desired; the server returns raw strings.
+`old_value` and `new_value` strings (via `nh3`-sanitised HTML for richtext).
+The frontend is responsible for rendering a character-level or line-level diff.
 
 ---
 
@@ -1530,76 +1735,120 @@ in parallel, to avoid cross-proposal deadlocks.
 
 ---
 
+## 15. Workflow Transition Execution
+
+Every state change on a `ProposalNode` is a **transition**. The execution
+sequence below runs inside a single `transaction.atomic()` with the root
+Proposal row locked first (§14.3).
+
+### 15.1 Execution sequence
+
+```
+POST /api/proposals/{id}/transition/   { "transition": "submit" }
+
+1.  Lock root Proposal (SELECT FOR UPDATE NOWAIT) + node if submodel.
+2.  Load WorkflowTransition by name within node.config_version.workflow.
+    → 404 if no such transition exists in the workflow.
+3.  Check from_state: node.current_state must match transition.from_state
+    (or from_state is null = "any").
+    → 409 if the node is in the wrong state.
+4.  Check permission: request.user must hold transition.permission_codename
+    (if set).
+    → 403 if permission is missing.
+5.  Execute PRE-phase TransitionActions (sorted by sort_order).
+6.  Validate mandatory fields: every TransitionMandatoryField must be satisfied
+    by the node's current FieldValues.
+    → 400 with field-keyed errors if any mandatory field is missing/wrong.
+7.  Run TransitionValidatorAssignments (same engine as validate_for_save / 
+    validate_for_submit from §4), in sort_order.
+    → 400 with field-keyed errors on failure.
+8.  Lock all FieldValue rows referenced by transition validators (§14.4).
+9.  Atomically:
+      a. Apply any SetFieldValueAction writes.
+      b. Set node.current_state = transition.to_state.
+      c. Save the node.
+      d. Create an EditGroup + FieldEdit entries for field value changes (step 9a)
+         and a NODE_TRANSITION FieldEdit for the state change.
+10. Execute POST-phase TransitionActions (sorted by sort_order).
+    → Post-action failures are logged but do not roll back the transition.
+11. Return updated node representation (all field values + new current_state).
+```
+
+### 15.2 FieldEdit for state changes
+
+`FieldEdit.ChangeKind` gains a new value:
+
+```python
+NODE_TRANSITION = "node_transition"
+# old_value = {"state": "draft"},  new_value = {"state": "submitted"}
+# field is null; affected_node points to the transitioning node
+```
+
+### 15.3 `WorkflowState.allows_edit` enforcement
+
+Every PATCH request checks `node.current_state.allows_edit` after acquiring the
+proposal lock (§14.3 step 1). If `False`, the request is rejected with
+`HTTP 409 { "error": "editing_not_allowed_in_state" }` before any validation runs.
+
+### 15.4 Nodes without a workflow
+
+If `config_version.workflow` is null the node has no states, all field edits are
+always permitted, and `POST /transition/` returns 404. This is the default for
+configs that have not yet been assigned a workflow.
+
+---
+
 ## 9. Implementation Phases
 
 ### Phase 1 — Config infrastructure (no UI changes yet)
-- [ ] `FieldConfig`, `ConfigVersion`, `FieldDefinition` models + migrations
+- [ ] `FieldConfig`, `ConfigVersion` (+ `workflow` FK), `FieldDefinition` models + migrations
 - [ ] `field_config` FK added to `Call`
-- [ ] `SingleFieldValidationRule` root + all concrete single-field subclasses
+- [ ] `WorkflowDefinition`, `WorkflowState`, `WorkflowTransition`, `TransitionMandatoryField`, `TransitionValidatorAssignment`, `TransitionAction` hierarchy models
+- [ ] `SingleFieldValidationRule` root (+ `clean()` type-check) + all concrete single-field subclasses
 - [ ] `AllowedMimeTypeEntry` child model
 - [ ] `MultiFieldValidationRule` root + `MultiFieldRuleAssociation` + concrete subclasses
-- [ ] `ConfigVersion.publish()` atomic method: freezes rules, deep-copies all field defs
-      + rules into new DRAFT, auto-creates `BulkMigrationPlan` stubs for stale proposals
-- [ ] Config admin (Django admin for staff), including inline rule editing
+- [ ] `ConfigVersion.publish()` atomic method: deep-copies field defs, rules, and workflow into new DRAFT; auto-creates `BulkMigrationPlan` stubs for stale proposals
+- [ ] Config + workflow admin (Django admin for staff)
 - [ ] `/api/configs/` CRUD endpoints + `/api/calls/{id}/config/` read alias
-- [ ] Config JSON schema includes serialised rules (see §6) so the frontend can display
-      rule summaries alongside each field
+- [ ] Config JSON schema includes serialised rules and workflow states/transitions
 
 ### Phase 2 — ProposalNode base + FieldValue storage
-- [ ] `ProposalNode`, `Proposal` (MTI), `SubmodelInstance` models
-- [ ] `FieldValue`, `FileAttachment` models
-- [ ] `validate_for_save()` / `validate_for_submit()` on `ProposalNode` using rule model queries
+- [ ] `ProposalNode` (+ `current_state` FK), `Proposal` (MTI), `SubmodelInstance` models
+- [ ] `FieldValue`, `FileAttachment` (soft-delete with `deleted_at`) models
+- [ ] `validate_for_save()` / `validate_for_submit()` on `ProposalNode`
 - [ ] `FieldValue.clean()` data-type enforcement
-- [ ] Data migration: import all existing hardcoded proposal fields and their implicit
-      validation constraints as `SingleFieldValidationRule` instances; convert existing
-      `Proposal` / `Speaker` rows into `ProposalNode` + `FieldValue` rows
+- [ ] Data migration: import existing hardcoded fields as `FieldDefinition` + `SingleFieldValidationRule` instances; convert existing `Proposal` / `Speaker` rows
 
 ### Phase 3 — Proposal CRUD API
-- [ ] Create / retrieve / update proposal endpoints (partial PATCH semantics from §12)
+- [ ] Create / retrieve / update proposal endpoints (partial PATCH, §12)
 - [ ] Lock acquisition in every write path per §14.3 (`select_for_update(nowait=True)`)
 - [ ] `_compute_validation_lock_set()` utility + 409 handler for `OperationalError`
+- [ ] `WorkflowState.allows_edit` check in PATCH (§15.3)
+- [ ] Transition endpoint (`POST /api/proposals/{id}/transition/`) with full §15.1 sequence
 - [ ] Staging file upload endpoint + `cleanup_staging_files` management command
-- [ ] File staging → promotion flow within PATCH transaction
-- [ ] Submodel nested endpoints (create / partial-update / delete) with root proposal lock
-- [ ] Submit endpoint: full-tree lock → submit-validates → status transition (§14.3)
-- [ ] Status transition endpoints: proposal lock only
-- [ ] Edit history models (`EditGroup`, `FieldEdit`) created alongside each PATCH
+- [ ] `cleanup_deleted_attachments` management command for soft-deleted `FileAttachment` rows
+- [ ] File staging → promotion + soft-delete-old flow within PATCH transaction
+- [ ] Submodel nested endpoints (create / partial-update / delete / transition)
+- [ ] Edit history models with `old_attachment` / `new_attachment` FKs and `NODE_TRANSITION` kind
 - [ ] History list endpoint (`GET /api/proposals/{id}/history/`)
 
 ### Phase 4 — Migration system
 - [ ] `ProposalMigration` + `MigrationFieldMapping` models (with `bulk_plan` FK)
 - [ ] `BulkMigrationPlan` + `BulkMigrationFieldMapping` models
+- [ ] Celery task `execute_bulk_migration` with per-proposal locking (§5.5)
 - [ ] Single-proposal migration preview + execute API
-- [ ] Bulk migration preview + create + execute API
-- [ ] Call config-switch guard (reject PATCH if stale proposals exist without a confirmed plan)
-- [ ] Stale-proposal count query wired into `FieldConfig` detail and `Call` detail responses
+- [ ] Bulk migration preview + create + execute (202) + status-poll API
+- [ ] Call config-switch guard + stale-proposal count in `FieldConfig` / `Call` responses
 - [ ] Overflow data admin view
 
-### Phase 5 — Config versioning UI
-- [ ] Draft editing UI (staff), including FieldConfig create/edit/assign to calls
-- [ ] Rule editor UI: add / edit / delete / copy single-field rules per field;
-      add / edit / delete multi-field rules per version with field picker
-- [ ] Publish flow with diff preview (includes rule changes) + bulk migration plan notice
+### Phase 5 — Config and workflow UI (staff)
+- [ ] FieldConfig create/edit/assign to calls; workflow designer (states + transitions)
+- [ ] Transition editor: permissions, validator assignments, mandatory fields, pre/post actions
+- [ ] Rule editor: add / edit / delete / copy single-field rules; multi-field rule picker
+- [ ] Publish flow with diff preview (fields, rules, workflow changes) + bulk migration notice
 - [ ] Datatype-change dry-run endpoint
-- [ ] Bulk migration mapping UI (shared by republish and config-switch flows)
-- [ ] Per-proposal config version upgrade flow (re-uses single-proposal migration UI)
+- [ ] Bulk migration mapping UI
+- [ ] Per-proposal config version upgrade flow
 
 ---
 
-## 10. Open Questions / Decisions Deferred
-
-| Question | Notes |
-|---|---|
-| Should `Proposal` keep its existing `Status` workflow? | The existing accept/reject/revise flow can remain on `Proposal`; `ProposalNode` only needs DRAFT/SUBMITTED for validation gating |
-| Rich-text sanitisation library | `bleach` or `nh3`; must be decided before `TEXT_RICHTEXT` type is implemented |
-| Max nesting depth | No hard limit in the model, but the UI should warn beyond 2 levels |
-| Full-text search across FieldValues | Out of scope for initial implementation; JSONField values can be indexed later with `SearchVector` if needed |
-| Staging file storage location | Should staged files use the same backend as committed files, or a separate bucket/path with cheaper/shorter retention settings? |
-| Bulk migration execution mode | The plan shows execution as synchronous (request blocks until done). For large proposal sets this should move to a background task (Celery). Decide the threshold before implementing. |
-| Config-switch atomicity vs. partial failure | If a `BulkMigrationPlan` execution partly fails (some proposals error), the call's `field_config` is not changed (the outer transaction rolls back). Decide whether a PARTIAL outcome should still commit the successful migrations and allow the switch, or always roll back entirely. |
-| FieldConfig deletion guard | A `FieldConfig` can only be deleted if no calls reference it and no proposals exist on any of its versions. Decide whether orphaned archived versions (no living proposals) should be auto-deletable or require explicit cleanup. |
-| Rule applicability checking | `SingleFieldValidationRule` subclasses are only meaningful on certain `data_type`s (e.g. `MinLengthRule` makes no sense on a `BOOLEAN` field). Decide whether to enforce compatible (rule type, field type) pairs at the DB level (a check constraint or custom `clean()`) or only in the admin UI. |
-| Multi-field rule cross-version integrity | `MultiFieldRuleAssociation` must only reference `FieldDefinition`s that belong to the same `ConfigVersion` as the rule. This is enforced at the application level. Decide whether a DB-level constraint (e.g. a trigger or a generated FK via an intermediate denormalised column) is worth the complexity. |
-| SQLite compatibility | `SELECT FOR UPDATE NOWAIT` and `SELECT FOR UPDATE` are PostgreSQL features; SQLite (used in tests via `db.sqlite3`) does not support them. All locking code must be wrapped in a `connection.features.has_select_for_update` guard or replaced with a no-op in tests. Confirm the production DB is PostgreSQL before implementing §14. |
-| History retention policy | Edit history is currently kept forever. A retention limit (e.g. keep last N groups, or purge groups older than X years) may be needed for GDPR compliance. |
-| File diff in history | The plan stores filenames only for file edits. If users need to view the previous version of an image or file, old `FileAttachment` rows would need to be retained rather than deleted on replace. Decide before implementing the promotion step. |
