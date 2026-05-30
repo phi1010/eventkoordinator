@@ -12,11 +12,13 @@ import i18n from './i18n'
 import styles from './IndexView.module.css'
 import {ProposalSelectionPanel} from "./ProposalSelectionPanel.tsx";
 import { ProposalDashboard } from './ProposalDashboard'
+import { UdmAdminPage } from './UdmAdminPage'
+import { UdmEntityEditor, UdmEntityPanel } from './UdmEntityEditor'
 
 export function IndexView() {
   const { t } = useTranslation()
   const [user, setUser] = useState<User | null>(null)
-  const { canBrowse, loading: permissionsLoading } = usePermissions()
+  const { canBrowse, permissions, loading: permissionsLoading } = usePermissions()
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -90,6 +92,18 @@ export function IndexView() {
             path="/sync/diff/:seriesId/:eventId/:targetId"
             element={<SyncDiff />}
           />
+          <Route
+            path="/udm-admin"
+            element={
+              permissionsLoading ? null : permissions?.is_staff ? <UdmAdminPage /> : (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+                  <p style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>{t('common.accessDenied')}</p>
+                </div>
+              )
+            }
+          />
+          <Route path="/udm-entity" element={<UdmEntityPanel />} />
+          <Route path="/udm-entity/:entityId" element={<UdmEntityEditor />} />
           <Route
             path="/proposal/:proposalId/event/:eventId"
             element={

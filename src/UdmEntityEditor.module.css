@@ -1,0 +1,393 @@
+.page {
+  padding: 1.5rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.pageTitle {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.backBtn {
+  background: none;
+  border: none;
+  color: #0066cc;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.stateBadge {
+  display: inline-block;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #e8f0fe;
+  color: #1a73e8;
+}
+
+.stateReadonly {
+  background: #fce8e6;
+  color: #c5221f;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.fieldGroup {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.fieldGroupDirty {
+  border-color: #f9a825;
+  box-shadow: 0 0 0 2px rgba(249, 168, 37, 0.15);
+}
+
+.fieldHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.fieldLabel {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #222;
+}
+
+.fieldSlug {
+  font-size: 0.78rem;
+  color: #888;
+  font-family: 'Fira Mono', 'Courier New', monospace;
+}
+
+.fieldHelp {
+  font-size: 0.82rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.fieldActions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.resetBtn {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #fff;
+  color: #666;
+}
+
+.resetBtn:hover { background: #f5f5f5; }
+
+.input {
+  width: 100%;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.15);
+}
+
+.input:disabled {
+  background: #f5f5f5;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.textarea {
+  width: 100%;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.15);
+}
+
+.textarea:disabled {
+  background: #f5f5f5;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.select {
+  width: 100%;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+.select:disabled {
+  background: #f5f5f5;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.langTabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.langTab {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  font-size: 0.8rem;
+  background: #fff;
+  color: #555;
+}
+
+.langTabActive {
+  background: #0066cc;
+  color: #fff;
+  border-color: #0066cc;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e0e0e0;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 0.5rem 1.25rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.btnPrimary {
+  background: #0066cc;
+  color: #fff;
+  border-color: #0066cc;
+}
+
+.btnPrimary:hover:not(:disabled) { background: #0052a3; }
+
+.btnSecondary {
+  background: #fff;
+  color: #333;
+  border-color: #ccc;
+}
+
+.btnSecondary:hover:not(:disabled) { background: #f5f5f5; }
+
+.btnDanger {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+}
+
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.transitionRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.transitionBtn {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid #0066cc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  background: #fff;
+  color: #0066cc;
+}
+
+.transitionBtn:hover { background: #e8f0fe; }
+
+.error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.success {
+  color: #16a34a;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.readonlyNote {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  color: #856404;
+  margin-bottom: 1rem;
+}
+
+.historySection {
+  margin-top: 2rem;
+  border-top: 1px solid #e0e0e0;
+  padding-top: 1rem;
+}
+
+.historyTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: #333;
+}
+
+.historyGroup {
+  border-left: 3px solid #e0e0e0;
+  padding: 0.5rem 0 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.historyMeta {
+  font-size: 0.8rem;
+  color: #666;
+  margin-bottom: 0.25rem;
+}
+
+.historyEdit {
+  font-size: 0.85rem;
+  color: #333;
+  padding: 0.1rem 0;
+}
+
+.autocompleteWrapper {
+  position: relative;
+}
+
+.autocompleteDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 0 0 4px 4px;
+  z-index: 100;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.autocompleteItem {
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.autocompleteItem:hover { background: #f0f4ff; }
+
+.selectedTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.selectedTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  background: #e8f0fe;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: #1a73e8;
+}
+
+.removeTag {
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.removeTag:hover { color: #dc2626; }
+
+.fileUploadArea {
+  border: 2px dashed #ccc;
+  border-radius: 6px;
+  padding: 1rem;
+  text-align: center;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.fileUploadArea:hover { border-color: #0066cc; color: #0066cc; }
+
+.fileInfo {
+  font-size: 0.85rem;
+  color: #555;
+  margin-top: 0.25rem;
+}
+
+.submodelNote {
+  font-size: 0.85rem;
+  color: #888;
+  font-style: italic;
+}
+
+.metaInfo {
+  font-size: 0.8rem;
+  color: #888;
+  margin-bottom: 1rem;
+}

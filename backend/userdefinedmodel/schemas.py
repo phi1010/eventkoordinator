@@ -656,3 +656,15 @@ class UDMTypeOut(Schema):
     name: str
     description: str
     field_config_id: Optional[uuid.UUID]
+
+
+class UDMTypeCreateIn(Schema):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = ""
+
+
+class PolicyEvalOut(Schema):
+    input_document: dict[str, Any]
+    policies: list[dict[str, str]]   # [{"slug": ..., "source": ...}]
+    output: dict[str, Any]           # allow, messages, viewable_fields, editable_fields
+    error: Optional[str] = None

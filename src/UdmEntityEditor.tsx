@@ -1,0 +1,964 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import {
+  udmGetEntity,
+  udmGetTypeConfig,
+  udmPatchEntity,
+  udmTransitionEntity,
+  udmEntityHistory,
+  udmSearchUsers,
+  udmSearchGroups,
+  udmSearchEntities,
+  udmUploadStagingFile,
+  type EntityOut,
+  type ConfigVersionOut,
+  type FieldDefinitionOut,
+  type WorkflowStateOut,
+  type WorkflowTransitionOut,
+  type EditHistoryOut,
+  type UserAutocompleteItem,
+  type GroupAutocompleteItem,
+  type EntityAutocompleteItem,
+} from './apiUdm'
+import styles from './UdmEntityEditor.module.css'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getLang(map: Record<string, string>, uiLang: string): string {
+  return map[uiLang] ?? map['en'] ?? Object.values(map)[0] ?? ''
+}
+
+function getFieldValue(entity: EntityOut, slug: string, lang = ''): unknown {
+  const fv = entity.field_values.find(v => v.field_slug === slug && v.language === lang)
+  return fv?.value ?? null
+}
+
+function getAllLangValues(entity: EntityOut, slug: string): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  entity.field_values
+    .filter(v => v.field_slug === slug)
+    .forEach(v => { result[v.language] = v.value })
+  return result
+}
+
+// ── Autocomplete hook ─────────────────────────────────────────────────────────
+
+function useAutocomplete<T>(
+  fetcher: (q: string) => Promise<T[]>,
+  delay = 300,
+) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<T[]>([])
+  const [open, setOpen] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const search = useCallback((q: string) => {
+    setQuery(q)
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(async () => {
+      if (q.length < 1) { setResults([]); setOpen(false); return }
+      const res = await fetcher(q)
+      setResults(res)
+      setOpen(true)
+    }, delay)
+  }, [fetcher, delay])
+
+  return { query, setQuery, results, setResults, open, setOpen, search }
+}
+
+// ── Field renderers ───────────────────────────────────────────────────────────
+
+interface FieldInputProps {
+  fd: FieldDefinitionOut
+  value: unknown
+  onChange: (v: unknown) => void
+  disabled: boolean
+  lang?: string
+}
+
+function UserSelectInput({ value, onChange, disabled, fd }: FieldInputProps) {
+  const multi = fd.data_type === 'user_select_multi'
+  const groupIds = (fd.type_config as Record<string, unknown>)['limit_to_group_ids']
+  const groupIdsStr = Array.isArray(groupIds) ? (groupIds as number[]).join(',') : undefined
+  const fetcher = useCallback((q: string) => udmSearchUsers(q, groupIdsStr), [groupIdsStr])
+  const ac = useAutocomplete<UserAutocompleteItem>(fetcher)
+
+  const currentIds: string[] = multi
+    ? (Array.isArray(value) ? value as string[] : [])
+    : (value ? [value as string] : [])
+
+  function selectItem(item: UserAutocompleteItem) {
+    if (multi) {
+      if (!currentIds.includes(item.id))
+        onChange([...currentIds, item.id])
+    } else {
+      onChange(item.id)
+    }
+    ac.setQuery('')
+    ac.setResults([])
+    ac.setOpen(false)
+  }
+
+  function removeItem(id: string) {
+    if (multi) onChange(currentIds.filter(x => x !== id))
+    else onChange(null)
+  }
+
+  return (
+    <div className={styles.autocompleteWrapper}>
+      {!disabled && (
+        <input
+          className={styles.input}
+          value={ac.query}
+          onChange={e => ac.search(e.target.value)}
+          onBlur={() => setTimeout(() => ac.setOpen(false), 150)}
+          placeholder="Search users…"
+          disabled={disabled}
+        />
+      )}
+      {ac.open && ac.results.length > 0 && (
+        <div className={styles.autocompleteDropdown}>
+          {ac.results.map(u => (
+            <div key={u.id} className={styles.autocompleteItem} onMouseDown={() => selectItem(u)}>
+              {u.display_name}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className={styles.selectedTags}>
+        {currentIds.map(id => {
+          const found = ac.results.find(u => u.id === id)
+          const label = found ? found.display_name : id
+          return (
+            <span key={id} className={styles.selectedTag}>
+              {label}
+              {!disabled && (
+                <button type="button" className={styles.removeTag} onClick={() => removeItem(id)}>×</button>
+              )}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function GroupSelectInput({ value, onChange, disabled, fd }: FieldInputProps) {
+  const multi = fd.data_type === 'group_select_multi'
+  const ac = useAutocomplete<GroupAutocompleteItem>(udmSearchGroups)
+
+  const currentIds: number[] = multi
+    ? (Array.isArray(value) ? value as number[] : [])
+    : (value != null ? [value as number] : [])
+
+  function selectItem(item: GroupAutocompleteItem) {
+    if (multi) {
+      if (!currentIds.includes(item.id))
+        onChange([...currentIds, item.id])
+    } else {
+      onChange(item.id)
+    }
+    ac.setQuery('')
+    ac.setResults([])
+    ac.setOpen(false)
+  }
+
+  function removeItem(id: number) {
+    if (multi) onChange(currentIds.filter(x => x !== id))
+    else onChange(null)
+  }
+
+  return (
+    <div className={styles.autocompleteWrapper}>
+      {!disabled && (
+        <input
+          className={styles.input}
+          value={ac.query}
+          onChange={e => ac.search(e.target.value)}
+          onBlur={() => setTimeout(() => ac.setOpen(false), 150)}
+          placeholder="Search groups…"
+          disabled={disabled}
+        />
+      )}
+      {ac.open && ac.results.length > 0 && (
+        <div className={styles.autocompleteDropdown}>
+          {ac.results.map(g => (
+            <div key={g.id} className={styles.autocompleteItem} onMouseDown={() => selectItem(g)}>
+              {g.name}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className={styles.selectedTags}>
+        {currentIds.map(id => {
+          const found = ac.results.find(g => g.id === id)
+          const label = found ? found.name : String(id)
+          return (
+            <span key={id} className={styles.selectedTag}>
+              {label}
+              {!disabled && (
+                <button type="button" className={styles.removeTag} onClick={() => removeItem(id)}>×</button>
+              )}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function EntitySelectInput({ value, onChange, disabled, fd }: FieldInputProps) {
+  const multi = fd.data_type === 'entity_select_multi'
+  const typeIds = (fd.type_config as Record<string, unknown>)['limit_to_type_ids']
+  const typeIdsStr = Array.isArray(typeIds) ? (typeIds as string[]).join(',') : undefined
+  const fetcher = useCallback((q: string) => udmSearchEntities(q, typeIdsStr), [typeIdsStr])
+  const ac = useAutocomplete<EntityAutocompleteItem>(fetcher)
+
+  const currentIds: string[] = multi
+    ? (Array.isArray(value) ? value as string[] : [])
+    : (value ? [value as string] : [])
+
+  function selectItem(item: EntityAutocompleteItem) {
+    if (multi) {
+      if (!currentIds.includes(item.id))
+        onChange([...currentIds, item.id])
+    } else {
+      onChange(item.id)
+    }
+    ac.setQuery('')
+    ac.setResults([])
+    ac.setOpen(false)
+  }
+
+  function removeItem(id: string) {
+    if (multi) onChange(currentIds.filter(x => x !== id))
+    else onChange(null)
+  }
+
+  return (
+    <div className={styles.autocompleteWrapper}>
+      {!disabled && (
+        <input
+          className={styles.input}
+          value={ac.query}
+          onChange={e => ac.search(e.target.value)}
+          onBlur={() => setTimeout(() => ac.setOpen(false), 150)}
+          placeholder="Search entities…"
+          disabled={disabled}
+        />
+      )}
+      {ac.open && ac.results.length > 0 && (
+        <div className={styles.autocompleteDropdown}>
+          {ac.results.map(e => (
+            <div key={e.id} className={styles.autocompleteItem} onMouseDown={() => selectItem(e)}>
+              {e.display ?? e.id}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className={styles.selectedTags}>
+        {currentIds.map(id => {
+          const found = ac.results.find(e => e.id === id)
+          const label = found ? (found.display ?? id) : id
+          return (
+            <span key={id} className={styles.selectedTag}>
+              {label}
+              {!disabled && (
+                <button type="button" className={styles.removeTag} onClick={() => removeItem(id)}>×</button>
+              )}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+interface FileFieldProps {
+  fd: FieldDefinitionOut
+  value: unknown
+  onChange: (stagingId: string | null) => void
+  disabled: boolean
+}
+
+function FileFieldInput({ fd, value, onChange, disabled }: FileFieldProps) {
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [stagingName, setStagingName] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFile(file: File) {
+    setUploading(true)
+    setProgress(0)
+    try {
+      const staging = await udmUploadStagingFile(file, fd.id, setProgress)
+      onChange(staging.staging_id)
+      setStagingName(file.name)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const currentUrl = value && typeof value === 'object'
+    ? (value as Record<string, string>)['url']
+    : null
+
+  return (
+    <div>
+      {currentUrl && !stagingName && (
+        <div className={styles.fileInfo}>
+          Current: <a href={currentUrl} target="_blank" rel="noopener noreferrer">View file</a>
+        </div>
+      )}
+      {stagingName && (
+        <div className={styles.fileInfo}>Staged: {stagingName}</div>
+      )}
+      {!disabled && (
+        <>
+          <div
+            className={styles.fileUploadArea}
+            onClick={() => inputRef.current?.click()}
+            onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) void handleFile(f) }}
+            onDragOver={e => e.preventDefault()}
+          >
+            {uploading ? `Uploading… ${progress}%` : 'Click or drop to upload'}
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            style={{ display: 'none' }}
+            accept={fd.data_type === 'image' ? 'image/*' : undefined}
+            onChange={e => { const f = e.target.files?.[0]; if (f) void handleFile(f) }}
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+function FieldInput({ fd, value, onChange, disabled, lang = '' }: FieldInputProps) {
+  const dt = fd.data_type
+  const tc = fd.type_config as Record<string, unknown>
+
+  if (dt === 'text_short') {
+    const maxLen = tc['max_length'] as number | undefined
+    return (
+      <input className={styles.input} type="text" value={(value as string) ?? ''}
+        onChange={e => onChange(e.target.value)} disabled={disabled}
+        maxLength={maxLen} />
+    )
+  }
+
+  if (dt === 'text_long' || dt === 'text_markdown') {
+    return (
+      <textarea className={styles.textarea} rows={4} value={(value as string) ?? ''}
+        onChange={e => onChange(e.target.value)} disabled={disabled} />
+    )
+  }
+
+  if (dt === 'text_richtext') {
+    return (
+      <textarea className={styles.textarea} rows={6} value={(value as string) ?? ''}
+        onChange={e => onChange(e.target.value)} disabled={disabled}
+        style={{ fontFamily: 'inherit' }} />
+    )
+  }
+
+  if (dt === 'integer') {
+    return (
+      <input className={styles.input} type="number" step="1"
+        value={value != null ? String(value) : ''}
+        onChange={e => onChange(e.target.value ? parseInt(e.target.value) : null)}
+        disabled={disabled} />
+    )
+  }
+
+  if (dt === 'float') {
+    return (
+      <input className={styles.input} type="number" step="any"
+        value={value != null ? String(value) : ''}
+        onChange={e => onChange(e.target.value ? parseFloat(e.target.value) : null)}
+        disabled={disabled} />
+    )
+  }
+
+  if (dt === 'boolean') {
+    return (
+      <label className={styles.checkbox}>
+        <input type="checkbox" checked={!!value}
+          onChange={e => onChange(e.target.checked)}
+          disabled={disabled} />
+        Yes
+      </label>
+    )
+  }
+
+  if (dt === 'date') {
+    return (
+      <input className={styles.input} type="date" value={(value as string) ?? ''}
+        onChange={e => onChange(e.target.value || null)} disabled={disabled} />
+    )
+  }
+
+  if (dt === 'time') {
+    return (
+      <input className={styles.input} type="time" value={(value as string) ?? ''}
+        onChange={e => onChange(e.target.value || null)} disabled={disabled} />
+    )
+  }
+
+  if (dt === 'datetime') {
+    const iso = value ? (value as string).replace(' ', 'T').slice(0, 16) : ''
+    return (
+      <input className={styles.input} type="datetime-local" value={iso}
+        onChange={e => onChange(e.target.value ? e.target.value + ':00' : null)} disabled={disabled} />
+    )
+  }
+
+  if (dt === 'select_single') {
+    const choices = (tc['choices'] as string[]) ?? []
+    return (
+      <select className={styles.select} value={(value as string) ?? ''}
+        onChange={e => onChange(e.target.value || null)} disabled={disabled}>
+        <option value="">— select —</option>
+        {choices.map(c => <option key={c} value={c}>{c}</option>)}
+      </select>
+    )
+  }
+
+  if (dt === 'select_multi') {
+    const choices = (tc['choices'] as string[]) ?? []
+    const selected: string[] = Array.isArray(value) ? value as string[] : []
+    return (
+      <div>
+        {choices.map(c => (
+          <label key={c} className={styles.checkbox} style={{ marginBottom: '0.25rem' }}>
+            <input type="checkbox" disabled={disabled}
+              checked={selected.includes(c)}
+              onChange={e => {
+                if (e.target.checked) onChange([...selected, c])
+                else onChange(selected.filter(x => x !== c))
+              }} />
+            {c}
+          </label>
+        ))}
+      </div>
+    )
+  }
+
+  if (dt === 'user_select' || dt === 'user_select_multi') {
+    return <UserSelectInput fd={fd} value={value} onChange={onChange} disabled={disabled} lang={lang} />
+  }
+
+  if (dt === 'group_select' || dt === 'group_select_multi') {
+    return <GroupSelectInput fd={fd} value={value} onChange={onChange} disabled={disabled} lang={lang} />
+  }
+
+  if (dt === 'entity_select' || dt === 'entity_select_multi') {
+    return <EntitySelectInput fd={fd} value={value} onChange={onChange} disabled={disabled} lang={lang} />
+  }
+
+  if (dt === 'image' || dt === 'file') {
+    return (
+      <FileFieldInput
+        fd={fd}
+        value={value}
+        disabled={disabled}
+        onChange={stagingId => onChange(stagingId ? { staging_id: stagingId } : null)}
+      />
+    )
+  }
+
+  if (dt === 'submodel_list' || dt === 'submodel_select') {
+    return (
+      <div className={styles.submodelNote}>
+        Submodel editing is not supported inline. Value: {JSON.stringify(value)}
+      </div>
+    )
+  }
+
+  // Fallback: JSON display
+  return (
+    <input className={styles.input} value={JSON.stringify(value) ?? ''}
+      onChange={e => { try { onChange(JSON.parse(e.target.value)) } catch { onChange(e.target.value) } }}
+      disabled={disabled} />
+  )
+}
+
+// ── Field row ─────────────────────────────────────────────────────────────────
+
+interface FieldRowProps {
+  fd: FieldDefinitionOut
+  entity: EntityOut
+  dirty: Record<string, unknown>
+  onDirty: (slug: string, val: unknown) => void
+  onReset: (slug: string) => void
+  editable: boolean
+  languages: string[]
+  uiLang: string
+}
+
+function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang }: FieldRowProps) {
+  const [activeLang, setActiveLang] = useState(languages[0] ?? '')
+  const isDirty = fd.slug in dirty
+  const label = getLang(fd.label as Record<string, string>, uiLang) || fd.slug
+  const helpText = getLang(fd.help_text as Record<string, string>, uiLang)
+
+  function getVal(lang = '') {
+    if (isDirty) {
+      const d = dirty[fd.slug]
+      if (fd.is_localized && typeof d === 'object' && d !== null)
+        return (d as Record<string, unknown>)[lang]
+      return d
+    }
+    return getFieldValue(entity, fd.slug, lang)
+  }
+
+  function handleChange(lang: string, val: unknown) {
+    if (fd.is_localized) {
+      const existing = isDirty && typeof dirty[fd.slug] === 'object' && dirty[fd.slug] !== null
+        ? (dirty[fd.slug] as Record<string, unknown>)
+        : getAllLangValues(entity, fd.slug)
+      onDirty(fd.slug, { ...existing, [lang]: val })
+    } else {
+      onDirty(fd.slug, val)
+    }
+  }
+
+  return (
+    <div className={`${styles.fieldGroup} ${isDirty ? styles.fieldGroupDirty : ''}`}>
+      <div className={styles.fieldHeader}>
+        <div>
+          <div className={styles.fieldLabel}>{label}</div>
+          <div className={styles.fieldSlug}>{fd.slug} · {fd.data_type}</div>
+          {helpText && <div className={styles.fieldHelp}>{helpText}</div>}
+        </div>
+        {isDirty && (
+          <div className={styles.fieldActions}>
+            <button type="button" className={styles.resetBtn} onClick={() => onReset(fd.slug)}>
+              Reset
+            </button>
+          </div>
+        )}
+      </div>
+
+      {fd.is_localized && languages.length > 1 && (
+        <div className={styles.langTabs}>
+          {languages.map(l => (
+            <button key={l} type="button"
+              className={`${styles.langTab} ${activeLang === l ? styles.langTabActive : ''}`}
+              onClick={() => setActiveLang(l)}>
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {fd.is_localized ? (
+        <FieldInput
+          fd={fd}
+          value={getVal(activeLang)}
+          onChange={val => handleChange(activeLang, val)}
+          disabled={!editable}
+          lang={activeLang}
+        />
+      ) : (
+        <FieldInput
+          fd={fd}
+          value={getVal()}
+          onChange={val => handleChange('', val)}
+          disabled={!editable}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── History panel ─────────────────────────────────────────────────────────────
+
+function HistoryPanel({ entityId }: { entityId: string }) {
+  const [history, setHistory] = useState<EditHistoryOut | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    udmEntityHistory(entityId)
+      .then(h => setHistory(h))
+      .catch(() => setHistory(null))
+      .finally(() => setLoading(false))
+  }, [entityId])
+
+  if (loading) return <div>Loading history…</div>
+  if (!history || history.results.length === 0)
+    return <div style={{ color: '#888', fontSize: '0.875rem' }}>No edit history yet.</div>
+
+  return (
+    <div>
+      {history.results.map(group => (
+        <div key={group.id} className={styles.historyGroup}>
+          <div className={styles.historyMeta}>
+            {new Date(group.saved_at).toLocaleString()}{' '}
+            {group.saved_by ? `by ${group.saved_by.display_name}` : ''}
+            {' · '}{group.node_type}
+          </div>
+          {group.edits.map((edit, i) => (
+            <div key={i} className={styles.historyEdit}>
+              {edit.change_kind === 'field_value' ? (
+                <span>
+                  <strong>{edit.field_label ?? edit.field_slug}</strong>:{' '}
+                  {JSON.stringify(edit.old_value)} → {JSON.stringify(edit.new_value)}
+                </span>
+              ) : (
+                <span>{edit.change_kind}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Main entity editor ────────────────────────────────────────────────────────
+
+export function UdmEntityEditor() {
+  const { entityId } = useParams<{ entityId: string }>()
+  const navigate = useNavigate()
+  const { i18n } = useTranslation()
+
+  const [entity, setEntity] = useState<EntityOut | null>(null)
+  const [config, setConfig] = useState<ConfigVersionOut | null>(null)
+  const [dirty, setDirty] = useState<Record<string, unknown>>({})
+  const [saving, setSaving] = useState(false)
+  const [transitioning, setTransitioning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
+
+  const uiLang = i18n.language.split('-')[0]
+
+  const load = useCallback(async () => {
+    if (!entityId) return
+    try {
+      const e = await udmGetEntity(entityId)
+      setEntity(e)
+      if (e.user_defined_model_type_id) {
+        const cfg = await udmGetTypeConfig(e.user_defined_model_type_id)
+        setConfig(cfg)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load entity')
+    }
+  }, [entityId])
+
+  useEffect(() => { void load() }, [load])
+
+  if (!entity || !entityId) {
+    return (
+      <div className={styles.page}>
+        {error ? <div className={styles.error}>{error}</div> : <div>Loading…</div>}
+      </div>
+    )
+  }
+  // entityId is now narrowed to string (not undefined) below this point
+  const resolvedEntityId: string = entityId
+
+  // Determine editability from workflow state
+  const currentStateName = entity.current_state
+  const workflowState: WorkflowStateOut | null = config?.workflow?.states.find(
+    s => s.name === currentStateName
+  ) ?? null
+  const editable = workflowState ? workflowState.allows_edit : true
+
+  // Available transitions from current state
+  const availableTransitions: WorkflowTransitionOut[] = config?.workflow
+    ? config.workflow.transitions.filter(
+        t => t.from_state === currentStateName || t.from_state === null
+      )
+    : []
+
+  const languages = (config?.languages ?? []).map(l => l.code)
+  if (languages.length === 0) languages.push('')
+
+  const fields = config?.fields ?? []
+
+  function handleDirty(slug: string, val: unknown) {
+    setDirty(prev => ({ ...prev, [slug]: val }))
+    setSuccess(null)
+  }
+
+  function handleReset(slug: string) {
+    setDirty(prev => {
+      const n = { ...prev }
+      delete n[slug]
+      return n
+    })
+  }
+
+  async function handleSave() {
+    if (Object.keys(dirty).length === 0) return
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      const updated = await udmPatchEntity(resolvedEntityId, dirty)
+      setEntity(updated)
+      setDirty({})
+      setSuccess('Saved successfully.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleTransition(transitionName: string) {
+    setTransitioning(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      const updated = await udmTransitionEntity(resolvedEntityId, transitionName)
+      setEntity(updated)
+      setSuccess(`Transition "${transitionName}" applied.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Transition failed')
+    } finally {
+      setTransitioning(false)
+    }
+  }
+
+  const dirtyCount = Object.keys(dirty).length
+  const stateLabel = currentStateName
+    ? (workflowState
+        ? getLang(workflowState.label as Record<string, string>, uiLang) || currentStateName
+        : currentStateName)
+    : null
+
+  return (
+    <div className={styles.page}>
+      <div className={styles.header}>
+        <button type="button" className={styles.backBtn} onClick={() => navigate(-1)}>
+          ← Back
+        </button>
+        <h1 className={styles.pageTitle}>
+          Entity
+          <span className={styles.metaInfo} style={{ marginLeft: '0.75rem', display: 'inline' }}>
+            {entityId.slice(0, 8)}…
+          </span>
+        </h1>
+        {stateLabel && (
+          <span className={`${styles.stateBadge} ${!editable ? styles.stateReadonly : ''}`}>
+            {stateLabel}
+          </span>
+        )}
+      </div>
+
+      <div className={styles.metaInfo}>
+        Type: {entity.user_defined_model_type_id ?? '—'} ·
+        Created: {new Date(entity.created_at).toLocaleString()} ·
+        Updated: {new Date(entity.updated_at).toLocaleString()}
+        {config && ` · Config version: ${entity.config_version_id.slice(0, 8)}…`}
+      </div>
+
+      {!editable && (
+        <div className={styles.readonlyNote}>
+          This entity is in state "{stateLabel ?? currentStateName}" which does not allow editing.
+          {availableTransitions.length > 0 && ' Use a workflow transition to change the state.'}
+        </div>
+      )}
+
+      {error && <div className={styles.error}>{error}</div>}
+      {success && <div className={styles.success}>{success}</div>}
+
+      {/* Workflow transitions */}
+      {availableTransitions.length > 0 && (
+        <div style={{ marginBottom: '1rem' }}>
+          <strong style={{ fontSize: '0.875rem', color: '#555', display: 'block', marginBottom: '0.4rem' }}>
+            Workflow Transitions:
+          </strong>
+          <div className={styles.transitionRow}>
+            {availableTransitions.map(t => {
+              const label = getLang(t.label as Record<string, string>, uiLang) || t.name
+              return (
+                <button key={t.name} type="button" className={styles.transitionBtn}
+                  onClick={() => void handleTransition(t.name)}
+                  disabled={transitioning}>
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic form */}
+      {fields.length === 0 && (
+        <div style={{ color: '#888', fontStyle: 'italic', padding: '1rem' }}>
+          {config ? 'This config has no fields defined.' : 'No config loaded for this entity type.'}
+        </div>
+      )}
+
+      <div className={styles.form}>
+        {fields.map(fd => (
+          <FieldRow
+            key={fd.slug}
+            fd={fd}
+            entity={entity}
+            dirty={dirty}
+            onDirty={handleDirty}
+            onReset={handleReset}
+            editable={editable}
+            languages={fd.is_localized ? languages.filter(Boolean) : ['']}
+            uiLang={uiLang}
+          />
+        ))}
+      </div>
+
+      <div className={styles.toolbar}>
+        <div style={{ fontSize: '0.875rem', color: '#888' }}>
+          {dirtyCount > 0 ? `${dirtyCount} unsaved change${dirtyCount > 1 ? 's' : ''}` : 'No changes'}
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {dirtyCount > 0 && (
+            <button type="button" className={`${styles.btn} ${styles.btnSecondary}`}
+              onClick={() => setDirty({})}>
+              Discard All
+            </button>
+          )}
+          <button type="button" className={`${styles.btn} ${styles.btnSecondary}`}
+            onClick={() => setShowHistory(!showHistory)}>
+            {showHistory ? 'Hide History' : 'View History'}
+          </button>
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={handleSave} disabled={saving || dirtyCount === 0 || !editable}>
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+
+      {showHistory && (
+        <div className={styles.historySection}>
+          <div className={styles.historyTitle}>Edit History</div>
+          <HistoryPanel entityId={resolvedEntityId} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Entity selector / create panel ───────────────────────────────────────────
+
+export function UdmEntityPanel() {
+  const navigate = useNavigate()
+  const [types, setTypes] = useState<import('./apiUdm').UDMTypeOut[]>([])
+  const [entities, setEntities] = useState<import('./apiUdm').EntityAutocompleteItem[]>([])
+  const [filterTypeId, setFilterTypeId] = useState('')
+  const [selectedEntityId, setSelectedEntityId] = useState('')
+  const [createTypeId, setCreateTypeId] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [loadingEntities, setLoadingEntities] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    import('./apiUdm').then(({ udmListTypes }) => {
+      udmListTypes().then(setTypes).catch(() => {})
+    })
+  }, [])
+
+  // Reload entity list when type filter changes
+  useEffect(() => {
+    setLoadingEntities(true)
+    setSelectedEntityId('')
+    import('./apiUdm').then(({ udmSearchEntities }) => {
+      udmSearchEntities('', filterTypeId || undefined)
+        .then(setEntities)
+        .catch(() => setEntities([]))
+        .finally(() => setLoadingEntities(false))
+    })
+  }, [filterTypeId])
+
+  async function handleCreate() {
+    if (!createTypeId) { setError('Select a UDM type'); return }
+    setCreating(true)
+    setError(null)
+    try {
+      const { udmCreateEntity } = await import('./apiUdm')
+      const e = await udmCreateEntity({ user_defined_model_type_id: createTypeId })
+      navigate(`/udm-entity/${e.id}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Create failed')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  function handleOpen() {
+    if (!selectedEntityId) { setError('Select an entity'); return }
+    navigate(`/udm-entity/${selectedEntityId}`)
+  }
+
+  const panelStyle: React.CSSProperties = {
+    background: '#fff', border: '1px solid #e0e0e0', borderRadius: '8px', padding: '1.25rem', marginBottom: '1rem',
+  }
+  const selectStyle: React.CSSProperties = {
+    width: '100%', padding: '0.45rem 0.7rem', border: '1px solid #ccc',
+    borderRadius: '4px', marginBottom: '0.5rem', boxSizing: 'border-box', fontSize: '0.9rem', background: '#fff',
+  }
+
+  return (
+    <div style={{ padding: '2rem', maxWidth: '560px', margin: '0 auto' }}>
+      <h2 style={{ fontWeight: 600, marginBottom: '1.5rem' }}>UDM Entities</h2>
+
+      <div style={panelStyle}>
+        <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Open Existing Entity</div>
+        <label style={{ fontSize: '0.82rem', color: '#666', display: 'block', marginBottom: '0.25rem' }}>
+          Filter by type (optional)
+        </label>
+        <select style={selectStyle} value={filterTypeId} onChange={e => setFilterTypeId(e.target.value)}>
+          <option value="">— all types —</option>
+          {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <label style={{ fontSize: '0.82rem', color: '#666', display: 'block', marginBottom: '0.25rem' }}>
+          Entity {loadingEntities ? '(loading…)' : `(${entities.length} found)`}
+        </label>
+        <select style={selectStyle} value={selectedEntityId}
+          onChange={e => setSelectedEntityId(e.target.value)}
+          disabled={loadingEntities}>
+          <option value="">— select entity —</option>
+          {entities.map(e => (
+            <option key={e.id} value={e.id}>
+              {e.display && e.display !== e.id ? `${e.display} (${e.id.slice(0, 8)}…)` : e.id}
+            </option>
+          ))}
+        </select>
+        {error && <div style={{ color: '#dc2626', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{error}</div>}
+        <button
+          style={{ padding: '0.45rem 1rem', background: '#0066cc', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: !selectedEntityId ? 0.5 : 1 }}
+          onClick={handleOpen} disabled={!selectedEntityId}>
+          Open
+        </button>
+      </div>
+
+      <div style={panelStyle}>
+        <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Create New Entity</div>
+        {types.length === 0 ? (
+          <div style={{ color: '#888', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+            No UDM types available. Create types in the UDM Admin page first.
+          </div>
+        ) : (
+          <select style={selectStyle} value={createTypeId} onChange={e => setCreateTypeId(e.target.value)}>
+            <option value="">— select type —</option>
+            {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        )}
+        <button
+          style={{ padding: '0.45rem 1rem', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: creating || !createTypeId ? 0.5 : 1 }}
+          onClick={handleCreate} disabled={creating || !createTypeId}>
+          {creating ? 'Creating…' : 'Create Entity'}
+        </button>
+      </div>
+    </div>
+  )
+}

@@ -44,10 +44,12 @@ from userdefinedmodel.schemas import (
     PolicyAssignIn,
     PolicyCreateIn,
     PolicyOut,
+    PolicyEvalOut,
     PolicyUpdateIn,
     StagingFileOut,
     TransitionIn,
     UDMTypeOut,
+    UDMTypeCreateIn,
     UserAutocompleteItem,
     UserRefOut,
     WorkflowStateOut,
@@ -437,6 +439,127 @@ def publish_draft(request, config_id: uuid.UUID):
 
 
 # ─── UDMType ──────────────────────────────────────────────────────────────────
+
+@api.get("/types/", response=list[UDMTypeOut], auth=django_auth)
+def list_udm_types(request):
+    from userdefinedmodel.models import UserDefinedModelType
+    if not request.user.is_staff:
+        return JsonResponse({"detail": "Staff only"}, status=403)
+    types = UserDefinedModelType.objects.select_related("field_config").all()
+    return [UDMTypeOut(id=t.id, name=t.name, description=t.description, field_config_id=t.field_config_id)
+            for t in types]
+
+
+@api.post("/types/", response={201: UDMTypeOut}, auth=django_auth)
+def create_udm_type(request, payload: UDMTypeCreateIn):
+    from userdefinedmodel.models import UserDefinedModelType
+    if not request.user.is_staff:
+        return JsonResponse({"detail": "Staff only"}, status=403)
+    udm_type = UserDefinedModelType.objects.create(name=payload.name, description=payload.description)
+    return 201, UDMTypeOut(id=udm_type.id, name=udm_type.name, description=udm_type.description, field_config_id=None)
+
+
+@api.get("/types/{type_id}/", response=UDMTypeOut, auth=django_auth)
+def get_udm_type(request, type_id: uuid.UUID):
+    from userdefinedmodel.models import UserDefinedModelType
+    try:
+        t = UserDefinedModelType.objects.get(id=type_id)
+    except UserDefinedModelType.DoesNotExist:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    return UDMTypeOut(id=t.id, name=t.name, description=t.description, field_config_id=t.field_config_id)
+
+
+@api.get("/types/{type_id}/eval-policy/", response=PolicyEvalOut, auth=django_auth)
+def eval_policy_for_type(
+    request,
+    type_id: uuid.UUID,
+    entity_id: uuid.UUID,
+    user_id: uuid.UUID,
+    action: str = "view",
+    transition: Optional[str] = None,
+):
+    """Superuser-only: evaluate the Rego policy for a given entity + user and return the full
+    input document, the raw policy sources, and the structured output."""
+    if not request.user.is_superuser:
+        return JsonResponse({"detail": "Superuser only"}, status=403)
+
+    from userdefinedmodel.models import UserDefinedModelEntity, UserDefinedModelType
+    from userdefinedmodel.engine import build_policy_input, get_udm_type_for_node
+
+    try:
+        entity = UserDefinedModelEntity.objects.select_related(
+            "config_version__workflow", "current_state", "user_defined_model_type"
+        ).get(id=entity_id)
+    except UserDefinedModelEntity.DoesNotExist:
+        return JsonResponse({"detail": "Entity not found"}, status=404)
+
+    try:
+        from openid_user_management.models import OpenIDUser
+        eval_user = OpenIDUser.objects.prefetch_related("groups", "user_permissions").get(id=user_id)
+    except Exception:
+        return JsonResponse({"detail": "User not found"}, status=404)
+
+    # Collect policy sources
+    udm_type = get_udm_type_for_node(entity)
+    policy_entries = []
+    if udm_type:
+        for tp in udm_type.type_policies.select_related("policy").order_by("sort_order"):
+            policy_entries.append({"slug": tp.policy.slug, "source": tp.policy.source})
+
+    # Build input document
+    kwargs = {}
+    if transition:
+        kwargs["transition"] = transition
+    input_doc = build_policy_input(entity, eval_user, action, **kwargs)
+
+    # Run evaluation
+    error_msg = None
+    output = {"allow": True, "messages": [], "viewable_fields": [], "editable_fields": []}
+    if policy_entries:
+        try:
+            import json as _json
+            import regorus
+            eng = regorus.Engine()
+            for entry in policy_entries:
+                eng.add_policy(f"policy_{entry['slug']}.rego", entry["source"])
+            eng.set_input_json(_json.dumps(input_doc))
+
+            def _eval_list(rule_path):
+                try:
+                    raw = _json.loads(eng.eval_rule_as_json(rule_path))
+                    return raw if isinstance(raw, list) else []
+                except Exception:
+                    return []
+
+            def _eval_bool(rule_path, default=True):
+                try:
+                    raw = _json.loads(eng.eval_rule_as_json(rule_path))
+                    if raw is None:
+                        return default
+                    if isinstance(raw, list):
+                        return bool(raw[0]) if raw else default
+                    return bool(raw)
+                except Exception:
+                    return default
+
+            output = {
+                "allow": _eval_bool("data.udm.allow", default=False),
+                "deny": _eval_list("data.udm.deny"),
+                "messages": _eval_list("data.udm.messages"),
+                "viewable_fields": _eval_list("data.udm.viewable_fields"),
+                "editable_fields": _eval_list("data.udm.editable_fields"),
+            }
+        except Exception as exc:
+            error_msg = str(exc)
+            output = {"allow": False, "messages": [], "viewable_fields": [], "editable_fields": []}
+
+    return PolicyEvalOut(
+        input_document=input_doc,
+        policies=policy_entries,
+        output=output,
+        error=error_msg,
+    )
+
 
 @api.get("/types/{type_id}/config/", response=ConfigVersionOut, auth=django_auth)
 def get_type_config(request, type_id: uuid.UUID):

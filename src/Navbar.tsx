@@ -146,6 +146,24 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
             </Link>
           )}
           {permissions?.is_staff && (
+            <Link
+              role="listitem"
+              className={location.pathname.startsWith('/udm-admin') ? styles.activeNavLink : styles.navLink}
+              to="/udm-admin"
+              aria-current={location.pathname.startsWith('/udm-admin') ? 'page' : undefined}
+            >
+              UDM Admin
+            </Link>
+          )}
+          <Link
+            role="listitem"
+            className={location.pathname.startsWith('/udm-entity') ? styles.activeNavLink : styles.navLink}
+            to="/udm-entity"
+            aria-current={location.pathname.startsWith('/udm-entity') ? 'page' : undefined}
+          >
+            UDM Entities
+          </Link>
+          {permissions?.is_staff && (
             <a
               role="listitem"
               className={styles.navLink}
@@ -231,6 +249,24 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
                       {t('nav.proposalDashboard')}
                     </Link>
                   )}
+                  {permissions?.is_staff && (
+                    <Link
+                      to="/udm-admin"
+                      className={location.pathname.startsWith('/udm-admin') ? styles.dropdownNavLinkActive : styles.menuLink}
+                      onClick={() => setIsDropdownOpen(false)}
+                      role="menuitem"
+                    >
+                      UDM Admin
+                    </Link>
+                  )}
+                  <Link
+                    to="/udm-entity"
+                    className={location.pathname.startsWith('/udm-entity') ? styles.dropdownNavLinkActive : styles.menuLink}
+                    onClick={() => setIsDropdownOpen(false)}
+                    role="menuitem"
+                  >
+                    UDM Entities
+                  </Link>
                   {permissions?.is_staff && (
                     <a
                       href="/admin/"

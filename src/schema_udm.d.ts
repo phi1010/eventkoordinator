@@ -404,6 +404,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/udm/types/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Udm Types */
+        get: operations["userdefinedmodel_api_list_udm_types"];
+        put?: never;
+        /** Create Udm Type */
+        post: operations["userdefinedmodel_api_create_udm_type"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/udm/types/{type_id}/": {
         parameters: {
             query?: never;
@@ -411,7 +429,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Udm Type */
+        get: operations["userdefinedmodel_api_get_udm_type"];
         put?: never;
         post?: never;
         delete?: never;
@@ -430,6 +449,27 @@ export interface paths {
         };
         /** Get Type Config */
         get: operations["userdefinedmodel_api_get_type_config"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/udm/types/{type_id}/eval-policy/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Eval Policy For Type
+         * @description Superuser-only: evaluate the Rego policy for a given entity + user and return the full
+         *     input document, the raw policy sources, and the structured output.
+         */
+        get: operations["userdefinedmodel_api_eval_policy_for_type"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1106,6 +1146,23 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** PolicyEvalOut */
+        PolicyEvalOut: {
+            /** Error */
+            error?: string | null;
+            /** Input Document */
+            input_document: {
+                [key: string]: unknown;
+            };
+            /** Output */
+            output: {
+                [key: string]: unknown;
+            };
+            /** Policies */
+            policies: {
+                [key: string]: string;
+            }[];
+        };
         /** PolicyOut */
         PolicyOut: {
             /** Slug */
@@ -1201,6 +1258,16 @@ export interface components {
         TransitionIn: {
             /** Transition */
             transition: string;
+        };
+        /** UDMTypeCreateIn */
+        UDMTypeCreateIn: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
         };
         /** UDMTypeOut */
         UDMTypeOut: {
@@ -2063,6 +2130,72 @@ export interface operations {
             };
         };
     };
+    userdefinedmodel_api_list_udm_types: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UDMTypeOut"][];
+                };
+            };
+        };
+    };
+    userdefinedmodel_api_create_udm_type: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UDMTypeCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UDMTypeOut"];
+                };
+            };
+        };
+    };
+    userdefinedmodel_api_get_udm_type: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UDMTypeOut"];
+                };
+            };
+        };
+    };
     userdefinedmodel_api_update_udm_type: {
         parameters: {
             query?: {
@@ -2105,6 +2238,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConfigVersionOut"];
+                };
+            };
+        };
+    };
+    userdefinedmodel_api_eval_policy_for_type: {
+        parameters: {
+            query: {
+                entity_id: string;
+                user_id: string;
+                action?: string;
+                transition?: string | null;
+            };
+            header?: never;
+            path: {
+                type_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicyEvalOut"];
                 };
             };
         };
