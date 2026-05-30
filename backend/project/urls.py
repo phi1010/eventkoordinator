@@ -22,12 +22,14 @@ from django.urls import path, include, re_path
 from django.views.generic import RedirectView
 
 import apiv1.api
+import userdefinedmodel.api
 from project.spa_views import SpaFallbackView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/docs/", RedirectView.as_view(url="/api/v1/docs", permanent=False)),
     path("api/v1/", apiv1.api.api.urls),
+    path("api/udm/", userdefinedmodel.api.api.urls),
     path("oidc/", include("mozilla_django_oidc.urls")),
     path("", include("django_prometheus.urls")),
 ]

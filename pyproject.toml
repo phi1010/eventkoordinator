@@ -35,6 +35,8 @@ dependencies = [
     "xlsxwriter>=3.2.9",
     "caldav>=1.4.0",
     "celine-regorus>=0.9.1.post20260227075446",
+    "nh3>=0.2.21",
+    "factory-boy>=3.3.3",
 ]
 default-groups = []
 

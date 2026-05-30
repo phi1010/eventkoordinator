@@ -1,0 +1,211 @@
+"""
+Workflow transition engine (§15) and policy evaluation (§16).
+"""
+from __future__ import annotations
+
+import json
+import logging
+from typing import TYPE_CHECKING
+
+from django.core.exceptions import ValidationError
+from django.db import transaction
+
+if TYPE_CHECKING:
+    from userdefinedmodel.models import (
+        UserDefinedModelEntityNode,
+        UserDefinedModelEntity,
+        WorkflowTransition,
+    )
+    from openid_user_management.models import OpenIDUser
+
+logger = logging.getLogger(__name__)
+
+
+# ─── Policy evaluation (§16) ──────────────────────────────────────────────────
+
+def build_policy_input(node: "UserDefinedModelEntityNode", user: "OpenIDUser", action: str, **kwargs) -> dict:
+    """Build the input document passed to regorus for a given action."""
+    policy_doc = node.to_policy_document()
+
+    user_doc = {
+        "id": str(user.id),
+        "username": user.username,
+        "is_active": user.is_active,
+        "is_staff": user.is_staff,
+        "groups": list(user.groups.values_list("id", flat=True)),
+        "permissions": list(user.user_permissions.values_list("codename", flat=True)),
+    }
+
+    input_doc = {
+        "action": action,
+        "entity": policy_doc,
+        "user": user_doc,
+        "type_id": policy_doc.get("type_id"),
+        **kwargs,
+    }
+    return input_doc
+
+
+def get_udm_type_for_node(node: "UserDefinedModelEntityNode"):
+    """Return the UserDefinedModelType for a node (root or submodel)."""
+    try:
+        return node.userdefinedmodelentity.user_defined_model_type
+    except Exception:
+        root = node.get_root()
+        return root.user_defined_model_type if root else None
+
+
+def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", action: str, **kwargs) -> dict:
+    """Evaluate all policies for node's UDMType; return PolicyOutput dict."""
+    udm_type = get_udm_type_for_node(node)
+    if udm_type is None:
+        return {"allow": True, "messages": [], "viewable_fields": [], "editable_fields": []}
+
+    from userdefinedmodel.models import UserDefinedModelTypePolicy
+    type_policies = list(
+        udm_type.type_policies.select_related("policy").order_by("sort_order")
+    )
+    if not type_policies:
+        return {"allow": True, "messages": [], "viewable_fields": [], "editable_fields": []}
+
+    try:
+        import regorus
+        eng = regorus.Engine()
+        for tp in type_policies:
+            eng.add_policy(f"policy_{tp.policy.slug}.rego", tp.policy.source)
+
+        input_doc = build_policy_input(node, user, action, **kwargs)
+        eng.set_input_json(json.dumps(input_doc))
+
+        allow = eng.eval_rule("data.udm.allow")
+        if allow is None:
+            allow = True
+        elif isinstance(allow, list):
+            allow = bool(allow[0]) if allow else False
+        else:
+            allow = bool(allow)
+
+        deny = eng.eval_rule("data.udm.deny") or []
+        messages = eng.eval_rule("data.udm.messages") or []
+        viewable_fields = list(eng.eval_rule("data.udm.viewable_fields") or [])
+        editable_fields = list(eng.eval_rule("data.udm.editable_fields") or [])
+
+        all_messages = list(deny) + list(messages)
+
+        return {
+            "allow": allow,
+            "messages": all_messages,
+            "viewable_fields": viewable_fields,
+            "editable_fields": editable_fields,
+        }
+    except Exception as exc:
+        logger.exception("Policy evaluation failed: %s", exc)
+        return {"allow": False, "messages": [], "viewable_fields": [], "editable_fields": []}
+
+
+# ─── Transition engine (§15) ──────────────────────────────────────────────────
+
+class TransitionError(Exception):
+    """Raised when a workflow transition cannot proceed."""
+    def __init__(self, message: str, http_status: int = 422, details=None):
+        super().__init__(message)
+        self.http_status = http_status
+        self.details = details or {}
+
+
+def execute_transition(node: "UserDefinedModelEntityNode", name: str, user: "OpenIDUser") -> None:
+    """
+    Execute a named workflow transition on `node` (§15.1).
+    Must be called inside an existing transaction.atomic() with the root lock held.
+    """
+    from userdefinedmodel.models import WorkflowTransition, WorkflowState
+    from userdefinedmodel.models.history import EditGroup, FieldEdit
+
+    # 2. Load transition
+    if node.config_version.workflow_id is None:
+        raise TransitionError(f"No workflow defined for this node's config version.", http_status=404)
+
+    try:
+        transition = WorkflowTransition.objects.get(
+            workflow=node.config_version.workflow, name=name
+        )
+    except WorkflowTransition.DoesNotExist:
+        raise TransitionError(f"Transition '{name}' not found.", http_status=404)
+
+    # 3. Check from_state
+    if transition.from_state is not None:
+        if node.current_state_id != transition.from_state_id:
+            current = node.current_state.name if node.current_state else "None"
+            raise TransitionError(
+                f"Node is in state '{current}', but transition '{name}' requires '{transition.from_state.name}'.",
+                http_status=409,
+            )
+
+    # 4. Evaluate policy
+    output = evaluate_policy(node, user, "transition", transition=name)
+    if not output["allow"]:
+        raise TransitionError(f"Policy denied transition '{name}'.", http_status=403)
+
+    blocking_messages = [
+        m for m in output["messages"]
+        if isinstance(m, dict) and m.get("level") in ("critical", "error")
+    ]
+
+    # 5. Execute PRE-phase actions
+    from userdefinedmodel.models.workflow import TransitionAction
+    pre_actions = list(transition.actions.filter(phase=TransitionAction.Phase.PRE).order_by("sort_order"))
+    for action in pre_actions:
+        action.get_real_instance().execute(node, user)
+
+    # 6. Subtree validation (save-rule floor)
+    _validate_subtree(node)
+
+    # Check blocking policy messages after subtree validation
+    if blocking_messages:
+        raise TransitionError(
+            "Transition blocked by policy.",
+            http_status=422,
+            details={"messages": blocking_messages},
+        )
+
+    # 9. Apply state change
+    old_state_name = node.current_state.name if node.current_state else None
+    node.current_state = transition.to_state
+    node.save(update_fields=["current_state"])
+
+    # Record transition in history
+    root_entity = None
+    try:
+        root_entity = node.userdefinedmodelentity
+    except Exception:
+        root = node.get_root()
+        root_entity = root
+
+    edit_group = EditGroup.objects.create(
+        node=node,
+        root_entity=root_entity,
+        saved_by=user,
+    )
+    FieldEdit.objects.create(
+        group=edit_group,
+        change_kind=FieldEdit.ChangeKind.NODE_TRANSITION,
+        affected_node=node,
+        old_value={"state": old_state_name},
+        new_value={"state": transition.to_state.name},
+    )
+
+    # 10. Execute POST-phase actions (failures logged, don't roll back)
+    post_actions = list(transition.actions.filter(phase=TransitionAction.Phase.POST).order_by("sort_order"))
+    for action in post_actions:
+        try:
+            action.get_real_instance().execute(node, user)
+        except Exception as exc:
+            logger.warning("Post-transition action %s failed: %s", action.pk, exc)
+
+
+def _validate_subtree(node: "UserDefinedModelEntityNode") -> None:
+    """Re-run save rules on every node in the subtree (§4)."""
+    errors = {}
+    node.validate_for_save()
+    for child in node.children.all():
+        _validate_subtree(child)
