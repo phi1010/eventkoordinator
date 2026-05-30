@@ -1,34 +1,34 @@
-# Configurable Proposal Form — Implementation Plan
+# Configurable UserDefinedModelEntity Form — Implementation Plan
 
 ## Requirements
 
 ### Field configuration
-- Per-call, configurable proposal form with a defined set of field types → §2.1, §8
+- Per-user_defined_model_type, configurable user_defined_model_entity form with a defined set of field types → §2.1, §8
 - Supported types: `text_short`, `text_long`, `text_markdown`, `text_richtext`, `integer`, `float`, `boolean`, `date`, `time`, `datetime`, `select_single`, `select_multi`, `image`, `file`, `user_select`, `user_select_multi`, `group_select`, `group_select_multi`, `submodel_select`, `submodel_list` → §2.1
-- Multiple calls may share the same field configuration → §2.1, §3
-- A call's configuration can be switched to a different one → §5.5, §6
+- Multiple user_defined_model_types may share the same field configuration → §2.1, §3
+- A user_defined_model_type's configuration can be switched to a different one → §5.5, §6
 - `TEXT_RICHTEXT` content is sanitised with **`nh3`** on write → §2.1
-- Each field may carry an admin-chosen default value (per-language for localized fields); new proposals start pre-filled from these defaults, and publish is blocked unless the default combination passes save-time validation → §2.8
+- Each field may carry an admin-chosen default value (per-language for localized fields); new user_defined_model_entities start pre-filled from these defaults, and publish is blocked unless the default combination passes save-time validation → §2.8
 
 ### Config versioning
 - Field configuration is versioned with an explicit DRAFT → PUBLISHED → ARCHIVED lifecycle → §3
 - Published versions are immutable; editing creates a new draft automatically → §3
-- A call's proposals remain bound to the version they were created under until migrated → §3, §5
-- Orphaned archived `FieldConfig` versions (no living proposals) may only be deleted by explicit staff action → §6
+- A user_defined_model_type's user_defined_model_entities remain bound to the version they were created under until migrated → §3, §5
+- Orphaned archived `FieldConfig` versions (no living user_defined_model_entities) may only be deleted by explicit staff action → §6
 
 ### Submodels
 - Submodel instances (e.g. Speakers) are stored as separate Django model rows → §2.2
-- Submodels share a common base (`ProposalNode`) with proposals for reuse of validation and migration logic → §2.2
+- Submodels share a common base (`UserDefinedModelEntityNode`) with user_defined_model_entities for reuse of validation and migration logic → §2.2
 - Submodels may be nested to any depth; the UI warns beyond 2 levels, with no hard model limit → §2.2
 
 ### File and image attachments
-- File and image fields are supported on proposals and submodels at any nesting level → §2.3
+- File and image fields are supported on user_defined_model_entities and submodels at any nesting level → §2.3
 - Files are only permanently stored when the user explicitly saves; selections are held in a temporary staging area until then → §2.3, §11
 - Staged files use the same storage backend as committed files (staging/ prefix), configurable via django-storages → §2.3
 - When a file/image field is overwritten the previous `FileAttachment` row is **soft-deleted** (not physically removed), so the edit history can show the prior version → §2.3, §13
 
 ### Configurable workflow
-- Every `ProposalNode` (both `Proposal` and `SubmodelInstance`) can have a configurable workflow with named states and transitions; the hardcoded `Proposal.Status` choices are replaced by `WorkflowState` instances → §2.2, §2.6, §15
+- Every `UserDefinedModelEntityNode` (both `UserDefinedModelEntity` and `SubmodelInstance`) can have a configurable workflow with named states and transitions; the hardcoded `UserDefinedModelEntity.Status` choices are replaced by `WorkflowState` instances → §2.2, §2.6, §15
 - A `WorkflowDefinition` is assigned per `ConfigVersion`; different config versions (and therefore different submodel types) may have different workflows → §2.6
 - Each transition carries: permission checks, additional validators, mandatory field updates (fields that must be filled on transition), pre-actions (before validation + save), and post-actions (after save) → §2.6, §15
 
@@ -41,21 +41,21 @@
 - Stricter "submit-time" validation is not a rule flag: submission is a workflow transition, and the strict rules are attached to that transition as validators (`TransitionValidatorAssignment`) / mandatory fields (`TransitionMandatoryField`) → §2.6, §4, §15
 
 ### Migration
-- Proposals can be migrated to a different call or re-bound to a newer config version → §5.1–§5.4
+- UserDefinedModelEntities can be migrated to a different user_defined_model_type or re-bound to a newer config version → §5.1–§5.4
 - Migration is user-confirmed per field: each orphaned source field can be mapped, discarded, or kept in an overflow store → §5.3
-- Config republish and call config-switch both trigger a bulk migration flow: one field mapping is defined once and applied to all affected proposals → §5.5
+- Config republish and user_defined_model_type config-switch both trigger a bulk migration flow: one field mapping is defined once and applied to all affected user_defined_model_entities → §5.5
 - Bulk migration always executes asynchronously via a **Celery task** → §5.5
-- A config-switch always rolls back entirely if any proposal migration fails; no partial switch → §5.5
-- Orphaned field values from any migration are preserved in `ProposalNode.overflow_data` for staff review → §5.3
+- A config-switch always rolls back entirely if any user_defined_model_entity migration fails; no partial switch → §5.5
+- Orphaned field values from any migration are preserved in `UserDefinedModelEntityNode.overflow_data` for staff review → §5.3
 
 ### Partial saves and per-field undo
 - PATCH requests send only the fields the user changed; other fields are never overwritten → §12
-- The frontend tracks saved vs. editing state per field; a reset button reverts a single field to its last saved value without a server call → §12
+- The frontend tracks saved vs. editing state per field; a reset button reverts a single field to its last saved value without a server user_defined_model_type → §12
 - Unchanged fields retain their stored value even if another user modified them in the meantime → §12
 
 ### Edit history
 - All field changes within a single save are grouped together as one `EditGroup`; workflow state transitions are also recorded → §2.4, §13
-- History is scoped to the root proposal and includes edits from nested submodel instances → §2.4, §13
+- History is scoped to the root user_defined_model_entity and includes edits from nested submodel instances → §2.4, §13
 - File/image edits carry FK references to the soft-deleted old and active new `FileAttachment` rows, enabling the history UI to show the previous version inline → §2.3, §13
 - Rich-text/markdown edits store the full old and new strings for client-side diff rendering → §13
 - Edit history is retained indefinitely → §13
@@ -69,9 +69,9 @@
 - The PATCH payload uses a `{language_code: value}` dict for localized fields; omitting a language leaves that language's stored value untouched → §6, §12
 
 ### Concurrent write safety
-- The root `Proposal` row is locked (`SELECT FOR UPDATE NOWAIT`) before any validation runs and held through the write; it is the single mutex for the whole proposal tree → §14, §14.2
+- The root `UserDefinedModelEntity` row is locked (`SELECT FOR UPDATE NOWAIT`) before any validation runs and held through the write; it is the single mutex for the whole user_defined_model_entity tree → §14, §14.2
 - Validation results are never cached across a transaction boundary → §14.1
-- Only one row is ever write-locked, so there is no lock-ordering or deadlock concern between proposal writes → §14.2
+- Only one row is ever write-locked, so there is no lock-ordering or deadlock concern between user_defined_model_entity writes → §14.2
 - Status transitions hold the root lock so no concurrent field edit can race against the status change → §14.3
 - Lock contention returns HTTP 409 immediately; the frontend retries → §14.5
 - The test suite uses **PostgreSQL exclusively** (SQLite dropped); no conditional locking guards needed → §14
@@ -80,10 +80,10 @@
 
 ## Overview
 
-Replace the current hardcoded `Proposal` / `Speaker` fields with a versioned,
+Replace the current hardcoded `UserDefinedModelEntity` / `Speaker` fields with a versioned,
 **shareable** field configuration system. A `FieldConfig` is an independent entity;
-multiple calls can reference the same one. The same validation and migration logic
-applies to proposals and all submodel instances through a shared base model.
+multiple user_defined_model_types can reference the same one. The same validation and migration logic
+applies to user_defined_model_entities and all submodel instances through a shared base model.
 
 ---
 
@@ -91,19 +91,19 @@ applies to proposals and all submodel instances through a shared base model.
 
 | Term | Meaning |
 |---|---|
-| **FieldConfig** | Independent, named configuration entity; may be shared by multiple calls |
+| **FieldConfig** | Independent, named configuration entity; may be shared by multiple user_defined_model_types |
 | **SingleFieldValidationRule** | Polymorphic rule attached to exactly one `FieldDefinition` via FK; must be copied to reuse on a different field |
 | **MultiFieldValidationRule** | Polymorphic rule associated with multiple `FieldDefinition`s via a join table; expresses cross-field constraints |
 | **ConfigVersion** | One immutable snapshot of field definitions (DRAFT → PUBLISHED → ARCHIVED) |
 | **FieldDefinition** | A single configured field within a version |
-| **ProposalNode** | Concrete base model shared by `Proposal` and all submodel instances |
-| **FieldValue** | Stores the actual value of one field on one ProposalNode |
+| **UserDefinedModelEntityNode** | Concrete base model shared by `UserDefinedModelEntity` and all submodel instances |
+| **FieldValue** | Stores the actual value of one field on one UserDefinedModelEntityNode |
 | **FileAttachment** | File or image permanently bound to a FieldValue (created only at save time) |
 | **StagingFile** | Temporary file upload held server-side until the user saves; promoted or discarded |
 | **EditGroup** | Records all field changes made in a single save operation |
 | **FieldEdit** | One changed field within an EditGroup (old value → new value) |
-| **ProposalMigration** | A recorded move of one Proposal to a different call / config version |
-| **BulkMigrationPlan** | A staff-configured mapping applied to many proposals at once (config switch or republish) |
+| **UserDefinedModelEntityMigration** | A recorded move of one UserDefinedModelEntity to a different user_defined_model_type / config version |
+| **BulkMigrationPlan** | A staff-configured mapping applied to many user_defined_model_entities at once (config switch or republish) |
 | **ConfigLanguage** | A supported BCP-47 language code registered on a `FieldConfig`; one is marked as default fallback |
 | **FieldDefinitionTranslation** | A translated `label` / `help_text` for one `FieldDefinition` in one language |
 
@@ -120,11 +120,11 @@ FieldConfig  ──1:N──  ConfigVersion
     │                      │
   N:1                 SubmodelConfigVersion (optional FK)
     │                      │
-   Call            FieldDefinition (recursive, for sub-fields)
+   UserDefinedModelType            FieldDefinition (recursive, for sub-fields)
 ```
 
-A `FieldConfig` is an independent entity — not owned by any single call. Many
-calls may share one `FieldConfig`. Each `Call` holds a nullable FK to the
+A `FieldConfig` is an independent entity — not owned by any single user_defined_model_type. Many
+user_defined_model_types may share one `FieldConfig`. Each `UserDefinedModelType` holds a nullable FK to the
 `FieldConfig` it currently uses.
 
 **`FieldConfig`**
@@ -134,17 +134,17 @@ class FieldConfig(HistoricalMetaBase):
     description = models.TextField(blank=True)
 ```
 
-**On `Call`** (new field, added alongside existing Call fields):
+**On `UserDefinedModelType`** (new field, added alongside existing UserDefinedModelType fields):
 ```python
 field_config = models.ForeignKey(
     FieldConfig,
     on_delete=models.SET_NULL,
     null=True, blank=True,
-    related_name="calls",
+    related_name="user_defined_model_types",
 )
 ```
 
-Changing `Call.field_config` triggers the **config-switch migration flow** (see §5.5).
+Changing `UserDefinedModelType.field_config` triggers the **config-switch migration flow** (see §5.5).
 
 **`ConfigVersion`**
 ```python
@@ -279,7 +279,7 @@ active record (`is_active=True` for users). If `type_config` contains
 Deleted users/groups cause existing values to fail `clean()`; the API exposes this
 as a field error so staff can correct the value before the next submit.
 
-**API serialisation** — Proposal GET responses resolve user/group PKs to display
+**API serialisation** — UserDefinedModelEntity GET responses resolve user/group PKs to display
 objects so the frontend never needs a separate lookup per stored ID:
 
 ```jsonc
@@ -302,23 +302,23 @@ PATCH input still uses raw PKs (or a list of PKs for multi variants).
 
 ---
 
-### 2.2 Shared proposal node
+### 2.2 Shared user_defined_model_entity node
 
 ```
-ProposalNode  ──1:N──  FieldValue  ──0:1──  FileAttachment
+UserDefinedModelEntityNode  ──1:N──  FieldValue  ──0:1──  FileAttachment
      │
-     ├── Proposal  (root nodes; one per submission)
+     ├── UserDefinedModelEntity  (root nodes; one per submission)
      └── SubmodelInstance  (child nodes)
 ```
 
-**`ProposalNode`** (concrete, not abstract — enables self-referential FK for nesting)
+**`UserDefinedModelEntityNode`** (concrete, not abstract — enables self-referential FK for nesting)
 
 ```python
-class ProposalNode(HistoricalMetaBase):
+class UserDefinedModelEntityNode(HistoricalMetaBase):
     config_version = models.ForeignKey(
         ConfigVersion, on_delete=models.PROTECT, related_name="nodes"
     )
-    # Non-null for submodel instances; null for root Proposal nodes.
+    # Non-null for submodel instances; null for root UserDefinedModelEntity nodes.
     parent_node    = models.ForeignKey(
         "self", on_delete=models.CASCADE,
         null=True, blank=True, related_name="children"
@@ -345,26 +345,26 @@ class ProposalNode(HistoricalMetaBase):
     # save rules plus its submit-transition validators across the subtree.
 ```
 
-**`Proposal`** extends `ProposalNode` via multi-table inheritance.
+**`UserDefinedModelEntity`** extends `UserDefinedModelEntityNode` via multi-table inheritance.
 The hardcoded `Status` choices are removed — states are now `WorkflowState`
 instances (see §2.6):
 
 ```python
-class Proposal(ProposalNode):
-    call    = models.ForeignKey(Call, on_delete=models.SET_NULL,
-                                null=True, blank=True, related_name="proposals")
+class UserDefinedModelEntity(UserDefinedModelEntityNode):
+    user_defined_model_type    = models.ForeignKey(UserDefinedModelType, on_delete=models.SET_NULL,
+                                null=True, blank=True, related_name="user_defined_model_entities")
     owner   = models.ForeignKey(OpenIDUser, on_delete=models.SET_NULL,
-                                null=True, blank=True, related_name="owned_proposals")
+                                null=True, blank=True, related_name="owned_user_defined_model_entities")
     editors = models.ManyToManyField(OpenIDUser, blank=True,
-                                     related_name="edited_proposals")
+                                     related_name="edited_user_defined_model_entities")
     # ... existing permission logic migrated here; permission checks now
     # consult current_state and its outgoing WorkflowTransitions
 ```
 
-**`SubmodelInstance`** extends `ProposalNode`:
+**`SubmodelInstance`** extends `UserDefinedModelEntityNode`:
 
 ```python
-class SubmodelInstance(ProposalNode):
+class SubmodelInstance(UserDefinedModelEntityNode):
     sort_order = models.PositiveSmallIntegerField(default=0)
     # The type of submodel is inferred from parent_field.submodel_config.
 
@@ -408,9 +408,9 @@ class TypedValue(models.Model):
                                         null=True, blank=True, related_name="+")  # user_select
     value_group    = models.ForeignKey("auth.Group", on_delete=models.SET_NULL,
                                         null=True, blank=True, related_name="+")  # group_select
-    value_node     = models.ForeignKey(ProposalNode, on_delete=models.SET_NULL,
+    value_node     = models.ForeignKey(UserDefinedModelEntityNode, on_delete=models.SET_NULL,
                                         null=True, blank=True, related_name="+")  # submodel_select
-    # SUBMODEL_LIST has no value column — children are ProposalNode rows via parent_node.
+    # SUBMODEL_LIST has no value column — children are UserDefinedModelEntityNode rows via parent_node.
 
     class Meta:
         abstract = True
@@ -430,7 +430,7 @@ class TypedValue(models.Model):
 
 
 class FieldValue(TypedValue, MetaBase):
-    node       = models.ForeignKey(ProposalNode, on_delete=models.CASCADE,
+    node       = models.ForeignKey(UserDefinedModelEntityNode, on_delete=models.CASCADE,
                                    related_name="field_values")
     field      = models.ForeignKey(FieldDefinition, on_delete=models.PROTECT,
                                    related_name="values")
@@ -463,7 +463,7 @@ class FieldValue(TypedValue, MetaBase):
 | `select_multi`, `user_select_multi`, `group_select_multi` | `value_json` (list of keys / PKs) |
 | `user_select` / `group_select` / `submodel_select` | `value_user` / `value_group` / `value_node` |
 | `image`, `file` | *(no column — the `FileAttachment` FK points at this `FieldValue`)* |
-| `submodel_list` | *(no `FieldValue` row — children are `ProposalNode`s via `parent_node`)* |
+| `submodel_list` | *(no `FieldValue` row — children are `UserDefinedModelEntityNode`s via `parent_node`)* |
 
 Localisation is unaffected: there is still one `FieldValue` row per language
 (`language` column), and the typed-column choice is the same for every language.
@@ -525,7 +525,7 @@ class StagingFile(MetaBase):
     # Optional scope hint — used for permission checks and pre-validation only.
     intended_field = models.ForeignKey(FieldDefinition, on_delete=models.SET_NULL,
                                        null=True, blank=True)
-    intended_node  = models.ForeignKey(ProposalNode, on_delete=models.SET_NULL,
+    intended_node  = models.ForeignKey(UserDefinedModelEntityNode, on_delete=models.SET_NULL,
                                        null=True, blank=True)
 ```
 
@@ -550,13 +550,13 @@ grouped under one `EditGroup`. This gives a human-readable timeline where
 
 ```python
 class EditGroup(MetaBase):
-    """All FieldEdits produced by a single save call."""
-    node          = models.ForeignKey(ProposalNode, on_delete=models.CASCADE,
+    """All FieldEdits produced by a single save user_defined_model_type."""
+    node          = models.ForeignKey(UserDefinedModelEntityNode, on_delete=models.CASCADE,
                                       related_name="edit_groups")
-    # Denormalised shortcut to the root proposal so the history page can
+    # Denormalised shortcut to the root user_defined_model_entity so the history page can
     # show changes from nested submodel edits without a recursive query.
     root_proposal = models.ForeignKey(
-        "Proposal", on_delete=models.CASCADE,
+        "UserDefinedModelEntity", on_delete=models.CASCADE,
         null=True, blank=True, related_name="all_edit_groups"
     )
     saved_by      = models.ForeignKey(OpenIDUser, on_delete=models.SET_NULL,
@@ -599,7 +599,7 @@ class FieldEdit(MetaBase):
     )
 
     # For NODE_ADDED / NODE_REMOVED / NODE_REORDERED:
-    affected_node = models.ForeignKey(ProposalNode, on_delete=models.SET_NULL,
+    affected_node = models.ForeignKey(UserDefinedModelEntityNode, on_delete=models.SET_NULL,
                                       null=True, blank=True, related_name="+")
 ```
 
@@ -610,7 +610,7 @@ for that field — the group is only persisted if at least one `FieldEdit` would
 non-empty.
 
 **Immutability:** `EditGroup` and `FieldEdit` rows are never updated after creation.
-They are deleted only if the parent `ProposalNode` is deleted.
+They are deleted only if the parent `UserDefinedModelEntityNode` is deleted.
 
 ---
 
@@ -801,9 +801,9 @@ MultiFieldValidationRule (PolymorphicMetaBase)
 
 ### 2.6 Configurable workflow
 
-Every `ProposalNode` participates in a workflow defined by the `ConfigVersion` it
+Every `UserDefinedModelEntityNode` participates in a workflow defined by the `ConfigVersion` it
 belongs to. A workflow governs which states a node can be in, which transitions are
-allowed, and what must happen at each transition. Submodels and proposals may have
+allowed, and what must happen at each transition. Submodels and user_defined_model_entities may have
 entirely different workflows because they have separate `ConfigVersion`s (via
 `submodel_config`).
 
@@ -854,10 +854,10 @@ class WorkflowTransition(HistoricalMetaBase):
     to_state        = models.ForeignKey(WorkflowState, on_delete=models.CASCADE,
                                         related_name="incoming_transitions")
     # Django permission codename that the triggering user must hold.
-    # Null = any authenticated user with proposal access may trigger it.
+    # Null = any authenticated user with user_defined_model_entity access may trigger it.
     permission_codename = models.CharField(max_length=200, blank=True)
     # Optional Rego rule-path override for authorising this transition (§16).
-    # When blank, §15.1 step 4 evaluates the default `data.proposals.allow` rule
+    # When blank, §15.1 step 4 evaluates the default `data.user_defined_model_entities.allow` rule
     # (action="transition", transition=<name>), which can branch on the name. Set
     # this only to point a specific transition at a different rule.
     policy_rule         = models.CharField(max_length=300, blank=True)
@@ -867,7 +867,7 @@ class WorkflowTransition(HistoricalMetaBase):
 
 **This is where strict "submit-time" validation lives.** There is no separate
 submit-rule flag on the rule models; instead the strict checks that must hold before
-a proposal can be submitted (or accepted, etc.) are attached to the relevant
+a user_defined_model_entity can be submitted (or accepted, etc.) are attached to the relevant
 `WorkflowTransition` — typically the `submit` transition. A rule used only at submit
 sets `applies_to_save=False` so it does not fire on every PATCH, and is referenced
 from the transition via a `TransitionValidatorAssignment`.
@@ -932,7 +932,7 @@ class TransitionAction(PolymorphicMetaBase):
     phase      = models.CharField(max_length=4, choices=Phase)
     sort_order = models.PositiveSmallIntegerField(default=0)
 
-    def execute(self, node: "ProposalNode", triggered_by) -> None:
+    def execute(self, node: "UserDefinedModelEntityNode", triggered_by) -> None:
         raise NotImplementedError
 ```
 
@@ -1079,7 +1079,7 @@ top-level value.
 
 #### Localized fields and locking
 
-No special handling is needed. The root-proposal lock (§14.2) serialises the whole
+No special handling is needed. The root-user_defined_model_entity lock (§14.2) serialises the whole
 tree, so a PATCH that touches only some languages of a localized field still sees a
 consistent snapshot of **all** that field's language rows during validation — which
 is what `RequiredInLanguageRule` relies on.
@@ -1114,9 +1114,9 @@ languages:
 
 ### 2.8 Default values
 
-A `FieldDefinition` may carry an admin-chosen default. When a new `ProposalNode`
+A `FieldDefinition` may carry an admin-chosen default. When a new `UserDefinedModelEntityNode`
 is created the defaults are materialised into real `FieldValue` rows, so every
-proposal starts from a complete, admin-approved combination of values rather than
+user_defined_model_entity starts from a complete, admin-approved combination of values rather than
 an empty form.
 
 Defaults are part of the config and are therefore **versioned** with it: a default
@@ -1154,7 +1154,7 @@ class FieldDefaultValue(TypedValue, MetaBase):
 - `image` / `file`: **no default** — there is no sensible config-owned file to
   pre-fill. A `FieldDefaultValue` for these types is rejected in `clean()`.
 - `submodel_select`: not supported — a default would have to point at a concrete
-  instance that does not exist until a proposal is created.
+  instance that does not exist until a user_defined_model_entity is created.
 - `submodel_list`: a field with no default starts with zero children. Optional
   default children are out of scope for the first cut (a `min_items` rule plus a
   publish-time check is the simpler way to guarantee at least one child); revisit
@@ -1162,7 +1162,7 @@ class FieldDefaultValue(TypedValue, MetaBase):
 
 **Materialisation on create**
 
-`POST /api/proposals/` and `POST /api/proposals/{id}/nodes/` build the new node's
+`POST /api/user_defined_model_entities/` and `POST /api/user_defined_model_entities/{id}/nodes/` build the new node's
 `FieldValue` rows by copying every `FieldDefaultValue` of the node's
 `ConfigVersion` (one row per language for localized fields). Fields without a
 default are simply left unset. Materialisation runs inside the create transaction;
@@ -1188,7 +1188,7 @@ required-at-submit field with no default stays empty until the user fills it).
 ```
          ┌──────────────────────────────────────────────────────┐
          │              Staff creates FieldConfig               │
-         │          (independent of any specific call)           │
+         │          (independent of any specific user_defined_model_type)           │
          └───────────────────────────┬──────────────────────────┘
                                      ▼
                               ┌─────DRAFT──────┐
@@ -1200,14 +1200,14 @@ required-at-submit field with no default stays empty until the user fills it).
                                        ▼
                              ┌────PUBLISHED────┐   new draft created automatically
                              │  immutable      │──►  (copy of published fields)
-                             │  proposals bind │
+                             │  user_defined_model_entities bind │
                              │  to this version│
                              └────────┬───────┘
                                        │  next publish
                                        ▼
                              ┌────ARCHIVED─────┐
                              │  read-only      │
-                             │  proposals still│
+                             │  user_defined_model_entities still│
                              │  reference it   │
                              └─────────────────┘
 ```
@@ -1217,13 +1217,13 @@ required-at-submit field with no default stays empty until the user fills it).
   combination and is blocked with field errors otherwise (§2.8).
 - The new DRAFT is an automatic deep-copy of the just-published version
   (field definitions, rules, workflow, and field defaults).
-- Proposals created before a republish continue to reference their original
+- UserDefinedModelEntities created before a republish continue to reference their original
   `ConfigVersion`; they are **not** silently upgraded.
-- A proposal can be voluntarily upgraded to the new config version via the
+- A user_defined_model_entity can be voluntarily upgraded to the new config version via the
   migration flow (see §5).
-- Because a `FieldConfig` may be shared by N calls, publishing a new version
-  surfaces a **pending-migration count** in the staff UI: the number of proposals
-  across all calls using this `FieldConfig` that are still on a previous version.
+- Because a `FieldConfig` may be shared by N user_defined_model_types, publishing a new version
+  surfaces a **pending-migration count** in the staff UI: the number of user_defined_model_entities
+  across all user_defined_model_types using this `FieldConfig` that are still on a previous version.
   Staff can then run a bulk migration from that view (see §5.5).
 
 ---
@@ -1246,7 +1246,7 @@ There are two places a rule can run:
 
 There is no `validate_for_submit()` and no `applies_to_submit` flag.
 
-### Validation entry points on `ProposalNode`
+### Validation entry points on `UserDefinedModelEntityNode`
 
 | Method | Trigger | Rules fetched |
 |---|---|---|
@@ -1312,8 +1312,8 @@ def validate_for_save(self):
 ### Strict (submit / transition) validation across the subtree
 
 A transition does not have its own copy of the field rules — it carries only the
-strict extras. To produce today's "submit checks the whole proposal" behaviour while
-respecting that each node (proposal or submodel) lives in its **own** `ConfigVersion`
+strict extras. To produce today's "submit checks the whole user_defined_model_entity" behaviour while
+respecting that each node (user_defined_model_entity or submodel) lives in its **own** `ConfigVersion`
 (and rules may not cross versions, §2.5), the transition engine validates the entire
 subtree, **validation-only**, in one transaction (§15):
 
@@ -1349,35 +1349,35 @@ workflow transition (§2.6, §15).
 
 | # | Trigger | Scope | Flow |
 |---|---|---|---|
-| 1 | **Cross-call move** | one proposal | §5.3 single-proposal flow |
-| 2 | **Config version upgrade** | one proposal | §5.3 single-proposal flow |
-| 3 | **Config republish on shared config** | all proposals on any previous version of that `FieldConfig`, across all calls | §5.5 bulk flow |
-| 4 | **Call config switch** | all proposals under the call being switched | §5.5 bulk flow |
+| 1 | **Cross-user_defined_model_type move** | one user_defined_model_entity | §5.3 single-user_defined_model_entity flow |
+| 2 | **Config version upgrade** | one user_defined_model_entity | §5.3 single-user_defined_model_entity flow |
+| 3 | **Config republish on shared config** | all user_defined_model_entities on any previous version of that `FieldConfig`, across all user_defined_model_types | §5.5 bulk flow |
+| 4 | **UserDefinedModelType config switch** | all user_defined_model_entities under the user_defined_model_type being switched | §5.5 bulk flow |
 
-Cases 1–2 use the existing single-proposal mapping mechanism. Cases 3–4 use
+Cases 1–2 use the existing single-user_defined_model_entity mapping mechanism. Cases 3–4 use
 the `BulkMigrationPlan` mechanism which defines one field mapping and applies it
-to many proposals at once.
+to many user_defined_model_entities at once.
 
-All four cases share the same underlying per-proposal execution logic; the bulk
+All four cases share the same underlying per-user_defined_model_entity execution logic; the bulk
 flow simply drives it in a loop.
 
 ### 5.2 Field mapping model
 
 ```python
-class ProposalMigration(HistoricalMetaBase):
+class UserDefinedModelEntityMigration(HistoricalMetaBase):
     class Action(models.TextChoices):
         MAP      = "map"       # source field → target field
         DISCARD  = "discard"   # drop the value
-        OVERFLOW = "overflow"  # keep in ProposalNode.overflow_data
+        OVERFLOW = "overflow"  # keep in UserDefinedModelEntityNode.overflow_data
 
-    proposal        = models.ForeignKey(Proposal, on_delete=models.CASCADE,
+    user_defined_model_entity        = models.ForeignKey(UserDefinedModelEntity, on_delete=models.CASCADE,
                                         related_name="migrations")
     source_version  = models.ForeignKey(ConfigVersion, on_delete=models.PROTECT,
                                         related_name="+")
-    # For cross-call moves, target_call differs from proposal.call.
-    # For in-place version upgrades or config switches, target_call == proposal.call.
-    target_call     = models.ForeignKey(Call, on_delete=models.PROTECT,
-                                        related_name="received_migrations")
+    # For cross-UserDefinedModelType moves, target_user_defined_model_type differs from user_defined_model_entity.user_defined_model_type.
+    # For in-place version upgrades or config switches, target_user_defined_model_type == user_defined_model_entity.user_defined_model_type.
+    target_user_defined_model_type     = models.ForeignKey(UserDefinedModelType, on_delete=models.PROTECT,
+                                        related_name="received_user_defined_model_entity_migrations")
     target_version  = models.ForeignKey(ConfigVersion, on_delete=models.PROTECT,
                                         related_name="+")
     executed_at     = models.DateTimeField(null=True, blank=True)
@@ -1390,11 +1390,11 @@ class ProposalMigration(HistoricalMetaBase):
     )
 
 class MigrationFieldMapping(MetaBase):
-    migration      = models.ForeignKey(ProposalMigration, on_delete=models.CASCADE,
+    migration      = models.ForeignKey(UserDefinedModelEntityMigration, on_delete=models.CASCADE,
                                        related_name="field_mappings")
     source_field   = models.ForeignKey(FieldDefinition, on_delete=models.PROTECT,
                                        related_name="+")
-    action         = models.CharField(max_length=10, choices=ProposalMigration.Action)
+    action         = models.CharField(max_length=10, choices=UserDefinedModelEntityMigration.Action)
     target_field   = models.ForeignKey(FieldDefinition, on_delete=models.PROTECT,
                                        null=True, blank=True, related_name="+")
 ```
@@ -1402,20 +1402,20 @@ class MigrationFieldMapping(MetaBase):
 ### 5.3 Migration flow
 
 ```
-1. Staff/user requests migration (target call selected)
-2. GET /api/proposals/{id}/migration-preview/?target_call={cid}
+1. Staff/user requests migration (target user_defined_model_type selected)
+2. GET /api/user_defined_model_entities/{id}/migration-preview/?target_user_defined_model_type={cid}
    → Returns auto-suggested mapping (matched by slug first, then label similarity)
    → Each source field has: suggested_action, suggested_target, conflict_reason
 3. User reviews and confirms/overrides each field decision
-4. POST /api/proposals/{id}/migrate/  { migration_id: ..., confirmed: true }
+4. POST /api/user_defined_model_entities/{id}/migrate/  { migration_id: ..., confirmed: true }
 5. Server executes atomically:
-   a. Create new Proposal under target call / version
+   a. Create new UserDefinedModelEntity under target user_defined_model_type / version
    b. For MAP entries: copy FieldValue (run type-compat check first)
    c. For OVERFLOW entries: write to new_proposal.overflow_data
    d. For DISCARD entries: skip
    e. Recursively migrate SubmodelInstance children
-   f. Mark old proposal status as MIGRATED (new Status choice)
-   g. Set ProposalMigration.executed_at
+   f. Mark old user_defined_model_entity status as MIGRATED (new Status choice)
+   g. Set UserDefinedModelEntityMigration.executed_at
 ```
 
 ### 5.4 Type-compatibility during MAP
@@ -1429,9 +1429,9 @@ OVERFLOW instead.
 
 ### 5.5 Bulk migration plan
 
-Used for trigger cases 3 (shared config republish) and 4 (call config switch).
+Used for trigger cases 3 (shared config republish) and 4 (user_defined_model_type config switch).
 Staff configures one field mapping; the system applies it to every affected
-proposal, each of which gets its own `ProposalMigration` record for audit.
+user_defined_model_entity, each of which gets its own `UserDefinedModelEntityMigration` record for audit.
 
 **Models**
 
@@ -1440,16 +1440,16 @@ class BulkMigrationPlan(HistoricalMetaBase):
     class Status(models.TextChoices):
         DRAFT    = "draft"    # field mappings being configured
         RUNNING  = "running"  # execution in progress (locked)
-        DONE     = "done"     # all proposals migrated
-        PARTIAL  = "partial"  # completed with some per-proposal failures
+        DONE     = "done"     # all user_defined_model_entities migrated
+        PARTIAL  = "partial"  # completed with some per-user_defined_model_entity failures
 
     source_version   = models.ForeignKey(ConfigVersion, on_delete=models.PROTECT,
                                          related_name="+")
     target_version   = models.ForeignKey(ConfigVersion, on_delete=models.PROTECT,
                                          related_name="+")
-    # Non-null for trigger 4 (call config switch): restricts execution to proposals
-    # under this call only. Null for trigger 3: applies across all calls.
-    call_filter      = models.ForeignKey(Call, on_delete=models.SET_NULL,
+    # Non-null for trigger 4 (user_defined_model_type config switch): restricts execution to user_defined_model_entities
+    # under this user_defined_model_type only. Null for trigger 3: applies across all user_defined_model_types.
+    user_defined_model_type_filter      = models.ForeignKey(UserDefinedModelType, on_delete=models.SET_NULL,
                                          null=True, blank=True, related_name="+")
     status           = models.CharField(max_length=10, choices=Status,
                                         default=Status.DRAFT)
@@ -1466,35 +1466,35 @@ class BulkMigrationFieldMapping(MetaBase):
                                      related_name="field_mappings")
     source_field = models.ForeignKey(FieldDefinition, on_delete=models.PROTECT,
                                      related_name="+")
-    action       = models.CharField(max_length=10, choices=ProposalMigration.Action)
+    action       = models.CharField(max_length=10, choices=UserDefinedModelEntityMigration.Action)
     target_field = models.ForeignKey(FieldDefinition, on_delete=models.PROTECT,
                                      null=True, blank=True, related_name="+")
 ```
 
 **Trigger 3 — Config republish**
 
-When `ConfigVersion.publish()` runs on a `FieldConfig` used by one or more calls:
-1. Query all distinct `config_version` values among proposals whose call references
+When `ConfigVersion.publish()` runs on a `FieldConfig` used by one or more user_defined_model_types:
+1. Query all distinct `config_version` values among user_defined_model_entities whose user_defined_model_type references
    this `FieldConfig` and whose `config_version` is not the new published version.
 2. For each distinct old version, automatically create a `BulkMigrationPlan`
-   (`source_version=old, target_version=new, call_filter=None`).
-3. Surface the plans in the staff UI as "N proposals need migration" badges on the
+   (`source_version=old, target_version=new, user_defined_model_type_filter=None`).
+3. Surface the plans in the staff UI as "N user_defined_model_entities need migration" badges on the
    `FieldConfig` detail page.
 
-**Trigger 4 — Call config switch**
+**Trigger 4 — UserDefinedModelType config switch**
 
-When `Call.field_config` is changed (via `PATCH /api/calls/{id}/` with a new
+When `UserDefinedModelType.field_config` is changed (via `PATCH /api/user_defined_model_types/{id}/` with a new
 `field_config_id`):
-1. The API refuses to commit the change while any existing proposals under the call
+1. The API refuses to commit the change while any existing user_defined_model_entities under the user_defined_model_type
    are on a different `FieldConfig` without a confirmed `BulkMigrationPlan`.
 2. Staff first previews the mapping: `POST /api/bulk-migrations/preview/` with
-   `source_version`, `target_version`, and `call_filter`.
+   `source_version`, `target_version`, and `user_defined_model_type_filter`.
 3. Staff creates the plan with confirmed field mappings.
-4. Staff executes the plan; only then can the `Call.field_config` be changed.
+4. Staff executes the plan; only then can the `UserDefinedModelType.field_config` be changed.
 5. The field_config change and the plan execution are wrapped in the same
    `transaction.atomic()` so a failed execution rolls back the assignment.
 
-If a call currently has no proposals, step 1–4 are skipped and the assignment
+If a user_defined_model_type currently has no user_defined_model_entities, step 1–4 are skipped and the assignment
 takes effect immediately.
 
 **Execution — always via Celery**
@@ -1507,26 +1507,26 @@ takes effect immediately.
 celery task: execute_bulk_migration(plan_id)
   1. Lock the plan row (SELECT FOR UPDATE NOWAIT).
      → If already RUNNING, raise and discard (idempotent).
-  2. Set status = RUNNING, total_proposals = count of affected proposals.
-  3. For each affected Proposal (one transaction per proposal):
-       a. Create ProposalMigration(bulk_plan=plan, ...).
+  2. Set status = RUNNING, total_proposals = count of affected user_defined_model_entities.
+  3. For each affected UserDefinedModelEntity (one transaction per user_defined_model_entity):
+       a. Create UserDefinedModelEntityMigration(bulk_plan=plan, ...).
        b. Copy BulkMigrationFieldMapping → MigrationFieldMapping.
-       c. Execute single-proposal migration (§5.3 steps 5a–5g),
-          with full proposal locking per §14.3.
+       c. Execute single-user_defined_model_entity migration (§5.3 steps 5a–5g),
+          with full user_defined_model_entity locking per §14.3.
        d. Atomically increment done_proposals or failed_proposals.
   4. Set status = DONE (all succeeded) or PARTIAL (any failed).
-     PARTIAL leaves the call's field_config unchanged (see §5.5 trigger 4).
+     PARTIAL leaves the user_defined_model_type's field_config unchanged (see §5.5 trigger 4).
 ```
 
 The preview endpoint (`GET /api/bulk-migrations/{id}/preview/`) returns the
-same per-field mapping format as the single-proposal preview, plus an
-`affected_proposal_count` field and a breakdown by call (when `call_filter` is null).
+same per-field mapping format as the single-user_defined_model_entity preview, plus an
+`affected_proposal_count` field and a breakdown by user_defined_model_type (when `user_defined_model_type_filter` is null).
 
-**Stale-proposal count query** (used for badges in the staff UI)
+**Stale-user_defined_model_entity count query** (used for badges in the staff UI)
 
 ```python
-# Proposals whose config version does not belong to their call's current FieldConfig.
-stale = Proposal.objects.exclude(
+# UserDefinedModelEntities whose config version does not belong to their user_defined_model_type's current FieldConfig.
+stale = UserDefinedModelEntity.objects.exclude(
     config_version__config=models.F("call__field_config")
 ).select_related("call__field_config", "config_version__config")
 ```
@@ -1536,38 +1536,38 @@ stale = Proposal.objects.exclude(
 ## 6. API Endpoints
 
 All endpoints require authentication. Permission logic mirrors the existing
-`Proposal.has_object_permission` pattern, moved to `ProposalNode`.
+`UserDefinedModelEntity.has_object_permission` pattern, moved to `UserDefinedModelEntityNode`.
 
 ### FieldConfig (staff-only write)
 
-`FieldConfig` objects are independent resources — not nested under a call.
+`FieldConfig` objects are independent resources — not nested under a user_defined_model_type.
 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/configs/` | List all FieldConfigs (staff) |
 | `POST` | `/api/configs/` | Create a new FieldConfig |
-| `GET` | `/api/configs/{cid}/` | Retrieve metadata (name, description, calls using it, stale-proposal count) |
+| `GET` | `/api/configs/{cid}/` | Retrieve metadata (name, description, user_defined_model_types using it, stale-user_defined_model_entity count) |
 | `PATCH` | `/api/configs/{cid}/` | Update name / description |
-| `DELETE` | `/api/configs/{cid}/` | Delete only if no calls reference it and no proposals exist |
+| `DELETE` | `/api/configs/{cid}/` | Delete only if no user_defined_model_types reference it and no user_defined_model_entities exist |
 | `GET` | `/api/configs/{cid}/versions/` | List all ConfigVersions |
 | `GET` | `/api/configs/{cid}/versions/published/` | Active published version as JSON schema |
 | `GET` | `/api/configs/{cid}/versions/draft/` | Current draft (staff) |
 | `PUT` | `/api/configs/{cid}/versions/draft/` | Replace draft field definitions |
-| `POST` | `/api/configs/{cid}/versions/draft/publish/` | Publish draft → auto-creates BulkMigrationPlans for stale proposals |
+| `POST` | `/api/configs/{cid}/versions/draft/publish/` | Publish draft → auto-creates BulkMigrationPlans for stale user_defined_model_entities |
 
-### Call ↔ FieldConfig assignment
+### UserDefinedModelType ↔ FieldConfig assignment
 
 | Method | Path | Description |
 |---|---|---|
-| `PATCH` | `/api/calls/{id}/` | Change `field_config_id`; blocked if stale proposals exist without a confirmed BulkMigrationPlan |
+| `PATCH` | `/api/user_defined_model_types/{id}/` | Change `field_config_id`; blocked if stale user_defined_model_entities exist without a confirmed BulkMigrationPlan |
 
-### Convenience read aliases (call-scoped, for the proposal form frontend)
+### Convenience read aliases (user_defined_model_type-scoped, for the user_defined_model_entity form frontend)
 
 These are read-only shortcuts; all writes go to `/api/configs/`.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/calls/{id}/config/` | Active published config for this call (same shape as `/api/configs/{cid}/versions/published/`) |
+| `GET` | `/api/user_defined_model_types/{id}/config/` | Active published config for this user_defined_model_type (same shape as `/api/configs/{cid}/versions/published/`) |
 
 ### Config JSON schema shape
 
@@ -1648,17 +1648,17 @@ param for bulk-resolving already-stored PKs on form load.
 | `POST` | `/api/staging-files/` | Upload a file; returns `staging_id`. Pre-validates MIME/size if `intended_field` is provided |
 | `DELETE` | `/api/staging-files/{sid}/` | Delete a staged file early (optional; it expires anyway) |
 
-### Proposals
+### UserDefinedModelEntities
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/proposals/` | Create draft; binds to call's active published config; materialises field defaults (§2.8) into starting `FieldValue` rows |
-| `GET` | `/api/proposals/{id}/` | Retrieve with all field values and child nodes |
-| `PATCH` | `/api/proposals/{id}/` | Partial update — only send changed fields (see below) |
-| `POST` | `/api/proposals/{id}/transition/` | Fire a workflow transition by name, e.g. `{ "transition": "submit" }`; runs the subtree validation (§15). Submission is just the `submit` transition — there is no separate `/submit/` endpoint |
-| `DELETE` | `/api/proposals/{id}/` | Delete (DRAFT only, owner only) |
-| `GET` | `/api/proposals/{id}/history/` | Edit history (EditGroups + FieldEdits, newest first) |
-| `GET` | `/api/proposals/{id}/policy-document/` | Canonical full-tree JSON used as Rego `input` (§16); staff-only, for policy authoring/tests |
+| `POST` | `/api/user_defined_model_entities/` | Create draft; binds to user_defined_model_type's active published config; materialises field defaults (§2.8) into starting `FieldValue` rows |
+| `GET` | `/api/user_defined_model_entities/{id}/` | Retrieve with all field values and child nodes |
+| `PATCH` | `/api/user_defined_model_entities/{id}/` | Partial update — only send changed fields (see below) |
+| `POST` | `/api/user_defined_model_entities/{id}/transition/` | Fire a workflow transition by name, e.g. `{ "transition": "submit" }`; runs the subtree validation (§15). Submission is just the `submit` transition — there is no separate `/submit/` endpoint |
+| `DELETE` | `/api/user_defined_model_entities/{id}/` | Delete (DRAFT only, owner only) |
+| `GET` | `/api/user_defined_model_entities/{id}/history/` | Edit history (EditGroups + FieldEdits, newest first) |
+| `GET` | `/api/user_defined_model_entities/{id}/policy-document/` | Canonical full-tree JSON used as Rego `input` (§16); staff-only, for policy authoring/tests |
 
 ### PATCH payload — partial update format
 
@@ -1667,7 +1667,7 @@ untouched on the server; their stored values — even if another user modified t
 in the meantime — are never overwritten.
 
 ```jsonc
-// PATCH /api/proposals/{id}/
+// PATCH /api/user_defined_model_entities/{id}/
 {
   "changed_fields": {
     "abstract":      "New abstract text",
@@ -1692,26 +1692,26 @@ its `savedValue` store without a separate GET.
 ### Submodel instances (nested endpoints)
 
 Each submodel operation creates its own `EditGroup` on the child node and sets
-`root_proposal` so it appears in the proposal's history.
+`root_proposal` so it appears in the user_defined_model_entity's history.
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/proposals/{id}/nodes/` | Create child SubmodelInstance (materialises submodel field defaults §2.8; NODE_ADDED edit recorded) |
-| `PATCH` | `/api/proposals/{id}/nodes/{nid}/` | Partial update of child (same format as proposal PATCH) |
-| `DELETE` | `/api/proposals/{id}/nodes/{nid}/` | Delete child (NODE_REMOVED edit recorded) |
+| `POST` | `/api/user_defined_model_entities/{id}/nodes/` | Create child SubmodelInstance (materialises submodel field defaults §2.8; NODE_ADDED edit recorded) |
+| `PATCH` | `/api/user_defined_model_entities/{id}/nodes/{nid}/` | Partial update of child (same format as user_defined_model_entity PATCH) |
+| `DELETE` | `/api/user_defined_model_entities/{id}/nodes/{nid}/` | Delete child (NODE_REMOVED edit recorded) |
 
-### Single-proposal migration
+### Single-user_defined_model_entity migration
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/proposals/{id}/migration-preview/` | Preview with `?target_call=` or `?target_version=` |
-| `POST` | `/api/proposals/{id}/migrate/` | Execute confirmed single-proposal migration |
+| `GET` | `/api/user_defined_model_entities/{id}/migration-preview/` | Preview with `?target_user_defined_model_type=` or `?target_version=` |
+| `POST` | `/api/user_defined_model_entities/{id}/migrate/` | Execute confirmed single-user_defined_model_entity migration |
 
 ### Bulk migration (config switch / republish)
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/bulk-migrations/preview/` | Suggest field mapping for `{ source_version, target_version, call_filter? }`; returns `affected_proposal_count` |
+| `POST` | `/api/bulk-migrations/preview/` | Suggest field mapping for `{ source_version, target_version, user_defined_model_type_filter? }`; returns `affected_proposal_count` |
 | `POST` | `/api/bulk-migrations/` | Create a `BulkMigrationPlan` with confirmed field mappings |
 | `GET` | `/api/bulk-migrations/{id}/` | Retrieve plan and current progress counters |
 | `POST` | `/api/bulk-migrations/{id}/execute/` | Execute; returns immediately, plan status polled via GET |
@@ -1721,7 +1721,7 @@ Each submodel operation creates its own `EditGroup` on the child node and sets
 ## 7. Frontend Integration
 
 The JS frontend receives a **config schema** (see §6 JSON shape) and a
-**proposal payload** (field values keyed by `field_id`). It is responsible for:
+**user_defined_model_entity payload** (field values keyed by `field_id`). It is responsible for:
 
 - Rendering each field by `data_type` (text, markdown editor, WYSIWYG, date
   picker, file drop zone, submodel list/table, etc.).
@@ -1736,12 +1736,12 @@ The JS frontend receives a **config schema** (see §6 JSON shape) and a
   any already-stored PKs with `?ids=…` to display names without a query per value.
 
 The frontend should request the config schema once per page load and cache it
-for the session; config changes only take effect for newly created proposals.
+for the session; config changes only take effect for newly created user_defined_model_entities.
 
 ### History endpoint response shape
 
 ```jsonc
-// GET /api/proposals/{id}/history/
+// GET /api/user_defined_model_entities/{id}/history/
 {
   "results": [
     {
@@ -1749,7 +1749,7 @@ for the session; config changes only take effect for newly created proposals.
       "saved_at": "2026-05-30T14:32:11Z",
       "saved_by": { "id": 5, "display_name": "Alice" },
       "node_id": 12,
-      "node_type": "proposal",          // or "submodel:<slug>"
+      "node_type": "user_defined_model_entity",          // or "submodel:<slug>"
       "edits": [
         {
           "change_kind": "field_value",
@@ -1812,7 +1812,7 @@ POST /api/staging-files/
       │  User edits other fields...
       │
       ▼
-PATCH /api/proposals/{id}/
+PATCH /api/user_defined_model_entities/{id}/
   body: { "changed_fields": { "photo": { "staging_id": "uuid" } } }
       │
       ▼  server-side, inside transaction.atomic():
@@ -1851,16 +1851,16 @@ transaction, and records a `FieldEdit` with `old_file_name` set and
 
 ### Server behaviour
 
-The PATCH handler on `ProposalNode` applies **field-level last-write-wins** inside a
-single `transaction.atomic()` block. The root-proposal lock is acquired **before**
+The PATCH handler on `UserDefinedModelEntityNode` applies **field-level last-write-wins** inside a
+single `transaction.atomic()` block. The root-user_defined_model_entity lock is acquired **before**
 validation so that the validated state is guaranteed to still hold when the write
 executes. See §14 for the full locking design.
 
 1. Parse `changed_fields` from the request body.
 2. Open `transaction.atomic()`.
-3. **Lock the root `Proposal` row** (`SELECT FOR UPDATE NOWAIT, of=("self",)`; §14.2).
+3. **Lock the root `UserDefinedModelEntity` row** (`SELECT FOR UPDATE NOWAIT, of=("self",)`; §14.2).
    For a submodel PATCH the root is found by walking `parent_node` up to the
-   `Proposal`. This single lock serialises the whole tree — no `FieldValue` rows
+   `UserDefinedModelEntity`. This single lock serialises the whole tree — no `FieldValue` rows
    are locked.
 4. **Authorize the edit** — compute `authz.editable_fields(node, user)` (§16.3) and
    reject the whole PATCH with `403` (naming the offending slugs) if any key in
@@ -1925,7 +1925,7 @@ are never included.
 
 ### Display model
 
-The history timeline groups changes by `EditGroup` (one group per save call).
+The history timeline groups changes by `EditGroup` (one group per save user_defined_model_type).
 Within a group, each `FieldEdit` is displayed as a diff row.
 
 ```
@@ -1940,25 +1940,25 @@ Within a group, each `FieldEdit` is displayed as a diff row.
    ＋ Speaker added: "Alice Smith"
 ```
 
-Submodel edits appear inline under the proposal history but are labelled with
+Submodel edits appear inline under the user_defined_model_entity history but are labelled with
 the submodel type and display name so they are identifiable without navigating
 to the child node.
 
 ### API pagination
 
 ```jsonc
-// GET /api/proposals/{id}/history/?page=1&page_size=20
+// GET /api/user_defined_model_entities/{id}/history/?page=1&page_size=20
 {
   "count": 42,
-  "next": "/api/proposals/7/history/?page=2&page_size=20",
+  "next": "/api/user_defined_model_entities/7/history/?page=2&page_size=20",
   "results": [ ... ]   // EditGroups with nested FieldEdits, newest first
 }
 ```
 
-### History for submitted proposals
+### History for submitted user_defined_model_entities
 
 `EditGroup` rows created after a node transitions to any non-initial state are
-preserved for audit. They are readable by proposal owners and by staff, not by
+preserved for audit. They are readable by user_defined_model_entity owners and by staff, not by
 reviewers.
 
 ### File / image diffs
@@ -1988,41 +1988,41 @@ races to prevent:
 
 | Race | Description |
 |---|---|
-| **Status-then-edit** | User A validates that editing field X is permitted (proposal is DRAFT). User B transitions the proposal to SUBMITTED. User A writes field X — the edit should now be rejected but A's validation result is stale. |
+| **Status-then-edit** | User A validates that editing field X is permitted (user_defined_model_entity is DRAFT). User B transitions the user_defined_model_entity to SUBMITTED. User A writes field X — the edit should now be rejected but A's validation result is stale. |
 | **Multi-field inconsistency** | Field rule: "at least one of A, B must be non-empty." User A reads B=filled, concludes clearing A is safe, starts writing A. User B concurrently clears B. Both writes succeed; the rule is now violated. |
-| **Submit-then-edit** | Submit validation reads all fields and passes. A concurrent field edit changes a field to an invalid value before the status is written. Proposal transitions to SUBMITTED with invalid data. |
+| **Submit-then-edit** | Submit validation reads all fields and passes. A concurrent field edit changes a field to an invalid value before the status is written. UserDefinedModelEntity transitions to SUBMITTED with invalid data. |
 
 **Approach: pessimistic locking.** Every write operation acquires `SELECT FOR UPDATE`
 row locks before running any validation, holds them through the write, and releases
 them only when the transaction commits. Validation is never cached across a transaction
 boundary.
 
-### 14.2 The root proposal row is the mutex
+### 14.2 The root user_defined_model_entity row is the mutex
 
-Every write to any node in a proposal tree — a field PATCH on the proposal or on
+Every write to any node in a user_defined_model_entity tree — a field PATCH on the user_defined_model_entity or on
 any nested `SubmodelInstance`, a submit, a workflow transition, a submodel
-add/delete, and each per-proposal step of a bulk migration — **first** acquires a
-`SELECT FOR UPDATE NOWAIT` lock on the single root `Proposal` row. Submodel
-instances belong to exactly one root proposal (walk `parent_node` up to the
-`Proposal`), so this one row serialises the entire tree.
+add/delete, and each per-user_defined_model_entity step of a bulk migration — **first** acquires a
+`SELECT FOR UPDATE NOWAIT` lock on the single root `UserDefinedModelEntity` row. Submodel
+instances belong to exactly one root user_defined_model_entity (walk `parent_node` up to the
+`UserDefinedModelEntity`), so this one row serialises the entire tree.
 
 That single lock alone defeats all three races in §14.1: each requires two
-transactions committing concurrently against the same proposal, and the root lock
+transactions committing concurrently against the same user_defined_model_entity, and the root lock
 makes them mutually exclusive. There is therefore **no** per-`FieldValue` lock set
 and **no** lock-ordering problem to manage — only one row is ever locked for write
-serialisation, so deadlock between two proposal writes is impossible.
+serialisation, so deadlock between two user_defined_model_entity writes is impossible.
 
 This is a deliberate trade-off: concurrent writes to *disjoint* fields of the same
-proposal are serialised rather than allowed in parallel. That is acceptable — a
-proposal is edited by its owner plus a small number of editors, contention is rare,
+user_defined_model_entity are serialised rather than allowed in parallel. That is acceptable — a
+user_defined_model_entity is edited by its owner plus a small number of editors, contention is rare,
 and the design already rejects contended writes outright via `NOWAIT` + 409 (§14.5)
 rather than queueing them.
 
-> **MTI note.** `Proposal` is multi-table-inherited from `ProposalNode`, so a plain
-> `Proposal.objects.select_for_update()` joins and locks *both* the `proposal` and
+> **MTI note.** `UserDefinedModelEntity` is multi-table-inherited from `UserDefinedModelEntityNode`, so a plain
+> `UserDefinedModelEntity.objects.select_for_update()` joins and locks *both* the `user_defined_model_entity` and
 > `proposalnode` rows. Lock only the child row, consistently, with `of=("self",)`
 > so the mutex is one unambiguous row:
-> `Proposal.objects.select_for_update(nowait=True, of=("self",)).get(pk=root_id)`.
+> `UserDefinedModelEntity.objects.select_for_update(nowait=True, of=("self",)).get(pk=root_id)`.
 
 ### 14.3 Lock acquisition per operation
 
@@ -2030,9 +2030,9 @@ rather than queueing them.
 
 ```python
 with transaction.atomic():
-    # The root proposal row is the only write lock. For a submodel PATCH,
+    # The root user_defined_model_entity row is the only write lock. For a submodel PATCH,
     # root_proposal_id is resolved by walking parent_node up from the node.
-    proposal = (Proposal.objects
+    user_defined_model_entity = (UserDefinedModelEntity.objects
                 .select_for_update(nowait=True, of=("self",))
                 .get(pk=root_proposal_id))
 
@@ -2050,11 +2050,11 @@ subtree validation (§4) sees a stable snapshot.
 
 ```python
 with transaction.atomic():
-    proposal = (Proposal.objects
+    user_defined_model_entity = (UserDefinedModelEntity.objects
                 .select_for_update(nowait=True, of=("self",))
                 .get(pk=proposal_id))
 
-    execute_transition(proposal, name=request.data["transition"], user=request.user)  # §15.1
+    execute_transition(user_defined_model_entity, name=request.data["transition"], user=request.user)  # §15.1
 ```
 
 This one block covers submit, accept, reject, revise and every other transition:
@@ -2066,7 +2066,7 @@ state change.
 
 ```python
 with transaction.atomic():
-    proposal = (Proposal.objects
+    user_defined_model_entity = (UserDefinedModelEntity.objects
                 .select_for_update(nowait=True, of=("self",))
                 .get(pk=root_proposal_id))
     # Create or delete SubmodelInstance; validate parent-level min/max_items rules.
@@ -2075,14 +2075,14 @@ with transaction.atomic():
 ### 14.4 Concurrent inserts of a new FieldValue
 
 Because the root lock serialises every write to the tree, two requests can never
-both be inside the critical section for the same proposal, so they cannot race to
+both be inside the critical section for the same user_defined_model_entity, so they cannot race to
 INSERT the same `(node, field, language)` row. The
 `UniqueConstraint(fields=["node", "field", "language"])` (§2.3) remains as a
 defensive backstop only; if it ever fires, the handler returns a 409.
 
 ### 14.5 Lock contention — API response
 
-All `SELECT FOR UPDATE` calls use `nowait=True`. If a lock cannot be immediately
+All `SELECT FOR UPDATE` user_defined_model_types use `nowait=True`. If a lock cannot be immediately
 acquired, Django raises `django.db.utils.OperationalError`. The API catches this
 at the view layer and returns:
 
@@ -2100,24 +2100,24 @@ again" message and retries after `retry_after_ms`.
 ### 14.6 Interaction with bulk migration
 
 The `BulkMigrationPlan` executor already holds a `SELECT FOR UPDATE` on the plan
-row to prevent concurrent runs (§5.5). For each proposal within a batch, the
-executor opens its own `transaction.atomic()` and takes the root-proposal lock
-(§14.3) for that proposal. Proposals in a batch are processed sequentially.
+row to prevent concurrent runs (§5.5). For each user_defined_model_entity within a batch, the
+executor opens its own `transaction.atomic()` and takes the root-user_defined_model_entity lock
+(§14.3) for that user_defined_model_entity. UserDefinedModelEntities in a batch are processed sequentially.
 
 ---
 
 ## 15. Workflow Transition Execution
 
-Every state change on a `ProposalNode` is a **transition**. The execution
+Every state change on a `UserDefinedModelEntityNode` is a **transition**. The execution
 sequence below runs inside a single `transaction.atomic()` with the root
-Proposal row locked first (§14.3).
+UserDefinedModelEntity row locked first (§14.3).
 
 ### 15.1 Execution sequence
 
 ```
-POST /api/proposals/{id}/transition/   { "transition": "submit" }
+POST /api/user_defined_model_entities/{id}/transition/   { "transition": "submit" }
 
-1.  Lock the root Proposal row (SELECT FOR UPDATE NOWAIT, of=("self",); §14.2).
+1.  Lock the root UserDefinedModelEntity row (SELECT FOR UPDATE NOWAIT, of=("self",); §14.2).
     This single lock covers the whole tree for the duration of the transition.
 2.  Load WorkflowTransition by name within node.config_version.workflow.
     → 404 if no such transition exists in the workflow.
@@ -2126,7 +2126,7 @@ POST /api/proposals/{id}/transition/   { "transition": "submit" }
     → 409 if the node is in the wrong state.
 4.  Check permission via the Rego authz evaluator (§16.3):
     authz.allows(node, "transition", user, transition=name), using
-    transition.policy_rule if set, else the default data.proposals.allow rule.
+    transition.policy_rule if set, else the default data.user_defined_model_entities.allow rule.
     (permission_codename is consulted only as a fallback when no Rego rule exists.)
     → 403 if the policy denies.
 5.  Execute PRE-phase TransitionActions (sorted by sort_order).
@@ -2165,7 +2165,7 @@ NODE_TRANSITION = "node_transition"
 ### 15.3 `WorkflowState.allows_edit` enforcement
 
 Every PATCH request checks `node.current_state.allows_edit` after acquiring the
-root-proposal lock (§14.2). If `False`, the request is rejected with
+root-user_defined_model_entity lock (§14.2). If `False`, the request is rejected with
 `HTTP 409 { "error": "editing_not_allowed_in_state" }` before any validation runs.
 
 ### 15.4 Nodes without a workflow
@@ -2178,24 +2178,24 @@ configs that have not yet been assigned a workflow.
 
 ## 16. Authorization (Rego via regorus)
 
-Authorization decisions — **view / create / edit / delete** on a node (proposal or
+Authorization decisions — **view / create / edit / delete** on a node (user_defined_model_entity or
 submodel) and on individual **fields**, plus workflow transitions — are evaluated
 with [microsoft/regorus](https://github.com/microsoft/regorus), an **in-process**
 Rego engine. There is no OPA server, no network call, and no `OPA_URL`: regorus is
 embedded via its Python bindings and policies are compiled once at startup. The
-proposal is serialised to a canonical JSON document (§16.1) that becomes the Rego
+user_defined_model_entity is serialised to a canonical JSON document (§16.1) that becomes the Rego
 `input` (§16.2); decisions are evaluated by a small `authz` module (§16.3) and
 enforced at the points listed in §16.4.
 
 ### 16.1 Node serialisation
 
-`ProposalNode.to_policy_document()` returns a plain, JSON-safe `dict` describing one
+`UserDefinedModelEntityNode.to_policy_document()` returns a plain, JSON-safe `dict` describing one
 node and, recursively, its whole subtree. It reuses the typed-value accessor
 (`FieldValue.get_value()`, §2.3) and resolves reference fields to bare PKs (policy
 matching wants identifiers, not display names — see §16.2 for where attributes go).
 
 ```python
-class ProposalNode(HistoricalMetaBase):
+class UserDefinedModelEntityNode(HistoricalMetaBase):
     ...
     def to_policy_document(self) -> dict:
         """Canonical, deterministic JSON-safe representation of this node + subtree.
@@ -2205,16 +2205,16 @@ class ProposalNode(HistoricalMetaBase):
         ...
 ```
 
-Shape (root proposal example; submodel nodes use the same shape minus
+Shape (root user_defined_model_entity example; submodel nodes use the same shape minus
 `call_id` / `owner` / `editors`):
 
 ```jsonc
 {
   "id": "0c1f…",
-  "type": "proposal",                  // or "submodel:<parent_field_slug>"
+  "type": "user_defined_model_entity",                  // or "submodel:<parent_field_slug>"
   "config_version_id": "8a2d…",
   "config_id": "4b9e…",
-  "call_id": "1f30…",                  // null for an unassigned proposal
+  "call_id": "1f30…",                  // null for an unassigned user_defined_model_entity
   "owner": { "id": "5c…", "username": "alice", "is_active": true },
   "editors": [ { "id": "9d…", "username": "bob" } ],
   "current_state": "submitted",        // WorkflowState.name, null if no workflow
@@ -2245,7 +2245,7 @@ Notes:
 - `file` / `image` values carry attachment metadata (not the bytes) so size/MIME
   policies are expressible without a second fetch.
 - `submodel_select` serialises as the referenced node's `id`; the referenced node is
-  **not** inlined (it may live under a different proposal tree) — follow the id if a
+  **not** inlined (it may live under a different user_defined_model_entity tree) — follow the id if a
   policy needs it.
 - The document is value-only: it deliberately excludes edit history and validation
   rules, which are config/audit concerns, not policy inputs.
@@ -2253,7 +2253,7 @@ Notes:
 ### 16.2 Policy input
 
 `build_policy_input(node, action, user, field=None)` wraps the document with the
-subject and the attempted action. The whole **root** proposal is always included
+subject and the attempted action. The whole **root** user_defined_model_entity is always included
 (even for a submodel action) so policies can reason about the tree; `node_id` points
 at the targeted node, and `field` is the slug for field-level actions (null for
 node-level ones).
@@ -2263,7 +2263,7 @@ node-level ones).
   "action": "edit",                 // one of: view | create | edit | delete | transition
   "transition": null,               // transition name when action == "transition", else null
   "node_id": "0c1f…",               // node the action targets (root or a submodel)
-  "node_type": "proposal",          // or "submodel:<slug>"
+  "node_type": "user_defined_model_entity",          // or "submodel:<slug>"
   "field": null,                    // field slug for field-level checks; null otherwise
   "user": {
     "id": "5c…",
@@ -2273,12 +2273,12 @@ node-level ones).
     "groups": [3, 7],               // auth.Group PKs the user belongs to
     "permissions": ["apiv1.submit_proposal", "apiv1.moderate_proposal"]
   },
-  "proposal": { /* root node document from §16.1 */ }
+  "user_defined_model_entity": { /* root node document from §16.1 */ }
 }
 ```
 
 The user's group memberships and Django permissions live on `user`, so reference
-fields inside the proposal can stay as bare PKs and the policy joins the two. The
+fields inside the user_defined_model_entity can stay as bare PKs and the policy joins the two. The
 node's `current_state` is in the document, so state-dependent rules (e.g. "no edits
 once submitted") are expressible in Rego — this subsumes `WorkflowState.allows_edit`
 (§15.3), which remains only as an optional fast pre-check.
@@ -2306,14 +2306,14 @@ def _eval(rule: str, input: dict):
 def allows(node, action, user, *, field=None, transition=None) -> bool:
     inp = build_policy_input(node, action, user, field=field)
     inp["transition"] = transition
-    return _eval("data.proposals.allow", inp) is True
+    return _eval("data.user_defined_model_entities.allow", inp) is True
 
 def viewable_fields(node, user) -> set[str]:
-    return set(_eval("data.proposals.viewable_fields",
+    return set(_eval("data.user_defined_model_entities.viewable_fields",
                      build_policy_input(node, "view", user)))
 
 def editable_fields(node, user) -> set[str]:
-    return set(_eval("data.proposals.editable_fields",
+    return set(_eval("data.user_defined_model_entities.editable_fields",
                      build_policy_input(node, "edit", user)))
 ```
 
@@ -2321,20 +2321,20 @@ Rego entry points the policies must define:
 
 | Rule | Returns | Used for |
 |---|---|---|
-| `data.proposals.allow` | boolean | node-level view / create / delete, and transitions (`action`/`transition` in input) |
-| `data.proposals.viewable_fields` | set of slugs | which fields appear in a GET response |
-| `data.proposals.editable_fields` | set of slugs | which fields a PATCH may write |
+| `data.user_defined_model_entities.allow` | boolean | node-level view / create / delete, and transitions (`action`/`transition` in input) |
+| `data.user_defined_model_entities.viewable_fields` | set of slugs | which fields appear in a GET response |
+| `data.user_defined_model_entities.editable_fields` | set of slugs | which fields a PATCH may write |
 
 `viewable_fields` / `editable_fields` are returned as **sets in one evaluation** (not
-one call per field) so field-level decisions cost a single `clone()`+`eval` per
+one user_defined_model_type per field) so field-level decisions cost a single `clone()`+`eval` per
 request, not one per field.
 
 ### 16.4 Enforcement points
 
 | Action | Enforced in | Rule | On deny |
 |---|---|---|---|
-| **view node** | `GET /api/proposals/{id}/`, and list querysets | `allow` (`action="view"`) | 404 (list: filtered out) |
-| **create node** | `POST /api/proposals/`, `POST …/nodes/` | `allow` (`action="create"`) | 403 |
+| **view node** | `GET /api/user_defined_model_entities/{id}/`, and list querysets | `allow` (`action="view"`) | 404 (list: filtered out) |
+| **create node** | `POST /api/user_defined_model_entities/`, `POST …/nodes/` | `allow` (`action="create"`) | 403 |
 | **delete node** | `DELETE …/{id}/`, `DELETE …/nodes/{nid}/` | `allow` (`action="delete"`) | 403 |
 | **view field** | GET serialiser | `viewable_fields` | field omitted from response |
 | **edit field** | PATCH (§12), per slug in `changed_fields` | `editable_fields` | 403 listing the rejected slugs |
@@ -2346,14 +2346,14 @@ naming the rejected fields — partial silent dropping is avoided so the client 
 believes an edit was saved when it was refused. GET field filtering instead silently
 omits non-viewable fields (a viewer simply does not see them).
 
-This replaces the keyword-matching `Proposal.has_object_permission` (existing code)
+This replaces the keyword-matching `UserDefinedModelEntity.has_object_permission` (existing code)
 and the per-transition `permission_codename` as the **primary** authorization path for
-proposal nodes and fields. `permission_codename` is retained only as a coarse fallback
+user_defined_model_entity nodes and fields. `permission_codename` is retained only as a coarse fallback
 for transitions whose config has no Rego rule yet (during migration); when a Rego
 policy is present it is authoritative.
 
 The serialiser is reusable for offline policy authoring and tests:
-`GET /api/proposals/{id}/policy-document/` (staff-only) returns the §16.1 document so
+`GET /api/user_defined_model_entities/{id}/policy-document/` (staff-only) returns the §16.1 document so
 it can be fed to `regorus eval` / unit tests as `input` while writing `.rego` rules.
 
 ---
@@ -2365,53 +2365,53 @@ it can be fed to `regorus eval` / unit tests as `input` while writing `.rego` ru
 - [ ] `TypedValue` abstract base + `FieldDefaultValue` model (§2.8)
 - [ ] `ConfigLanguage` model (supported languages per `FieldConfig`)
 - [ ] `FieldDefinitionTranslation`, `WorkflowStateTranslation`, `WorkflowTransitionTranslation` models
-- [ ] `field_config` FK added to `Call`
+- [ ] `field_config` FK added to `UserDefinedModelType`
 - [ ] `WorkflowDefinition`, `WorkflowState`, `WorkflowTransition`, `TransitionMandatoryField`, `TransitionValidatorAssignment`, `TransitionAction` hierarchy models
 - [ ] `SingleFieldValidationRule` root (+ `clean()` type-check) + all concrete single-field subclasses including `RequiredInLanguageRule`
 - [ ] `AllowedMimeTypeEntry` child model
 - [ ] `MultiFieldValidationRule` root + `MultiFieldRuleAssociation` + concrete subclasses
-- [ ] `ConfigVersion.publish()` atomic method: validates the default combination (save-context, §2.8); deep-copies field defs, rules, workflow, and defaults into new DRAFT; auto-creates `BulkMigrationPlan` stubs for stale proposals
+- [ ] `ConfigVersion.publish()` atomic method: validates the default combination (save-context, §2.8); deep-copies field defs, rules, workflow, and defaults into new DRAFT; auto-creates `BulkMigrationPlan` stubs for stale user_defined_model_entities
 - [ ] Config + workflow admin (Django admin for staff)
-- [ ] `/api/configs/` CRUD endpoints + `/api/calls/{id}/config/` read alias
+- [ ] `/api/configs/` CRUD endpoints + `/api/user_defined_model_types/{id}/config/` read alias
 - [ ] Config JSON schema includes serialised rules and workflow states/transitions
 
-### Phase 2 — ProposalNode base + FieldValue storage
-- [ ] `ProposalNode` (+ `current_state` FK), `Proposal` (MTI), `SubmodelInstance` models
+### Phase 2 — UserDefinedModelEntityNode base + FieldValue storage
+- [ ] `UserDefinedModelEntityNode` (+ `current_state` FK), `UserDefinedModelEntity` (MTI), `SubmodelInstance` models
 - [ ] `FieldValue` (extends `TypedValue`, `language` column, unique constraint), `FileAttachment` (soft-delete with `deleted_at`) models
-- [ ] `validate_for_save()` + shared `_evaluate_rules()` on `ProposalNode`; recursive subtree (submit/transition) validation in the transition engine (§4, §15)
+- [ ] `validate_for_save()` + shared `_evaluate_rules()` on `UserDefinedModelEntityNode`; recursive subtree (submit/transition) validation in the transition engine (§4, §15)
 - [ ] `FieldValue.clean()` data-type enforcement
-- [ ] Data migration: import existing hardcoded fields as `FieldDefinition` + `SingleFieldValidationRule` instances; convert existing `Proposal` / `Speaker` rows
+- [ ] Data migration: import existing hardcoded fields as `FieldDefinition` + `SingleFieldValidationRule` instances; convert existing `UserDefinedModelEntity` / `Speaker` rows
   - [ ] Map today's always-on validators (`Speaker.biography`/`abstract`/`description` `MinLengthValidator(50)`, etc.) to `applies_to_save=True` rules so workflow-less submodels keep being checked (save-rule floor, §4)
-  - [ ] Build a default `WorkflowDefinition` from the current `Proposal.Status` choices + permission verbs (`submit`/`accept`/`reject`/`revise`/`moderate`), and attach the proposal's submit-strict rules to its `submit` transition so the root keeps today's submit behaviour (§2.6)
+  - [ ] Build a default `WorkflowDefinition` from the current `UserDefinedModelEntity.Status` choices + permission verbs (`submit`/`accept`/`reject`/`revise`/`moderate`), and attach the user_defined_model_entity's submit-strict rules to its `submit` transition so the root keeps today's submit behaviour (§2.6)
 
-### Phase 3 — Proposal CRUD API
-- [ ] Create / retrieve / update proposal endpoints (partial PATCH, §12); create materialises field defaults into starting `FieldValue` rows (§2.8)
-- [ ] Root-proposal lock in every write path per §14.2/§14.3 (`select_for_update(nowait=True, of=("self",))`), including a helper to resolve the root `Proposal` from any submodel node
+### Phase 3 — UserDefinedModelEntity CRUD API
+- [ ] Create / retrieve / update user_defined_model_entity endpoints (partial PATCH, §12); create materialises field defaults into starting `FieldValue` rows (§2.8)
+- [ ] Root-user_defined_model_entity lock in every write path per §14.2/§14.3 (`select_for_update(nowait=True, of=("self",))`), including a helper to resolve the root `UserDefinedModelEntity` from any submodel node
 - [ ] 409 handler for `OperationalError` (lock contention)
 - [ ] `WorkflowState.allows_edit` check in PATCH (§15.3)
-- [ ] Transition endpoint (`POST /api/proposals/{id}/transition/`) with full §15.1 sequence
+- [ ] Transition endpoint (`POST /api/user_defined_model_entities/{id}/transition/`) with full §15.1 sequence
 - [ ] Staging file upload endpoint + `cleanup_staging_files` management command
 - [ ] `cleanup_deleted_attachments` management command for soft-deleted `FileAttachment` rows
 - [ ] File staging → promotion + soft-delete-old flow within PATCH transaction
 - [ ] Submodel nested endpoints (create / partial-update / delete / transition)
 - [ ] Edit history models with `old_attachment` / `new_attachment` FKs and `NODE_TRANSITION` kind
-- [ ] History list endpoint (`GET /api/proposals/{id}/history/`)
-- [ ] `ProposalNode.to_policy_document()` + `build_policy_input()` serialiser and `GET /api/proposals/{id}/policy-document/` endpoint (§16.1–16.2)
+- [ ] History list endpoint (`GET /api/user_defined_model_entities/{id}/history/`)
+- [ ] `UserDefinedModelEntityNode.to_policy_document()` + `build_policy_input()` serialiser and `GET /api/user_defined_model_entities/{id}/policy-document/` endpoint (§16.1–16.2)
 - [ ] `authz` module embedding regorus: startup policy load, per-request `clone()`+eval, `allows()` / `viewable_fields()` / `editable_fields()` (§16.3)
 - [ ] Enforce authz at every decision point (§16.4): view/create/delete node, GET field filtering, PATCH per-field gating (before validation), transition check in §15.1 step 4
 - [ ] Seed `.rego` policies reproducing current permissions (owner/editor edit in editable states, reviewer/staff visibility) + tests using the policy-document endpoint
 
 ### Phase 4 — Migration system
-- [ ] `ProposalMigration` + `MigrationFieldMapping` models (with `bulk_plan` FK)
+- [ ] `UserDefinedModelEntityMigration` + `MigrationFieldMapping` models (with `bulk_plan` FK)
 - [ ] `BulkMigrationPlan` + `BulkMigrationFieldMapping` models
-- [ ] Celery task `execute_bulk_migration` with per-proposal locking (§5.5)
-- [ ] Single-proposal migration preview + execute API
+- [ ] Celery task `execute_bulk_migration` with per-user_defined_model_entity locking (§5.5)
+- [ ] Single-user_defined_model_entity migration preview + execute API
 - [ ] Bulk migration preview + create + execute (202) + status-poll API
-- [ ] Call config-switch guard + stale-proposal count in `FieldConfig` / `Call` responses
+- [ ] UserDefinedModelType config-switch guard + stale-user_defined_model_entity count in `FieldConfig` / `UserDefinedModelType` responses
 - [ ] Overflow data admin view
 
 ### Phase 5 — Config and workflow UI (staff)
-- [ ] FieldConfig create/edit/assign to calls; language management (add/remove/reorder `ConfigLanguage`)
+- [ ] FieldConfig create/edit/assign to user_defined_model_types; language management (add/remove/reorder `ConfigLanguage`)
 - [ ] Workflow designer (states + transitions) with per-language label editor
 - [ ] Transition editor: permissions, validator assignments, mandatory fields, pre/post actions
 - [ ] Rule editor: add / edit / delete / copy single-field rules (including `RequiredInLanguageRule`); multi-field rule picker
@@ -2419,7 +2419,7 @@ it can be fed to `regorus eval` / unit tests as `input` while writing `.rego` ru
 - [ ] Publish flow with diff preview (fields, rules, workflow changes) + bulk migration notice
 - [ ] Datatype-change dry-run endpoint
 - [ ] Bulk migration mapping UI
-- [ ] Per-proposal config version upgrade flow
+- [ ] Per-user_defined_model_entity config version upgrade flow
 
 ---
 
