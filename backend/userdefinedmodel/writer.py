@@ -84,6 +84,9 @@ def _serialize_value(val, field: "FieldDefinition") -> Any:
         return None
     if isinstance(val, FileAttachment):
         return {"id": str(val.id), "original_name": val.original_name, "mime_type": val.mime_type}
+    # Defensive: if an ORM object slipped through, return its PK as string
+    if hasattr(val, "pk") and not isinstance(val, (str, int, float, bool, list, dict)):
+        return str(val.pk)
     return val
 
 
@@ -227,6 +230,35 @@ def _write_field_value(node, field, value, language, user, edit_group) -> None:
     fv = node.field_values.filter(field=field, language=language).first()
     old_value = fv.get_value() if fv else None
     old_attachment = fv.value_file if fv and hasattr(fv, "value_file") else None
+
+    # submodel_select: {"op": "create"} or {"op": "delete"}
+    if field.data_type == "submodel_select" and isinstance(value, dict):
+        op = value.get("op")
+        if op == "create":
+            from userdefinedmodel.models.node import SubmodelInstance
+            if not field.submodel_config_id:
+                raise ValidationError({field.slug: "No submodel_config set on this field."})
+            child = SubmodelInstance.objects.create(
+                config_version_id=field.submodel_config_id,
+                parent_node=node,
+                parent_field=field,
+                sort_order=0,
+            )
+            if field.submodel_config and field.submodel_config.workflow_id:
+                initial = field.submodel_config.workflow.states.filter(is_initial=True).first()
+                if initial:
+                    child.current_state = initial
+                    child.save(update_fields=["current_state"])
+            child.materialize_defaults()
+            value = child.id  # fall through to set value_node_id
+        elif op == "delete":
+            if fv and fv.value_node_id:
+                from userdefinedmodel.models.node import SubmodelInstance
+                try:
+                    SubmodelInstance.objects.get(id=fv.value_node_id, parent_node=node).delete()
+                except SubmodelInstance.DoesNotExist:
+                    pass
+            value = None  # clear the FK
 
     # Handle file staging promotion
     if isinstance(value, dict) and "staging_id" in value:

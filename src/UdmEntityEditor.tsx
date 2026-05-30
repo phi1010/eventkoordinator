@@ -76,6 +76,456 @@ interface FieldInputProps {
   onChange: (v: unknown) => void
   disabled: boolean
   lang?: string
+  entityChildren?: Record<string, unknown[]>
+}
+
+// ── Submodel editor ───────────────────────────────────────────────────────────
+
+// Shape of a serialized child node (from entity.children[slug])
+interface ChildNode {
+  id: string
+  field_values: Array<{ field_slug: string; data_type: string; value: unknown; language: string }>
+  children: Record<string, unknown[]>
+  current_state: string | null
+}
+
+interface SubmodelOp {
+  op: 'create' | 'update' | 'delete'
+  id?: string
+  fields?: Record<string, unknown>
+  sort_order?: number
+}
+
+// Local representation of one child (existing or pending-create)
+interface LocalChild {
+  key: string           // stable React key: existing id or "_new_N"
+  id: string | null     // null for not-yet-saved new items
+  dirty: Record<string, unknown>
+  saved: ChildNode | null
+  deleted: boolean
+}
+
+function buildOps(items: LocalChild[]): SubmodelOp[] {
+  const ops: SubmodelOp[] = []
+  for (const item of items) {
+    if (item.deleted && item.id) {
+      ops.push({ op: 'delete', id: item.id })
+    } else if (!item.id && !item.deleted) {
+      ops.push({ op: 'create', fields: item.dirty })
+    } else if (item.id && !item.deleted && Object.keys(item.dirty).length > 0) {
+      ops.push({ op: 'update', id: item.id, fields: item.dirty })
+    }
+  }
+  return ops
+}
+
+function getChildFieldValue(child: LocalChild, slug: string, lang = ''): unknown {
+  if (slug in child.dirty) {
+    const d = child.dirty[slug]
+    if (lang && typeof d === 'object' && d !== null) return (d as Record<string, unknown>)[lang]
+    return d
+  }
+  const fv = child.saved?.field_values.find(v => v.field_slug === slug && v.language === lang)
+  return fv?.value ?? null
+}
+
+interface SubmodelChildCardProps {
+  item: LocalChild
+  subFields: FieldDefinitionOut[]
+  subLanguages: string[]
+  uiLang: string
+  disabled: boolean
+  onChange: (dirty: Record<string, unknown>) => void
+  onDelete: () => void
+}
+
+function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete }: SubmodelChildCardProps) {
+  const [expanded, setExpanded] = useState(!item.id) // new items start expanded
+  const [activeLang, setActiveLang] = useState(subLanguages[0] ?? '')
+  const label = item.id ? item.id.slice(0, 8) + '…' : 'New (unsaved)'
+
+  function handleFieldChange(slug: string, lang: string, val: unknown) {
+    const subFd = subFields.find(f => f.slug === slug)
+    let update: Record<string, unknown>
+    if (subFd?.is_localized) {
+      const existing = (typeof item.dirty[slug] === 'object' && item.dirty[slug] !== null)
+        ? item.dirty[slug] as Record<string, unknown>
+        : subLanguages.reduce((acc, l) => {
+            acc[l] = getChildFieldValue(item, slug, l)
+            return acc
+          }, {} as Record<string, unknown>)
+      update = { ...item.dirty, [slug]: { ...existing, [lang]: val } }
+    } else {
+      update = { ...item.dirty, [slug]: val }
+    }
+    onChange(update)
+  }
+
+  const hasChanges = Object.keys(item.dirty).length > 0
+
+  return (
+    <div style={{
+      border: `1px solid ${item.deleted ? '#fca5a5' : hasChanges ? '#f9a825' : '#e0e0e0'}`,
+      borderRadius: '6px', marginBottom: '0.5rem', background: item.deleted ? '#fef2f2' : '#fafafa',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem' }}>
+        <span style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#555' }}>
+          {label}{hasChanges && !item.deleted ? ' *' : ''}{item.deleted ? ' (will be deleted)' : ''}
+        </span>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          {!item.deleted && (
+            <>
+              <button type="button"
+                style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', background: '#fff' }}
+                onClick={() => setExpanded(e => !e)}>
+                {expanded ? 'Collapse' : 'Edit'}
+              </button>
+              {!disabled && (
+                <button type="button"
+                  style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#dc2626' }}
+                  onClick={onDelete}>
+                  Delete
+                </button>
+              )}
+            </>
+          )}
+          {item.deleted && !disabled && (
+            <button type="button"
+              style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', background: '#fff' }}
+              onClick={() => onChange({ ...item.dirty, _undelete: true })}>
+              Restore
+            </button>
+          )}
+        </div>
+      </div>
+
+      {expanded && !item.deleted && (
+        <div style={{ padding: '0.5rem 0.75rem', borderTop: '1px solid #e8e8e8' }}>
+          {subLanguages.length > 1 && (
+            <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.5rem' }}>
+              {subLanguages.map(l => (
+                <button key={l} type="button"
+                  style={{ padding: '0.2rem 0.5rem', border: '1px solid #ccc', borderRadius: '4px 4px 0 0', cursor: 'pointer', fontSize: '0.78rem', background: activeLang === l ? '#0066cc' : '#fff', color: activeLang === l ? '#fff' : '#555' }}
+                  onClick={() => setActiveLang(l)}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+          {subFields.map(subFd => {
+            const subLabel = getLang(subFd.label as Record<string, string>, uiLang) || subFd.slug
+            const langs = subFd.is_localized ? subLanguages.filter(Boolean) : ['']
+            return (
+              <div key={subFd.slug} style={{ marginBottom: '0.6rem' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#444', marginBottom: '0.2rem' }}>
+                  {subLabel} <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#999' }}>({subFd.data_type})</span>
+                </div>
+                {langs.map(lang => (
+                  <FieldInput
+                    key={lang || 'nolang'}
+                    fd={subFd}
+                    value={getChildFieldValue(item, subFd.slug, lang)}
+                    onChange={val => handleFieldChange(subFd.slug, lang, val)}
+                    disabled={disabled}
+                    lang={lang}
+                    entityChildren={item.saved?.children}
+                  />
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface SubmodelEditorProps {
+  fd: FieldDefinitionOut
+  existingChildren: unknown[]    // entity.children[fd.slug]
+  existingValue: unknown         // field_values entry value (for submodel_select)
+  disabled: boolean
+  uiLang: string
+  onChange: (ops: SubmodelOp[] | { op: string; fields?: Record<string, unknown> } | null) => void
+}
+
+function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange }: SubmodelEditorProps) {
+  const isList = fd.data_type === 'submodel_list'
+  const subConfig = fd.submodel_config as ConfigVersionOut | null | undefined
+  const subFields = subConfig?.fields ?? []
+  const subLanguages = (subConfig?.languages ?? []).map(l => l.code)
+  if (subLanguages.length === 0) subLanguages.push('')
+
+  // Always keep the latest onChange in a ref so handlers never capture a stale closure
+  const onChangeRef = useRef(onChange)
+  useEffect(() => { onChangeRef.current = onChange })
+
+  // For submodel_list: manage a list of LocalChild items
+  const toItems = (children: unknown[]): LocalChild[] =>
+    (children as ChildNode[]).map(c => ({ key: c.id, id: c.id, dirty: {}, saved: c, deleted: false }))
+
+  const [items, setItems] = useState<LocalChild[]>(() => toItems(existingChildren))
+  const nextKeyRef = useRef(0)
+
+  // Sync when the server refreshes the entity (existingChildren IDs change after save)
+  const prevServerIds = useRef(new Set((existingChildren as ChildNode[]).map(c => c.id)))
+  useEffect(() => {
+    const incoming = existingChildren as ChildNode[]
+    const incomingIds = new Set(incoming.map(c => c.id))
+    const same =
+      incomingIds.size === prevServerIds.current.size &&
+      [...incomingIds].every(id => prevServerIds.current.has(id))
+    if (!same) {
+      prevServerIds.current = incomingIds
+      // Reset to server state — clears any pending-new items that were saved
+      setItems(toItems(incoming))
+      // After a server refresh there are no pending local ops
+      onChangeRef.current([])
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingChildren])
+
+  // Helpers that mutate items AND immediately propagate ops — no useEffect lag
+  function applyItemChange(newItems: LocalChild[]) {
+    setItems(newItems)
+    const ops = buildOps(newItems)
+    onChangeRef.current(ops.length > 0 ? ops : [])
+  }
+
+  function addItem() {
+    const key = `_new_${nextKeyRef.current++}`
+    applyItemChange([...items, { key, id: null, dirty: {}, saved: null, deleted: false }])
+  }
+
+  function updateItem(key: string, dirty: Record<string, unknown>) {
+    applyItemChange(items.map(it => it.key === key ? { ...it, dirty, deleted: false } : it))
+  }
+
+  function deleteItem(key: string) {
+    applyItemChange(
+      items
+        .map(it => {
+          if (it.key !== key) return it
+          if (!it.id) return { ...it, deleted: true }
+          return { ...it, deleted: true, dirty: {} }
+        })
+        .filter(it => !(it.deleted && !it.id))
+    )
+  }
+
+  // For submodel_select: the current op to send (or null = no change)
+  const selectNodeId = typeof existingValue === 'string' ? existingValue : null
+  const ownedChild = (existingChildren as ChildNode[]).find(c => c.id === selectNodeId) ?? null
+
+  const [selectDirty, setSelectDirty] = useState<Record<string, unknown>>({})
+  const [selectActiveLang, setSelectActiveLang] = useState(subLanguages[0] ?? '')
+  const [selectExpanded, setSelectExpanded] = useState(false)
+  // pendingNew = user clicked "Create", form shown optimistically before save
+  const [pendingNew, setPendingNew] = useState(false)
+
+  // When the entity refreshes after save, clear the pending state
+  const prevSelectNodeId = useRef(selectNodeId)
+  useEffect(() => {
+    if (pendingNew && selectNodeId && selectNodeId !== prevSelectNodeId.current) {
+      setPendingNew(false)
+      setSelectDirty({})
+    }
+    prevSelectNodeId.current = selectNodeId
+  }, [selectNodeId, pendingNew])
+
+  // ── submodel_list UI ──
+  if (isList) {
+    const visible = items.filter(it => !(it.deleted && !it.id))
+
+    return (
+      <div>
+        {visible.length === 0 && (
+          <div style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', marginBottom: '0.5rem' }}>No items yet.</div>
+        )}
+        {visible.map(item => (
+          <SubmodelChildCard
+            key={item.key}
+            item={item}
+            subFields={subFields}
+            subLanguages={subLanguages}
+            uiLang={uiLang}
+            disabled={disabled}
+            onChange={dirty => updateItem(item.key, dirty)}
+            onDelete={() => deleteItem(item.key)}
+          />
+        ))}
+        {!disabled && (
+          <button type="button"
+            style={{ fontSize: '0.82rem', padding: '0.3rem 0.75rem', border: '1px dashed #aaa', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#555', marginTop: '0.25rem' }}
+            onClick={addItem}>
+            + Add item
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  // ── submodel_select UI ──
+  function handleCreate() {
+    setPendingNew(true)
+    setSelectDirty({})
+    setSelectExpanded(true)
+    onChange({ op: 'create', fields: {} })
+  }
+
+  function handleCancelPending() {
+    setPendingNew(false)
+    setSelectDirty({})
+    onChange(null)
+  }
+
+  function handleDelete() {
+    onChange({ op: 'delete' })
+  }
+
+  function handleClear() {
+    onChange(null)
+  }
+
+  function handleSelectFieldChange(slug: string, lang: string, val: unknown) {
+    const subFd = subFields.find(f => f.slug === slug)
+    let updated: Record<string, unknown>
+    if (subFd?.is_localized) {
+      const existing = (typeof selectDirty[slug] === 'object' && selectDirty[slug] !== null)
+        ? selectDirty[slug] as Record<string, unknown>
+        : subLanguages.reduce((acc, l) => {
+            const fv = ownedChild?.field_values.find(v => v.field_slug === slug && v.language === l)
+            acc[l] = fv?.value ?? null
+            return acc
+          }, {} as Record<string, unknown>)
+      updated = { ...selectDirty, [slug]: { ...existing, [lang]: val } }
+    } else {
+      updated = { ...selectDirty, [slug]: val }
+    }
+    setSelectDirty(updated)
+    if (pendingNew) {
+      // still creating — carry the fields along with the create op
+      onChange({ op: 'create', fields: updated })
+    } else if (ownedChild) {
+      onChange([{ op: 'update', id: ownedChild.id, fields: updated }] as unknown as SubmodelOp[])
+    }
+  }
+
+  // Show the form when: pending new creation, OR already has a saved/owned child
+  const showForm = pendingNew || ownedChild !== null || selectNodeId !== null
+
+  return (
+    <div style={{ border: '1px solid #e0e0e0', borderRadius: '6px', padding: '0.75rem', background: '#fafafa' }}>
+      {!showForm && (
+        <div>
+          <div style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', marginBottom: '0.5rem' }}>No submodel selected.</div>
+          {!disabled && subConfig && (
+            <button type="button"
+              style={{ fontSize: '0.82rem', padding: '0.3rem 0.75rem', border: '1px dashed #aaa', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#555' }}
+              onClick={handleCreate}>
+              + Create new submodel
+            </button>
+          )}
+          {!disabled && !subConfig && (
+            <div style={{ fontSize: '0.82rem', color: '#dc2626' }}>No submodel config assigned to this field.</div>
+          )}
+        </div>
+      )}
+
+      {showForm && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <span style={{ fontSize: '0.82rem', fontFamily: 'monospace', color: '#555' }}>
+              {pendingNew ? 'New (unsaved)' : `${selectNodeId?.slice(0, 8)}…`}
+            </span>
+            <div style={{ display: 'flex', gap: '0.4rem' }}>
+              {!disabled && (
+                <>
+                  {!pendingNew && (
+                    <button type="button"
+                      style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', background: '#fff' }}
+                      onClick={() => setSelectExpanded(e => !e)}>
+                      {selectExpanded ? 'Collapse' : 'Edit fields'}
+                    </button>
+                  )}
+                  {pendingNew ? (
+                    <button type="button"
+                      style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #aaa', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#666' }}
+                      onClick={handleCancelPending}>
+                      Cancel
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button"
+                        style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#dc2626' }}
+                        onClick={handleDelete}>
+                        Delete
+                      </button>
+                      <button type="button"
+                        style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #aaa', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#666' }}
+                        onClick={handleClear}>
+                        Clear
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {(pendingNew || selectExpanded) && subFields.length > 0 && (
+            <div style={{ borderTop: '1px solid #e8e8e8', paddingTop: '0.5rem' }}>
+              {subLanguages.length > 1 && (
+                <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.5rem' }}>
+                  {subLanguages.map(l => (
+                    <button key={l} type="button"
+                      style={{ padding: '0.2rem 0.5rem', border: '1px solid #ccc', borderRadius: '4px 4px 0 0', cursor: 'pointer', fontSize: '0.78rem', background: selectActiveLang === l ? '#0066cc' : '#fff', color: selectActiveLang === l ? '#fff' : '#555' }}
+                      onClick={() => setSelectActiveLang(l)}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {subFields.map(subFd => {
+                const subLabel = getLang(subFd.label as Record<string, string>, uiLang) || subFd.slug
+                const langs = subFd.is_localized ? subLanguages.filter(Boolean) : ['']
+                return (
+                  <div key={subFd.slug} style={{ marginBottom: '0.6rem' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#444', marginBottom: '0.2rem' }}>
+                      {subLabel} <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#999' }}>({subFd.data_type})</span>
+                    </div>
+                    {langs.map(lang => (
+                      <FieldInput
+                        key={lang || 'nolang'}
+                        fd={subFd}
+                        value={
+                          selectDirty[subFd.slug] !== undefined
+                            ? (subFd.is_localized
+                                ? (selectDirty[subFd.slug] as Record<string, unknown>)?.[lang]
+                                : selectDirty[subFd.slug])
+                            : (ownedChild?.field_values.find(v => v.field_slug === subFd.slug && v.language === lang)?.value ?? null)
+                        }
+                        onChange={val => handleSelectFieldChange(subFd.slug, lang, val)}
+                        disabled={disabled}
+                        lang={lang}
+                        entityChildren={ownedChild?.children}
+                      />
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {!pendingNew && selectExpanded && !ownedChild && (
+            <div style={{ fontSize: '0.82rem', color: '#888', fontStyle: 'italic', paddingTop: '0.5rem', borderTop: '1px solid #e8e8e8' }}>
+              Referenced submodel is not directly owned by this entity — field editing not available here.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function UserSelectInput({ value, onChange, disabled, fd }: FieldInputProps) {
@@ -340,7 +790,7 @@ function FileFieldInput({ fd, value, onChange, disabled }: FileFieldProps) {
   )
 }
 
-function FieldInput({ fd, value, onChange, disabled, lang = '' }: FieldInputProps) {
+function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren }: FieldInputProps) {
   const dt = fd.data_type
   const tc = fd.type_config as Record<string, unknown>
 
@@ -474,10 +924,17 @@ function FieldInput({ fd, value, onChange, disabled, lang = '' }: FieldInputProp
   }
 
   if (dt === 'submodel_list' || dt === 'submodel_select') {
+    // value for submodel_list = ops array (from dirty) or ignored (use entityChildren)
+    // value for submodel_select = node UUID string or null
     return (
-      <div className={styles.submodelNote}>
-        Submodel editing is not supported inline. Value: {JSON.stringify(value)}
-      </div>
+      <SubmodelEditor
+        fd={fd}
+        existingChildren={(entityChildren?.[fd.slug] ?? []) as unknown[]}
+        existingValue={value}
+        disabled={disabled}
+        uiLang={lang || 'en'}
+        onChange={onChange as (ops: unknown) => void}
+      />
     )
   }
 
@@ -505,6 +962,7 @@ interface FieldRowProps {
 function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang }: FieldRowProps) {
   const [activeLang, setActiveLang] = useState(languages[0] ?? '')
   const isDirty = fd.slug in dirty
+  const isSubmodel = fd.data_type === 'submodel_list' || fd.data_type === 'submodel_select'
   const label = getLang(fd.label as Record<string, string>, uiLang) || fd.slug
   const helpText = getLang(fd.help_text as Record<string, string>, uiLang)
 
@@ -519,6 +977,11 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
   }
 
   function handleChange(lang: string, val: unknown) {
+    if (isSubmodel) {
+      // submodel ops passed directly — no localized wrapping
+      onDirty(fd.slug, val)
+      return
+    }
     if (fd.is_localized) {
       const existing = isDirty && typeof dirty[fd.slug] === 'object' && dirty[fd.slug] !== null
         ? (dirty[fd.slug] as Record<string, unknown>)
@@ -529,15 +992,23 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
     }
   }
 
+  // For submodel_list: isDirty shows whether ops are pending; value is always from entity.children
+  const submodelHasChanges = isSubmodel && isDirty && (() => {
+    const v = dirty[fd.slug]
+    if (Array.isArray(v)) return v.length > 0
+    if (v && typeof v === 'object') return true
+    return v !== null && v !== undefined
+  })()
+
   return (
-    <div className={`${styles.fieldGroup} ${isDirty ? styles.fieldGroupDirty : ''}`}>
+    <div className={`${styles.fieldGroup} ${(isDirty && !isSubmodel) || submodelHasChanges ? styles.fieldGroupDirty : ''}`}>
       <div className={styles.fieldHeader}>
         <div>
           <div className={styles.fieldLabel}>{label}</div>
           <div className={styles.fieldSlug}>{fd.slug} · {fd.data_type}</div>
           {helpText && <div className={styles.fieldHelp}>{helpText}</div>}
         </div>
-        {isDirty && (
+        {(isDirty && !isSubmodel) && (
           <div className={styles.fieldActions}>
             <button type="button" className={styles.resetBtn} onClick={() => onReset(fd.slug)}>
               Reset
@@ -546,7 +1017,7 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
         )}
       </div>
 
-      {fd.is_localized && languages.length > 1 && (
+      {!isSubmodel && fd.is_localized && languages.length > 1 && (
         <div className={styles.langTabs}>
           {languages.map(l => (
             <button key={l} type="button"
@@ -558,7 +1029,17 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
         </div>
       )}
 
-      {fd.is_localized ? (
+      {isSubmodel ? (
+        // Submodels always receive full entity.children context; value = FK UUID for submodel_select
+        <FieldInput
+          fd={fd}
+          value={getFieldValue(entity, fd.slug, '')}
+          onChange={val => handleChange('', val)}
+          disabled={!editable}
+          lang={uiLang}
+          entityChildren={entity.children as Record<string, unknown[]>}
+        />
+      ) : fd.is_localized ? (
         <FieldInput
           fd={fd}
           value={getVal(activeLang)}

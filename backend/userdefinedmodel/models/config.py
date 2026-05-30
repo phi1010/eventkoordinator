@@ -374,6 +374,10 @@ class TypedValue(models.Model):
         col = self._DATA_TYPE_COLUMN.get(field.data_type)
         if col is None:
             return None
+        # FK columns: return the PK directly to avoid lazy-loading ORM objects
+        # which are not JSON-serialisable and cause N+1 queries.
+        if col in ("value_user", "value_group", "value_node", "value_file"):
+            return getattr(self, col + "_id")
         val = getattr(self, col)
         # For INTEGER fields stored as Decimal, return int
         if field.data_type == FieldDefinition.DataType.INTEGER and val is not None:
