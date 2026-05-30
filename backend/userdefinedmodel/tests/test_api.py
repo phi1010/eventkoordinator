@@ -771,6 +771,87 @@ class MigrationTests(BaseAPITest):
         self.assertEqual(data["field_previews"][0]["source_slug"], "content")
         self.assertEqual(data["field_previews"][0]["suggested_action"], "map")
 
+    def _make_renamed_versions(self):
+        """One config: archived version with slug 'old_name', published with 'new_name'."""
+        from userdefinedmodel.models import (
+            FieldConfig, ConfigLanguage, ConfigVersion, FieldDefinition,
+            FieldDefinitionTranslation, UserDefinedModelType, FieldValue,
+        )
+        config = FieldConfig.objects.create(name="Renamed Config")
+        ConfigLanguage.objects.create(config=config, code="en", label="English", is_default=True)
+        v_old = ConfigVersion.objects.create(config=config, status="archived")
+        old_field = FieldDefinition.objects.create(version=v_old, slug="old_name", data_type="text_short", sort_order=0)
+        FieldDefinitionTranslation.objects.create(field=old_field, language="en", label="Old")
+        v_pub = ConfigVersion.objects.create(config=config, status="published")
+        new_field = FieldDefinition.objects.create(version=v_pub, slug="new_name", data_type="text_short", sort_order=0)
+        FieldDefinitionTranslation.objects.create(field=new_field, language="en", label="New")
+        udm_type = UserDefinedModelType.objects.create(name="Renamed Type", field_config=config)
+        entity = UserDefinedModelEntityFactory(config_version=v_old, user_defined_model_type=udm_type, owner=self.staff)
+        fv = FieldValue(node=entity, field=old_field, language="")
+        fv.set_value("hello", field=old_field)
+        fv.save()
+        return config, v_old, v_pub, udm_type, entity
+
+    def test_execute_migration_maps_renamed_field(self):
+        from userdefinedmodel.models import UserDefinedModelEntity
+        config, v_old, v_pub, udm_type, entity = self._make_renamed_versions()
+
+        prev = self.get(f"/entities/{entity.id}/migration-preview/?target_version={v_pub.id}").json()
+        resp = self.post(f"/entities/{entity.id}/migrate/", {
+            "migration_id": prev["migration_id"],
+            "confirmed": True,
+            "field_mappings": [
+                {"source_field_slug": "old_name", "action": "map", "target_field_slug": "new_name"},
+            ],
+        })
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        # Entity moved to the published version and the value was carried over.
+        self.assertEqual(data["config_version_id"], str(v_pub.id))
+        fvs = {fv["field_slug"]: fv["value"] for fv in data["field_values"]}
+        self.assertEqual(fvs.get("new_name"), "hello")
+        entity.refresh_from_db()
+        self.assertEqual(entity.config_version_id, v_pub.id)
+
+    def test_stale_entity_count_counts_archived_version_entities(self):
+        config, v_old, v_pub, udm_type, entity = self._make_renamed_versions()
+        # entity sits on the archived version → it is stale.
+        resp = self.get("/configs/")
+        self.assertEqual(resp.status_code, 200)
+        row = next(c for c in resp.json() if c["id"] == str(config.id))
+        self.assertEqual(row["stale_entity_count"], 1)
+
+    def test_config_version_entity_count(self):
+        config, v_old, v_pub, udm_type, entity = self._make_renamed_versions()
+        resp = self.get(f"/configs/{config.id}/versions/")
+        self.assertEqual(resp.status_code, 200)
+        counts = {v["id"]: v["entity_count"] for v in resp.json()}
+        self.assertEqual(counts[str(v_old.id)], 1)
+        self.assertEqual(counts[str(v_pub.id)], 0)
+
+    def test_bulk_migration_preview_and_create(self):
+        from userdefinedmodel.models import BulkMigrationPlan, BulkMigrationFieldMapping
+        config, v_old, v_pub, udm_type, entity = self._make_renamed_versions()
+
+        # Preview (POST with query params) reports the affected entity count.
+        resp = self.post(f"/bulk-migrations/preview/?source_version_id={v_old.id}&target_version_id={v_pub.id}")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["affected_entity_count"], 1)
+
+        # Create persists a draft plan with the field mapping.
+        resp = self.post("/bulk-migrations/", {
+            "source_version_id": str(v_old.id),
+            "target_version_id": str(v_pub.id),
+            "field_mappings": [
+                {"source_field_slug": "old_name", "action": "map", "target_field_slug": "new_name"},
+            ],
+        })
+        self.assertEqual(resp.status_code, 201, resp.content)
+        plan_id = resp.json()["id"]
+        plan = BulkMigrationPlan.objects.get(id=plan_id)
+        self.assertEqual(plan.status, "draft")
+        self.assertEqual(BulkMigrationFieldMapping.objects.filter(plan=plan).count(), 1)
+
 
 # ─── Autocomplete tests ───────────────────────────────────────────────────────
 
