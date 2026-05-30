@@ -437,6 +437,10 @@ class TypedValue(models.Model):
                                         null=True, blank=True, related_name="+")  # group_select
     value_node     = models.ForeignKey(UserDefinedModelEntityNode, on_delete=models.SET_NULL,
                                         null=True, blank=True, related_name="+")  # submodel_select, entity_select
+    # Forward FK to the attachment so multiple FieldValue rows can reference the
+    # same FileAttachment without duplicating the physical file (image, file types).
+    value_file     = models.ForeignKey("FileAttachment", on_delete=models.SET_NULL,
+                                        null=True, blank=True, related_name="field_values")  # image, file
     # SUBMODEL_LIST has no value column — children are UserDefinedModelEntityNode rows via parent_node.
 
     class Meta:
@@ -489,7 +493,7 @@ class FieldValue(TypedValue, MetaBase):
 | `date` / `time` / `datetime` | `value_date` / `value_time` / `value_datetime` |
 | `select_multi`, `user_select_multi`, `group_select_multi`, `entity_select_multi` | `value_json` (list of keys / PKs / UUIDs) |
 | `user_select` / `group_select` / `submodel_select` / `entity_select` | `value_user` / `value_group` / `value_node` / `value_node` |
-| `image`, `file` | *(no column — the `FileAttachment` FK points at this `FieldValue`)* |
+| `image`, `file` | `value_file` (FK to `FileAttachment`; multiple `FieldValue` rows may share one attachment) |
 | `submodel_list` | *(no `FieldValue` row — children are `UserDefinedModelEntityNode`s via `parent_node`)* |
 
 Localisation is unaffected: there is still one `FieldValue` row per language
@@ -501,17 +505,21 @@ review/export views, e.g.
 with a real index — something a single JSON column cannot do.
 
 **`FileAttachment`** — created only when a save is committed, never on file selection.
-When a file/image field is overwritten the old `FileAttachment` row is **soft-deleted**
-(its `field_value` FK is set to null and `deleted_at` is stamped) so the previous
-version remains accessible from the edit history timeline. Physical file deletion
-happens via a separate `cleanup_deleted_attachments` management command.
+`FieldValue.value_file` is a forward FK to `FileAttachment`, so multiple `FieldValue`
+rows (e.g. across different fields, entities, or language variants of a localized
+field) may reference the same `FileAttachment` without duplicating the physical file.
+
+When a file/image field is overwritten, `FieldValue.value_file` is swapped to the
+new `FileAttachment`. The old attachment's `deleted_at` is stamped **only if no
+other active `FieldValue.value_file` still references it**, so shared attachments
+are never prematurely soft-deleted. Physical file deletion is handled by the
+`cleanup_deleted_attachments` management command, which skips any attachment still
+referenced by at least one `FieldValue`.
 
 ```python
 class FileAttachment(MetaBase):
-    # Null when this attachment has been replaced and is kept only for history.
-    field_value   = models.ForeignKey(FieldValue, on_delete=models.SET_NULL,
-                                      null=True, blank=True,
-                                      related_name="attachments")
+    # No back-reference FK to FieldValue — the FK lives on TypedValue.value_file.
+    # FileAttachment is a pure data record; ownership is tracked via value_file FKs.
     file          = models.FileField(upload_to=UUIDFilenameUploadTo("proposal_files"))
     original_name = models.CharField(max_length=255)
     mime_type     = models.CharField(max_length=100)
@@ -519,18 +527,9 @@ class FileAttachment(MetaBase):
     # For IMAGE types, also store dimensions:
     image_width   = models.PositiveSmallIntegerField(null=True, blank=True)
     image_height  = models.PositiveSmallIntegerField(null=True, blank=True)
-    # Soft-delete: set when this attachment is superseded by a newer upload.
+    # Soft-delete: stamped when no active FieldValue references this attachment
+    # and it is kept only for the edit history timeline.
     deleted_at    = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        # Exactly one active (non-deleted) attachment per FieldValue at any time.
-        constraints = [
-            UniqueConstraint(
-                fields=["field_value"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_attachment_per_field_value",
-            )
-        ]
 ```
 
 `FieldEdit.old_file_attachment` and `new_file_attachment` (replacing the plain name
@@ -1911,9 +1910,12 @@ PATCH /api/udm/entities/{id}/
   1. Load StagingFile by staging_id; verify uploader == request.user
   2. Run definitive MIME / size validation against FieldDefinition rules
   3. Move file from staging/ to proposal_files/ (no filesystem copy)
-  4. Create FileAttachment linked to FieldValue
+  4. Create FileAttachment; set FieldValue.value_file to it.
+     If the FieldValue previously referenced another attachment, soft-delete that
+     old attachment (stamp deleted_at) only if no other active FieldValue still
+     references it via value_file.
   5. Delete StagingFile row
-  6. Record FieldEdit (old_file_name → new_file_name)
+  6. Record FieldEdit (old_attachment → new_attachment)
       │
       ▼
   Response includes full current field values so frontend refreshes savedValue
@@ -1933,9 +1935,11 @@ For immediate cleanup (e.g., on page unload), the frontend can send
 { "changed_fields": { "photo": null } }
 ```
 
-The server deletes the `FileAttachment` and its physical file within the same
-transaction, and records a `FieldEdit` with `old_file_name` set and
-`new_file_name` empty.
+The server sets `FieldValue.value_file` to null and soft-deletes the old
+`FileAttachment` (stamps `deleted_at`) if no other active `FieldValue` still
+references it. A `FieldEdit` is recorded with `old_attachment` set and
+`new_attachment` null. Physical file removal is deferred to the
+`cleanup_deleted_attachments` command.
 
 ---
 
