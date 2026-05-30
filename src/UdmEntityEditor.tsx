@@ -11,6 +11,7 @@ import {
   udmSearchGroups,
   udmSearchEntities,
   udmUploadStagingFile,
+  UdmApiError,
   type EntityOut,
   type ConfigVersionOut,
   type FieldDefinitionOut,
@@ -633,7 +634,7 @@ export function UdmEntityEditor() {
   const [dirty, setDirty] = useState<Record<string, unknown>>({})
   const [saving, setSaving] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [errors, setErrors] = useState<string[]>([])
   const [success, setSuccess] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
 
@@ -649,7 +650,7 @@ export function UdmEntityEditor() {
         setConfig(cfg)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load entity')
+      setErrors([err instanceof Error ? err.message : 'Failed to load entity'])
     }
   }, [entityId])
 
@@ -658,7 +659,9 @@ export function UdmEntityEditor() {
   if (!entity || !entityId) {
     return (
       <div className={styles.page}>
-        {error ? <div className={styles.error}>{error}</div> : <div>Loading…</div>}
+        {errors.length > 0
+          ? <div className={styles.error}>{errors.map((m, i) => <div key={i}>{m}</div>)}</div>
+          : <div>Loading…</div>}
       </div>
     )
   }
@@ -700,7 +703,7 @@ export function UdmEntityEditor() {
   async function handleSave() {
     if (Object.keys(dirty).length === 0) return
     setSaving(true)
-    setError(null)
+    setErrors([])
     setSuccess(null)
     try {
       const updated = await udmPatchEntity(resolvedEntityId, dirty)
@@ -708,7 +711,7 @@ export function UdmEntityEditor() {
       setDirty({})
       setSuccess('Saved successfully.')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed')
+      setErrors(e instanceof UdmApiError ? e.allMessages : [e instanceof Error ? e.message : 'Save failed'])
     } finally {
       setSaving(false)
     }
@@ -716,14 +719,14 @@ export function UdmEntityEditor() {
 
   async function handleTransition(transitionName: string) {
     setTransitioning(true)
-    setError(null)
+    setErrors([])
     setSuccess(null)
     try {
       const updated = await udmTransitionEntity(resolvedEntityId, transitionName)
       setEntity(updated)
       setSuccess(`Transition "${transitionName}" applied.`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Transition failed')
+      setErrors(e instanceof UdmApiError ? e.allMessages : [e instanceof Error ? e.message : 'Transition failed'])
     } finally {
       setTransitioning(false)
     }
@@ -769,7 +772,11 @@ export function UdmEntityEditor() {
         </div>
       )}
 
-      {error && <div className={styles.error}>{error}</div>}
+      {errors.length > 0 && (
+        <div className={styles.error}>
+          {errors.map((msg, i) => <div key={i}>{msg}</div>)}
+        </div>
+      )}
       {success && <div className={styles.success}>{success}</div>}
 
       {/* Workflow transitions */}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { UdmApiError } from './apiUdm'
 import {
   udmListConfigs,
   udmCreateConfig,
@@ -537,7 +538,7 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
   const [fields, setFields] = useState<FieldDefinitionIn[]>([])
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [errors, setErrors] = useState<string[]>([])
   const [success, setSuccess] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -584,7 +585,7 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
 
   async function handleSave() {
     setSaving(true)
-    setError(null)
+    setErrors([])
     setSuccess(null)
     try {
       const v = await udmReplaceDraft(configId, { notes, fields, multi_field_rules: [] })
@@ -592,7 +593,7 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
       setSuccess('Draft saved.')
       onSaved(v)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed')
+      setErrors(e instanceof UdmApiError ? e.allMessages : [e instanceof Error ? e.message : 'Save failed'])
     } finally {
       setSaving(false)
     }
@@ -600,7 +601,7 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
 
   async function handlePublish() {
     setPublishing(true)
-    setError(null)
+    setErrors([])
     setSuccess(null)
     try {
       const v = await udmPublishDraft(configId)
@@ -608,7 +609,7 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
       setSuccess('Published successfully.')
       onSaved(v)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Publish failed')
+      setErrors(e instanceof UdmApiError ? e.allMessages : [e instanceof Error ? e.message : 'Publish failed'])
     } finally {
       setPublishing(false)
     }
@@ -647,7 +648,11 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
             ))}
           </div>
 
-          {error && <div className={styles.error}>{error}</div>}
+          {errors.length > 0 && (
+            <div className={styles.error}>
+              {errors.map((msg, i) => <div key={i}>{msg}</div>)}
+            </div>
+          )}
           {success && <div className={styles.success}>{success}</div>}
 
           <div className={styles.row} style={{ marginTop: '1rem' }}>

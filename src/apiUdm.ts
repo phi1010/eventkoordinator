@@ -17,6 +17,92 @@ const udmClient = createClient<paths>({
   },
 })
 
+// ── Structured API error ──────────────────────────────────────────────────────
+
+export interface PydanticErrorItem {
+  loc: (string | number)[]
+  msg: string
+  type: string
+}
+
+/** Thrown by write operations when the server returns a structured error body. */
+export class UdmApiError extends Error {
+  /** Pydantic validation errors from `{"detail": [...]}` */
+  readonly pydanticErrors: PydanticErrorItem[]
+  /** Django-style field errors from `{"errors": {...}}` */
+  readonly fieldErrors: Record<string, string[]>
+
+  constructor(
+    message: string,
+    pydanticErrors: PydanticErrorItem[] = [],
+    fieldErrors: Record<string, string[]> = {},
+  ) {
+    super(message)
+    this.name = 'UdmApiError'
+    this.pydanticErrors = pydanticErrors
+    this.fieldErrors = fieldErrors
+  }
+
+  /** All human-readable error strings, deduplicated. */
+  get allMessages(): string[] {
+    const msgs: string[] = []
+    for (const e of this.pydanticErrors) {
+      // Strip the leading "body" / "payload" segments that are noise
+      const loc = e.loc
+        .filter(s => s !== 'body' && s !== 'payload')
+        .join(' → ')
+      msgs.push(loc ? `${loc}: ${e.msg}` : e.msg)
+    }
+    for (const [field, errs] of Object.entries(this.fieldErrors)) {
+      for (const err of errs) {
+        msgs.push(field === '__all__' ? err : `${field}: ${err}`)
+      }
+    }
+    return msgs
+  }
+}
+
+/**
+ * Parse an already-decoded error body (from openapi-fetch's `error` return value,
+ * or a manually-read response body) and throw a UdmApiError.
+ *
+ * openapi-fetch consumes response.json() internally, so we must use the `error`
+ * value it hands back rather than calling response.json() again.
+ * For raw fetch() calls, pass the result of await response.json() instead.
+ */
+function throwApiError(errorBody: unknown, fallback: string): never {
+  let pydanticErrors: PydanticErrorItem[] = []
+  let fieldErrors: Record<string, string[]> = {}
+  let message = fallback
+
+  if (errorBody !== null && typeof errorBody === 'object') {
+    const body = errorBody as Record<string, unknown>
+    // Pydantic / FastAPI format: {"detail": [{loc, msg, type}]}
+    if (Array.isArray(body['detail'])) {
+      pydanticErrors = body['detail'] as PydanticErrorItem[]
+      message = pydanticErrors.map(e => e.msg).join('; ') || fallback
+    } else if (typeof body['detail'] === 'string') {
+      message = body['detail']
+    }
+    // Django-ninja field errors: {"errors": {"field": ["msg"]}}
+    if (body['errors'] && typeof body['errors'] === 'object') {
+      fieldErrors = body['errors'] as Record<string, string[]>
+      if (!pydanticErrors.length) {
+        message = Object.values(fieldErrors).flat().join('; ') || fallback
+      }
+    }
+  }
+
+  throw new UdmApiError(message, pydanticErrors, fieldErrors)
+}
+
+/** For raw fetch() calls: read the body, then throw. */
+async function throwRawFetchError(response: Response, fallback: string): Promise<never> {
+  let body: unknown = null
+  try { body = await response.json() } catch { /* non-JSON — leave null */ }
+  throwApiError(body, fallback)
+}
+
 // ── Type aliases ──────────────────────────────────────────────────────────────
 
 export type FieldConfigOut = components['schemas']['FieldConfigOut']
@@ -88,7 +174,7 @@ export async function udmListConfigs(): Promise<FieldConfigOut[]> {
 
 export async function udmCreateConfig(payload: FieldConfigCreateIn): Promise<FieldConfigOut> {
   const { data, error, response } = await udmClient.POST('/api/udm/configs/', { body: payload })
-  if (error || !response.ok || !data) throw new Error('Failed to create config')
+  if (error || !response.ok || !data) throwApiError(error, 'Failed to create config')
   return data as unknown as FieldConfigOut
 }
 
@@ -105,7 +191,7 @@ export async function udmUpdateConfig(configId: string, payload: FieldConfigUpda
     params: { path: { config_id: configId } },
     body: payload,
   })
-  if (error || !response.ok || !data) throw new Error('Failed to update config')
+  if (error || !response.ok || !data) throwApiError(error, 'Failed to update config')
   return data as FieldConfigOut
 }
 
@@ -145,7 +231,7 @@ export async function udmReplaceDraft(configId: string, payload: ConfigDraftIn):
     params: { path: { config_id: configId } },
     body: payload,
   })
-  if (error || !response.ok || !data) throw new Error('Failed to replace draft')
+  if (error || !response.ok || !data) throwApiError(error, 'Failed to replace draft')
   return data as ConfigVersionOut
 }
 
@@ -153,7 +239,7 @@ export async function udmPublishDraft(configId: string): Promise<ConfigVersionOu
   const { data, error, response } = await udmClient.POST('/api/udm/configs/{config_id}/versions/draft/publish/', {
     params: { path: { config_id: configId } },
   })
-  if (error || !response.ok || !data) throw new Error('Failed to publish draft')
+  if (error || !response.ok || !data) throwApiError(error, 'Failed to publish draft')
   return data as ConfigVersionOut
 }
 
@@ -167,7 +253,7 @@ export async function udmListTypes(): Promise<UDMTypeOut[]> {
 
 export async function udmCreateType(payload: UDMTypeCreateIn): Promise<UDMTypeOut> {
   const { data, error, response } = await udmClient.POST('/api/udm/types/', { body: payload })
-  if (error || !response.ok || !data) throw new Error('Failed to create type')
+  if (error || !response.ok || !data) throwApiError(error, 'Failed to create type')
   return data as unknown as UDMTypeOut
 }
 
@@ -214,7 +300,7 @@ export async function udmUpdateType(typeId: string, fieldConfigId: string | null
     credentials: 'include',
     headers: token ? { [CSRF_HEADER_NAME]: token } : {},
   })
-  if (!resp.ok) throw new Error('Failed to update UDM type')
+  if (!resp.ok) return throwRawFetchError(resp, 'Failed to update UDM type')
   return resp.json() as Promise<UDMTypeOut>
 }
 
@@ -228,7 +314,7 @@ export async function udmListPolicies(): Promise<PolicyOut[]> {
 
 export async function udmCreatePolicy(payload: PolicyCreateIn): Promise<PolicyOut> {
   const { data, error, response } = await udmClient.POST('/api/udm/policies/', { body: payload })
-  if (error || !response.ok || !data) throw new Error('Failed to create policy')
+  if (error || !response.ok || !data) throwApiError(error, 'Failed to create policy')
   return data as unknown as PolicyOut
 }
 
@@ -237,7 +323,7 @@ export async function udmUpdatePolicy(slug: string, payload: PolicyUpdateIn): Pr
     params: { path: { slug } },
     body: payload,
   })
-  if (error || !response.ok || !data) throw new Error('Failed to update policy')
+  if (error || !response.ok || !data) throwApiError(error, 'Failed to update policy')
   return data as PolicyOut
 }
 
@@ -293,7 +379,7 @@ export async function udmPatchEntity(entityId: string, changedFields: Record<str
     params: { path: { entity_id: entityId } },
     body: { changed_fields: changedFields },
   })
-  if (error || !response.ok || !data) throw new Error('Failed to patch entity')
+  if (error || !response.ok || !data) throwApiError(error, 'Failed to patch entity')
   return data as EntityOut
 }
 
@@ -309,7 +395,7 @@ export async function udmTransitionEntity(entityId: string, transition: string):
     params: { path: { entity_id: entityId } },
     body: { transition },
   })
-  if (error || !response.ok || !data) throw new Error('Transition failed')
+  if (error || !response.ok || !data) throwApiError(error, 'Transition failed')
   return data as EntityOut
 }
 
