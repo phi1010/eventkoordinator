@@ -209,9 +209,6 @@ SECURE_CSP = {
     "script-src": [
         "'self'",
         "https://cdn.jsdelivr.net",
-        # Hash for the inline script injected by @vitejs/plugin-react
-        # (React refresh preamble).  Using a hash is safer than 'unsafe-inline'.
-        "'sha256-ieoeWczDHkReVBsRBqaal5AFMlBtNjMzgwKvLqi/tSU='",
     ],
     "style-src": ["'self'", "https://cdn.jsdelivr.net"],
 }

@@ -1,6 +1,8 @@
 # Debug/development overrides loaded by Dynaconf.
 # This file is intended to keep explicit local defaults in TOML.
 
+
+
 ALLOWED_HOSTS = [
     "127.0.0.1",
     "localhost",
@@ -61,3 +63,15 @@ simple = { format = "[{asctime}] {levelname: <10} | {name: <32}: {message}", sty
 
 [LOGGING.handlers]
 console = { class = "logging.StreamHandler", formatter = "simple", stream = "ext://sys.stderr", level = "DEBUG" }
+
+[SECURE_CSP]
+"default-src" = ["'self'"]
+"base-uri" = ["'self'"]
+"connect-src" = ["'self'"]
+"font-src" = ["'self'", "https://cdn.jsdelivr.net", "data:"]
+"form-action" = ["'self'"]
+"frame-ancestors" = ["'self'"]
+"img-src" = ["'self'", "data:", "https://django-ninja.dev"]
+"object-src" = ["'none'"]
+"script-src" = ["'self'", "https://cdn.jsdelivr.net", "'unsafe-inline'"]
+"style-src" = ["'self'", "https://cdn.jsdelivr.net"]

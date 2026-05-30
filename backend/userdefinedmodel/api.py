@@ -237,6 +237,26 @@ def delete_config(request, config_id: uuid.UUID):
     return JsonResponse({}, status=204)
 
 
+@api.get("/configs/{config_id}/versions/", auth=django_auth)
+def list_config_versions(request, config_id: uuid.UUID):
+    from userdefinedmodel.models import ConfigVersion, FieldConfig
+    try:
+        FieldConfig.objects.get(id=config_id)
+    except FieldConfig.DoesNotExist:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    versions = ConfigVersion.objects.filter(config_id=config_id).order_by("-published_at", "-created_at")
+    return JsonResponse([
+        {
+            "id": str(v.id),
+            "status": v.status,
+            "notes": v.notes,
+            "published_at": v.published_at.isoformat() if v.published_at else None,
+            "created_at": v.created_at.isoformat(),
+        }
+        for v in versions
+    ], safe=False)
+
+
 @api.get("/configs/{config_id}/versions/published/", response=ConfigVersionOut, auth=django_auth)
 def get_published_version(request, config_id: uuid.UUID):
     from userdefinedmodel.models import ConfigVersion

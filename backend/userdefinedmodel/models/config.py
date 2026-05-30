@@ -472,7 +472,22 @@ class FieldDefaultValue(TypedValue, MetaBase):
             )
         ]
 
+    # Types that cannot have defaults (per §2.8)
+    _NO_DEFAULT_TYPES = frozenset([
+        FieldDefinition.DataType.IMAGE,
+        FieldDefinition.DataType.FILE,
+        FieldDefinition.DataType.ENTITY_SELECT,
+        FieldDefinition.DataType.ENTITY_SELECT_MULTI,
+        FieldDefinition.DataType.SUBMODEL_SELECT,
+        FieldDefinition.DataType.SUBMODEL_LIST,
+    ])
+
     def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.field_id and self.field.data_type in self._NO_DEFAULT_TYPES:
+            raise ValidationError(
+                {self.field.slug: f"Defaults are not supported for data_type '{self.field.data_type}'."}
+            )
         self._clean_typed_value(self.field)
 
     def __str__(self):

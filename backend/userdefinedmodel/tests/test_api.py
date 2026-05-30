@@ -837,3 +837,115 @@ class ConcurrentWriteTests(TransactionTestCase):
         self.assertIn(resp.status_code, [200, 409])
 
 
+
+# ─── Gap coverage tests ───────────────────────────────────────────────────────
+
+class VersionListTests(BaseAPITest):
+    """§6: GET /configs/{cid}/versions/ — list all ConfigVersions."""
+
+    def test_list_versions(self):
+        config = FieldConfigFactory()
+        ConfigLanguageFactory(config=config)
+        from userdefinedmodel.models import ConfigVersion
+        ConfigVersion.objects.create(config=config, status="published")
+        ConfigVersion.objects.create(config=config, status="draft")
+        resp = self.get(f"/configs/{config.id}/versions/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(len(data), 2)
+        statuses = {v["status"] for v in data}
+        self.assertIn("published", statuses)
+        self.assertIn("draft", statuses)
+
+
+class FieldDefaultValueCleanTests(BaseAPITest):
+    """§2.8: FieldDefaultValue.clean() rejects unsupported types."""
+
+    def test_default_for_file_rejected(self):
+        from userdefinedmodel.models import FieldConfig, ConfigLanguage, ConfigVersion, FieldDefinition, FieldDefaultValue
+        from django.core.exceptions import ValidationError
+        config = FieldConfig.objects.create(name="Test")
+        ConfigLanguage.objects.create(config=config, code="en", label="en", is_default=True)
+        version = ConfigVersion.objects.create(config=config, status="draft")
+        field = FieldDefinition.objects.create(version=version, slug="photo", data_type="image", sort_order=0)
+        d = FieldDefaultValue(field=field, language="")
+        with self.assertRaises(ValidationError):
+            d.clean()
+
+    def test_default_for_text_allowed(self):
+        from userdefinedmodel.models import FieldConfig, ConfigLanguage, ConfigVersion, FieldDefinition, FieldDefaultValue
+        config = FieldConfig.objects.create(name="Test2")
+        ConfigLanguage.objects.create(config=config, code="en", label="en", is_default=True)
+        version = ConfigVersion.objects.create(config=config, status="draft")
+        field = FieldDefinition.objects.create(version=version, slug="title", data_type="text_short", sort_order=0)
+        d = FieldDefaultValue(field=field, language="", value_text="Default title")
+        d.clean()  # Should not raise
+
+
+class BulkMigrationExecutionTests(BaseAPITest):
+    """§5.5: Bulk migration plan creation and execution (via Celery task)."""
+
+    def test_create_bulk_migration(self):
+        from userdefinedmodel.models import FieldConfig, ConfigLanguage, ConfigVersion, FieldDefinition
+        config = FieldConfig.objects.create(name="BM Config")
+        ConfigLanguage.objects.create(config=config, code="en", label="en", is_default=True)
+        v1 = ConfigVersion.objects.create(config=config, status="published")
+        f1 = FieldDefinition.objects.create(version=v1, slug="title", data_type="text_short", sort_order=0)
+        config2 = FieldConfig.objects.create(name="BM Config 2")
+        ConfigLanguage.objects.create(config=config2, code="en", label="en", is_default=True)
+        v2 = ConfigVersion.objects.create(config=config2, status="published")
+        f2 = FieldDefinition.objects.create(version=v2, slug="title", data_type="text_short", sort_order=0)
+
+        resp = self.post("/bulk-migrations/", {
+            "source_version_id": str(v1.id),
+            "target_version_id": str(v2.id),
+            "field_mappings": [
+                {"source_field_slug": "title", "action": "map", "target_field_slug": "title"}
+            ],
+        })
+        self.assertEqual(resp.status_code, 201)
+        data = resp.json()
+        self.assertEqual(data["status"], "draft")
+        self.assertIn("id", data)
+
+    def test_bulk_migration_execute_async(self):
+        from unittest.mock import patch
+        from userdefinedmodel.models import FieldConfig, ConfigLanguage, ConfigVersion, FieldDefinition, BulkMigrationPlan
+        config = FieldConfig.objects.create(name="BM Exec Config")
+        ConfigLanguage.objects.create(config=config, code="en", label="en", is_default=True)
+        v1 = ConfigVersion.objects.create(config=config, status="published")
+        config2 = FieldConfig.objects.create(name="BM Exec Config 2")
+        ConfigLanguage.objects.create(config=config2, code="en", label="en", is_default=True)
+        v2 = ConfigVersion.objects.create(config=config2, status="published")
+        plan = BulkMigrationPlan.objects.create(
+            source_version=v1, target_version=v2, created_by=self.staff
+        )
+        with patch("userdefinedmodel.tasks.execute_bulk_migration.delay") as mock_delay:
+            resp = self.post(f"/bulk-migrations/{plan.id}/execute/")
+            self.assertEqual(resp.status_code, 202)
+            mock_delay.assert_called_once_with(str(plan.id))
+
+
+class DefaultValueMaterializationTests(BaseAPITest):
+    """§2.8: Defaults are materialized into FieldValues when entity is created."""
+
+    def test_defaults_materialized_on_create(self):
+        from userdefinedmodel.models import (
+            FieldConfig, ConfigLanguage, ConfigVersion, FieldDefinition,
+            FieldDefinitionTranslation, FieldDefaultValue, UserDefinedModelType,
+        )
+        config = FieldConfig.objects.create(name="Default Test Config")
+        ConfigLanguage.objects.create(config=config, code="en", label="en", is_default=True)
+        version = ConfigVersion.objects.create(config=config, status="published")
+        field = FieldDefinition.objects.create(version=version, slug="status_flag", data_type="boolean", sort_order=0)
+        FieldDefinitionTranslation.objects.create(field=field, language="en", label="Status Flag")
+        FieldDefaultValue.objects.create(field=field, language="", value_bool=True)
+
+        udm_type = UserDefinedModelType.objects.create(name="Default Type", field_config=config)
+
+        resp = self.post("/entities/", {"user_defined_model_type_id": str(udm_type.id)})
+        self.assertEqual(resp.status_code, 201)
+        data = resp.json()
+        fvs = {fv["field_slug"]: fv["value"] for fv in data["field_values"]}
+        self.assertIn("status_flag", fvs)
+        self.assertEqual(fvs["status_flag"], True)
