@@ -30,7 +30,7 @@
 ### Configurable workflow
 - Every `UserDefinedModelEntityNode` (both `UserDefinedModelEntity` and `SubmodelInstance`) can have a configurable workflow with named states and transitions; the hardcoded `UserDefinedModelEntity.Status` choices are replaced by `WorkflowState` instances → §2.2, §2.6, §15
 - A `WorkflowDefinition` is assigned per `ConfigVersion`; different config versions (and therefore different submodel types) may have different workflows → §2.6
-- Each transition carries: permission checks, additional validators, mandatory field updates (fields that must be filled on transition), pre-actions (before validation + save), and post-actions (after save) → §2.6, §15
+- Each transition carries: pre-actions (before policy evaluation and save) and post-actions (after save); all permission checks and validation are handled by the UDMType's Rego policy (§2.9, §16) → §2.6, §15
 
 ### Validation rules
 - Validation rules are stored as model instances in a polymorphic hierarchy, not as JSON → §2.5
@@ -38,7 +38,7 @@
 - Incompatible (rule type, field type) pairs are rejected in `SingleFieldValidationRule.clean()` via an `APPLICABLE_TYPES` class variable → §2.5
 - Multi-field rules are associated with multiple fields via a join table; cross-version integrity (all fields must belong to the same `ConfigVersion`) is enforced at the application level → §2.5
 - A rule's `applies_to_save` flag controls whether it runs on every save (PATCH); save-time validation is permissive (allows partial/incomplete data) → §2.5, §4
-- Stricter "submit-time" validation is not a rule flag: submission is a workflow transition, and the strict rules are attached to that transition as validators (`TransitionValidatorAssignment`) / mandatory fields (`TransitionMandatoryField`) → §2.6, §4, §15
+- Stricter "submit-time" validation is expressed in the UDMType's Rego policy (§2.9); the policy receives the transition name and returns structured messages with levels (`critical` blocks the transition, `error` blocks submission but not save, `warning`/`info`/`debug` are shown to the user) → §2.9, §16, §15
 
 ### Migration
 - UserDefinedModelEntities can be migrated to a different user_defined_model_type or re-bound to a newer config version → §5.1–§5.4
@@ -146,9 +146,15 @@ field_config = models.ForeignKey(
     null=True, blank=True,
     related_name="user_defined_model_types",
 )
+policies = models.ManyToManyField(
+    "Policy",
+    through="UserDefinedModelTypePolicy",
+    related_name="user_defined_model_types",
+    blank=True,
+)
 ```
 
-Changing `UserDefinedModelType.field_config` triggers the **config-switch migration flow** (see §5.5).
+Changing `UserDefinedModelType.field_config` triggers the **config-switch migration flow** (see §5.5). The Rego `Policy` objects in `policies` are combined and evaluated for every authorization and validation decision on this UDMType's entities (see §2.9, §16).
 
 **`ConfigVersion`**
 ```python
@@ -880,67 +886,8 @@ class WorkflowTransition(HistoricalMetaBase):
                                         related_name="outgoing_transitions")
     to_state        = models.ForeignKey(WorkflowState, on_delete=models.CASCADE,
                                         related_name="incoming_transitions")
-    # Django permission codename that the triggering user must hold.
-    # Null = any authenticated user with user_defined_model_entity access may trigger it.
-    permission_codename = models.CharField(max_length=200, blank=True)
-    # Optional Rego rule-path override for authorising this transition (§16).
-    # When blank, §15.1 step 4 evaluates the default `data.user_defined_model_entities.allow` rule
-    # (action="transition", transition=<name>), which can branch on the name. Set
-    # this only to point a specific transition at a different rule.
-    policy_rule         = models.CharField(max_length=300, blank=True)
+    # Permission and validation are handled entirely by the UDMType's Rego policy (§2.9).
 ```
-
-#### Transition validators
-
-**This is where strict "submit-time" validation lives.** There is no separate
-submit-rule flag on the rule models; instead the strict checks that must hold before
-a user_defined_model_entity can be submitted (or accepted, etc.) are attached to the relevant
-`WorkflowTransition` — typically the `submit` transition. A rule used only at submit
-sets `applies_to_save=False` so it does not fire on every PATCH, and is referenced
-from the transition via a `TransitionValidatorAssignment`.
-
-Transition validators reuse the same `SingleFieldValidationRule` /
-`MultiFieldValidationRule` polymorphic hierarchy and the same evaluation engine as
-`validate_for_save()` (§4). A `TransitionValidatorAssignment` attaches a rule to a
-transition; the rule is evaluated as part of the transition execution (§15):
-
-```python
-class TransitionValidatorAssignment(MetaBase):
-    transition = models.ForeignKey(WorkflowTransition, on_delete=models.CASCADE,
-                                   related_name="validator_assignments")
-    # Exactly one of these two FKs is non-null:
-    single_field_rule = models.ForeignKey(
-        SingleFieldValidationRule, on_delete=models.CASCADE,
-        null=True, blank=True, related_name="+",
-    )
-    multi_field_rule  = models.ForeignKey(
-        MultiFieldValidationRule, on_delete=models.CASCADE,
-        null=True, blank=True, related_name="+",
-    )
-    sort_order = models.PositiveSmallIntegerField(default=0)
-```
-
-#### Mandatory field updates
-
-Fields that must be non-empty (or set to a specific value) for the transition to
-be accepted:
-
-```python
-class TransitionMandatoryField(MetaBase):
-    transition      = models.ForeignKey(WorkflowTransition, on_delete=models.CASCADE,
-                                        related_name="mandatory_fields")
-    field           = models.ForeignKey(FieldDefinition, on_delete=models.CASCADE,
-                                        related_name="+")
-    # Null = field must merely be non-empty. Non-null = field must equal this value.
-    required_value  = models.JSONField(null=True, blank=True)
-    sort_order      = models.PositiveSmallIntegerField(default=0)
-```
-
-**Canonical way to express "required at submit"** — to avoid two overlapping
-mechanisms, use `TransitionMandatoryField` for plain required-ness (and fixed-value
-requirements), and `TransitionValidatorAssignment` for everything else
-(`MinLengthRule`, `RegexRule`, multi-field rules, …). The config UI should present
-required-ness only through `TransitionMandatoryField`.
 
 #### Transition actions (pre and post)
 
@@ -977,15 +924,14 @@ Initial concrete action subclasses:
 WorkflowDefinition ──1:N── WorkflowState
                    ──1:N── WorkflowTransition
                                 │
-                    ┌───────────┼────────────────┐
-                    │           │                │
-          TransitionValidatorAssignment  TransitionMandatoryField
-                    │
-          TransitionAction (PolymorphicMetaBase)
-                    │
-          ├── SendNotificationAction
-          ├── SetFieldValueAction
-          └── TriggerChildTransitionAction
+                    TransitionAction (PolymorphicMetaBase)
+                                │
+                    ├── SendNotificationAction
+                    ├── SetFieldValueAction
+                    └── TriggerChildTransitionAction
+
+UserDefinedModelType ──M2M (through UserDefinedModelTypePolicy)──► Policy
+Policy.source (Rego) handles all permission + validation for the UDMType's entities (§2.9, §16)
 ```
 
 ---
@@ -1241,6 +1187,45 @@ Save-context — not submit-context — is intentional: a freshly created draft 
 *saveable*, but it is legitimately allowed to be incomplete for *submission* (e.g. a
 required-at-submit field with no default stays empty until the user fills it).
 
+### 2.9 Policy model
+
+A `Policy` is a named unit of Rego source code. Multiple policies can be attached to
+a `UserDefinedModelType`; the engine loads them all into one regorus instance and
+evaluates the combined rule set for every authorization and validation decision on
+that type's entities (§16).
+
+```python
+class Policy(MetaBase):
+    slug   = models.SlugField(max_length=80, unique=True)
+    # Raw Rego source. All policies on a UDMType share `package udm`; rules compose
+    # via Rego's OR semantics (deny sets union, allow is true if any module grants it).
+    source = models.TextField()
+    # No name, no translations — the slug is the human reference.
+```
+
+```python
+class UserDefinedModelTypePolicy(MetaBase):
+    """Through table; sort_order controls the load order passed to regorus."""
+    user_defined_model_type = models.ForeignKey(
+        "UserDefinedModelType", on_delete=models.CASCADE,
+        related_name="type_policies",
+    )
+    policy     = models.ForeignKey(Policy, on_delete=models.CASCADE,
+                                   related_name="type_assignments")
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        constraints = [
+            UniqueConstraint(fields=["user_defined_model_type", "policy"],
+                             name="unique_policy_per_type")
+        ]
+```
+
+The same `Policy` row can be included by multiple `UserDefinedModelType`s — this is
+the intended sharing mechanism. A policy has no localized display name; the `slug`
+is the only human-readable identifier (e.g. `"staff_full_access"`, `"owner_edit"`).
+
 ---
 
 ## 3. Config Versioning Lifecycle
@@ -1298,11 +1283,10 @@ There are two places a rule can run:
    requires a field to be filled (use a transition for that), it only rejects values
    that are actively wrong (bad type, too long, regex mismatch, a violated mutual
    exclusion, …).
-2. **Workflow transitions** — strict checks (the old "submit rules") are attached to
-   a `WorkflowTransition` via `TransitionValidatorAssignment` / `TransitionMandatoryField`
-   (§2.6) and run only when that transition fires (§15). Submission is just the
-   `submit` transition. A submit-only rule sets `applies_to_save=False` so it does not
-   fire on every save.
+2. **Workflow transitions** — strict checks (the old "submit rules") are expressed in
+   the UDMType's Rego policy (§2.9). The policy receives `action="transition"` and the
+   transition name, and returns structured messages; any `critical` or `error` message
+   blocks the transition. Submission is just the `submit` transition.
 
 There is no `validate_for_submit()` and no `applies_to_submit` flag.
 
@@ -1311,7 +1295,7 @@ There is no `validate_for_submit()` and no `applies_to_submit` flag.
 | Method | Trigger | Rules fetched |
 |---|---|---|
 | `validate_for_save()` | API PATCH, Django admin save | rules where `applies_to_save=True` |
-| transition engine (§15) | `POST /transition` (incl. `submit`) | the transition's `TransitionValidatorAssignment` rules + `TransitionMandatoryField`s, **plus** each node's save rules re-run across the subtree |
+| transition engine (§15) | `POST /transition` (incl. `submit`) | the UDMType's Rego policy (§2.9) with `action="transition"`, plus each node's save rules re-run across the subtree |
 | `FieldValue.clean()` | Always, on every write | data-type correctness only (no rule models) |
 
 The single-field / multi-field evaluation loop below is shared: `validate_for_save()`
@@ -1371,19 +1355,16 @@ def validate_for_save(self):
 
 ### Strict (submit / transition) validation across the subtree
 
-A transition does not have its own copy of the field rules — it carries only the
-strict extras. To produce today's "submit checks the whole user_defined_model_entity" behaviour while
-respecting that each node (user_defined_model_entity or submodel) lives in its **own** `ConfigVersion`
-(and rules may not cross versions, §2.5), the transition engine validates the entire
-subtree, **validation-only**, in one transaction (§15):
+At transition time the engine validates the entire subtree, **validation-only**, in
+one transaction (§15):
 
 - For **every** node in the subtree (root + all descendants), re-run that node's own
   save rules (`applies_to_save=True`) via `_evaluate_rules`. This is the *save-rule
-  floor* — it guarantees a workflow-less submodel (e.g. a migrated `Speaker`) is still
-  checked against its own constraints at submit.
-- **Additionally**, for any node whose `ConfigVersion` has a workflow with a transition
-  of the same name (e.g. `submit`), run that transition's
-  `TransitionValidatorAssignment` rules + `TransitionMandatoryField`s.
+  floor* — it guarantees a workflow-less submodel is still checked against its own
+  field-level constraints at submit.
+- **Additionally**, evaluate the UDMType's Rego policy with `action="transition"` and
+  the transition name. Any message with level `critical` or `error` in the policy output
+  aborts the transition (see §16).
 - No descendant changes state during this — only the node the transition was invoked
   on transitions. Any error anywhere aborts the whole transition (no partial submit).
 
@@ -1621,6 +1602,19 @@ All endpoints require authentication. Permission logic mirrors the existing
 |---|---|---|
 | `PATCH` | `/api/udm/types/{id}/` | Change `field_config_id`; blocked if stale user_defined_model_entities exist without a confirmed BulkMigrationPlan |
 
+### Policy management
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/udm/policies/` | List all Policy objects (staff) |
+| `POST` | `/api/udm/policies/` | Create a Policy (staff) |
+| `GET` | `/api/udm/policies/{slug}/` | Retrieve source |
+| `PUT` | `/api/udm/policies/{slug}/` | Replace source (staff) |
+| `DELETE` | `/api/udm/policies/{slug}/` | Delete if not assigned to any UDMType |
+| `GET` | `/api/udm/types/{id}/policies/` | List policies assigned to this UDMType (ordered by sort_order) |
+| `POST` | `/api/udm/types/{id}/policies/` | Assign a Policy to a UDMType |
+| `DELETE` | `/api/udm/types/{id}/policies/{slug}/` | Remove assignment |
+
 ### Convenience read aliases (user_defined_model_type-scoped, for the user_defined_model_entity form frontend)
 
 These are read-only shortcuts; all writes go to `/api/udm/configs/`.
@@ -1666,23 +1660,16 @@ These are read-only shortcuts; all writes go to `/api/udm/configs/`.
       {
         "name": "submit",
         "from_state": "draft",
-        "to_state": "submitted",
-        "permission_codename": "submit_proposal",
-        "mandatory_fields": [ { "field_slug": "abstract" } ],
-        "validators": [
-          { "field_slug": "abstract", "rule": { "min_length": 50 } },
-          { "field_slug": "speakers", "rule": { "min_items": 1 } }
-        ]
+        "to_state": "submitted"
       }
     ]
   }
 }
 ```
 
-Per-field `save_rules` carry only the rules with `applies_to_save=True`. The strict
-checks that were previously `submit_rules` now live under `workflow.transitions[]`
-as `mandatory_fields` (required-ness) and `validators` (everything else). A config
-with no workflow has no `workflow` key and therefore only save-time validation.
+Per-field `save_rules` carry the rules with `applies_to_save=True`. Transition-level
+validation (the old "submit rules") is now expressed in the UDMType's Rego policy
+(§2.9, §16) — not serialised in the config schema.
 
 The `default` key (§2.8) is omitted when the field has no default. For a localized
 field it is a `{language_code: value}` dict, mirroring the PATCH payload convention
@@ -2239,22 +2226,15 @@ POST /api/udm/entities/{id}/transition/   { "transition": "submit" }
 3.  Check from_state: node.current_state must match transition.from_state
     (or from_state is null = "any").
     → 409 if the node is in the wrong state.
-4.  Check permission via the Rego authz evaluator (§16.3):
-    authz.allows(node, "transition", user, transition=name), using
-    transition.policy_rule if set, else the default data.user_defined_model_entities.allow rule.
-    (permission_codename is consulted only as a fallback when no Rego rule exists.)
-    → 403 if the policy denies.
+4.  Evaluate the UDMType's Rego policy (§16) with action="transition" and the
+    transition name. If the policy output has allow=False → 403.
+    Collect all messages from the policy output for step 6.
 5.  Execute PRE-phase TransitionActions (sorted by sort_order).
-6.  **Subtree validation (validation-only; §4 "Strict validation across the subtree").**
-    For every node in the subtree (root + all descendants), in one pass under the
-    root lock from step 1:
-      - re-run that node's save rules (the save-rule floor), and
-      - if the node's ConfigVersion has a workflow transition of this same name,
-        run that transition's TransitionMandatoryFields + TransitionValidatorAssignments.
-    → 400 with field-keyed errors (slug, and node id for descendants) on any failure.
-      Nothing has changed state yet, so the whole transition simply aborts.
-7.  (Covered by step 6 — the transition's own validators are evaluated there as part
-    of the root node's contribution.)
+6.  **Subtree validation (§4).**
+    - Re-run every node's save rules across the subtree (save-rule floor).
+    - If the policy output from step 4 contains any message with level `critical` or
+      `error`, abort the transition and return 422 with the structured message list.
+    → Nothing has changed state yet; the whole transition aborts on any failure.
 8.  (No additional locking — the root lock from step 1 already serialises the tree.)
 9.  Atomically (only the invoked node transitions; descendants do not):
       a. Apply any SetFieldValueAction writes.
@@ -2291,61 +2271,54 @@ configs that have not yet been assigned a workflow.
 
 ---
 
-## 16. Authorization (Rego via regorus)
+## 16. Rego Policy System
 
-Authorization decisions — **view / create / edit / delete** on a node (user_defined_model_entity or
-submodel) and on individual **fields**, plus workflow transitions — are evaluated
-with [microsoft/regorus](https://github.com/microsoft/regorus), an **in-process**
-Rego engine. There is no OPA server, no network call, and no `OPA_URL`: regorus is
-embedded via its Python bindings and policies are compiled once at startup. The
-user_defined_model_entity is serialised to a canonical JSON document (§16.1) that becomes the Rego
-`input` (§16.2); decisions are evaluated by a small `authz` module (§16.3) and
-enforced at the points listed in §16.4.
+All authorization and validation decisions for `UserDefinedModelEntity` nodes and
+fields are delegated to the `Policy` objects attached to the entity's
+`UserDefinedModelType` (§2.9). The policies are loaded into a
+[microsoft/regorus](https://github.com/microsoft/regorus) engine — in-process, no
+OPA server, no network call.
 
-### 16.1 Node serialisation
+### 16.1 Policy loading
 
-`UserDefinedModelEntityNode.to_policy_document()` returns a plain, JSON-safe `dict` describing one
-node and, recursively, its whole subtree. It reuses the typed-value accessor
-(`FieldValue.get_value()`, §2.3) and resolves reference fields to bare PKs (policy
-matching wants identifiers, not display names — see §16.2 for where attributes go).
+For each `UserDefinedModelType`, a regorus `Engine` is constructed at request time
+(or cached per type + policy fingerprint):
 
 ```python
-class UserDefinedModelEntityNode(HistoricalMetaBase):
-    ...
-    def to_policy_document(self) -> dict:
-        """Canonical, deterministic JSON-safe representation of this node + subtree.
-        Keys are sorted; children are ordered by (parent_field.slug, sort_order, id);
-        datetimes are ISO-8601 UTC strings; Decimals are stringified. Determinism
-        matters so policy decisions can be cached and diffed."""
-        ...
+def build_engine(user_defined_model_type: UserDefinedModelType) -> regorus.Engine:
+    eng = regorus.Engine()
+    for tp in user_defined_model_type.type_policies.select_related("policy").order_by("sort_order"):
+        eng.add_policy(f"policy_{tp.policy.slug}.rego", tp.policy.source)
+    return eng
 ```
 
-Shape (root user_defined_model_entity example; submodel nodes use the same shape minus
-`call_id` / `owner` / `editors`):
+All policies must declare `package udm`. Rules from different files compose via
+Rego's standard module merging: `deny` and `messages` are incremental (set union),
+`allow` is true if any module's condition holds.
+
+### 16.2 Policy input
+
+Every policy evaluation receives a `PolicyInput` document as `input` (Pydantic schema
+in §17.15). The entity document shape (§16.2.1) is the same structure returned by
+`GET /api/udm/entities/{id}/policy-document/`.
+
+#### 16.2.1 Entity document shape
 
 ```jsonc
 {
   "id": "0c1f…",
-  "type": "user_defined_model_entity",                  // or "submodel:<parent_field_slug>"
+  "type": "entity",                  // or "submodel:<parent_field_slug>"
   "config_version_id": "8a2d…",
   "config_id": "4b9e…",
-  "call_id": "1f30…",                  // null for an unassigned user_defined_model_entity
+  "type_id": "1f30…",               // UserDefinedModelType id; null for submodels
   "owner": { "id": "5c…", "username": "alice", "is_active": true },
   "editors": [ { "id": "9d…", "username": "bob" } ],
-  "current_state": "submitted",        // WorkflowState.name, null if no workflow
+  "current_state": "submitted",
   "fields": {
-    // key = field slug; value carries data_type so Rego need not look it up
-    "abstract":  { "data_type": "text_markdown", "localized": false, "value": "…" },
-    "title_i18n":{ "data_type": "text_short", "localized": true,
-                   "value": { "en": "…", "de": "…" } },
-    "duration_days": { "data_type": "integer", "localized": false, "value": 3 },
-    "material_cost_eur": { "data_type": "float", "localized": false, "value": "12.50" },
-    "reviewers": { "data_type": "user_select_multi", "localized": false, "value": ["5c…","9d…"] },
-    "photo":     { "data_type": "image", "localized": false,
-                   "value": { "attachment_id": "aa…", "mime_type": "image/png", "size_bytes": 40213 } }
+    "abstract":      { "data_type": "text_markdown", "localized": false, "value": "…" },
+    "duration_days": { "data_type": "integer",       "localized": false, "value": 3 }
   },
   "children": {
-    // grouped by the parent SUBMODEL_LIST field slug, each ordered by sort_order
     "speakers": [ { "id": "…", "type": "submodel:speakers", "fields": { … }, "children": {} } ]
   },
   "overflow_data": {},
@@ -2354,124 +2327,111 @@ Shape (root user_defined_model_entity example; submodel nodes use the same shape
 }
 ```
 
-Notes:
-- Localized fields serialise as a `{language_code: value}` dict, matching the PATCH
-  and config-schema conventions (§2.7).
-- `file` / `image` values carry attachment metadata (not the bytes) so size/MIME
-  policies are expressible without a second fetch.
-- `submodel_select` serialises as the referenced node's `id`; the referenced node is
-  **not** inlined (it may live under a different user_defined_model_entity tree) — follow the id if a
-  policy needs it.
-- `entity_select` serialises as the referenced entity's UUID; `entity_select_multi`
-  as a list of UUIDs. Referenced entities are not inlined.
-- The document is value-only: it deliberately excludes edit history and validation
-  rules, which are config/audit concerns, not policy inputs.
+### 16.3 Policy output
 
-### 16.2 Policy input
+The engine evaluates the following rules from `package udm` and assembles a
+`PolicyOutput` (Pydantic schema in §17.15):
 
-`build_policy_input(node, action, user, field=None)` wraps the document with the
-subject and the attempted action. The whole **root** user_defined_model_entity is always included
-(even for a submodel action) so policies can reason about the tree; `node_id` points
-at the targeted node, and `field` is the slug for field-level actions (null for
-node-level ones).
+| Rego rule | Type | Semantics |
+|---|---|---|
+| `allow` | `boolean` | `false` → 403 Forbidden; the user has no permission to attempt the action |
+| `deny` | `set of message objects` | each entry blocks the action (level forced to `"error"`) |
+| `messages` | `set of message objects` | non-blocking feedback returned alongside the response |
+| `viewable_fields` | `set of slug strings` | fields included in GET responses; empty set = all visible |
+| `editable_fields` | `set of slug strings` | fields a PATCH may write; empty set = all editable |
 
+A message object:
 ```jsonc
 {
-  "action": "edit",                 // one of: view | create | edit | delete | transition
-  "transition": null,               // transition name when action == "transition", else null
-  "node_id": "0c1f…",               // node the action targets (root or a submodel)
-  "node_type": "user_defined_model_entity",          // or "submodel:<slug>"
-  "field": null,                    // field slug for field-level checks; null otherwise
-  "user": {
-    "id": "5c…",
-    "username": "alice",
-    "is_active": true,
-    "is_staff": false,
-    "groups": [3, 7],               // auth.Group PKs the user belongs to
-    "permissions": ["userdefinedmodel.submit_proposal", "userdefinedmodel.moderate_proposal"]
-  },
-  "user_defined_model_entity": { /* root node document from §16.1 */ }
+  "level":      "critical",          // critical | error | warning | info | debug
+  "message":    { "en": "Abstract is required", "de": "Zusammenfassung fehlt" },
+  "field_slug": "abstract"           // null for entity-level messages
 }
 ```
 
-The user's group memberships and Django permissions live on `user`, so reference
-fields inside the user_defined_model_entity can stay as bare PKs and the policy joins the two. The
-node's `current_state` is in the document, so state-dependent rules (e.g. "no edits
-once submitted") are expressible in Rego — this subsumes `WorkflowState.allows_edit`
-(§15.3), which remains only as an optional fast pre-check.
+Level semantics:
+- **`critical`** — hard stop; blocks save *and* transition regardless of `allow`.
+- **`error`** — blocks transition/submission; allows save (the user can keep editing).
+- **`warning` / `info` / `debug`** — shown to the user; do not block any action.
 
-### 16.3 The `authz` evaluator
+Messages in `deny` are always treated as at least `error` level. The final `messages`
+list in `PolicyOutput` is the union of `deny` entries and `messages` entries.
 
-A single module owns regorus. Policies (`.rego` files shipped in the repo, e.g.
-`backend/userdefinedmodel/policies/`) and any static `data` are loaded into one base
-`regorus.Engine` **once** at startup. Per request the base engine is `clone()`d
-(cheap; avoids recompiling policies and keeps evaluation thread-safe), the input is
-set, and the relevant rule is evaluated:
+### 16.4 Rego conventions
 
-```python
-# Built once at process start.
-_BASE = regorus.Engine()
-for path in sorted(POLICY_DIR.glob("*.rego")):
-    _BASE.add_policy_from_file(str(path))
-# _BASE.add_data_json(...)  # optional static data (role tables, etc.)
+All policy files share `package udm`. Typical structure:
 
-def _eval(rule: str, input: dict):
-    eng = _BASE.clone()
-    eng.set_input_json(json.dumps(input))
-    return eng.eval_rule(rule)          # returns the rule's value (bool / set / …)
+```rego
+package udm
 
-def allows(node, action, user, *, field=None, transition=None) -> bool:
-    inp = build_policy_input(node, action, user, field=field)
-    inp["transition"] = transition
-    return _eval("data.user_defined_model_entities.allow", inp) is True
+import rego.v1
 
-def viewable_fields(node, user) -> set[str]:
-    return set(_eval("data.user_defined_model_entities.viewable_fields",
-                     build_policy_input(node, "view", user)))
+# Grant view to the entity's owner and editors.
+allow if {
+    input.action in {"view", "edit", "save"}
+    input.user.id in {input.entity.owner.id} | {e.id | e := input.entity.editors[_]}
+}
 
-def editable_fields(node, user) -> set[str]:
-    return set(_eval("data.user_defined_model_entities.editable_fields",
-                     build_policy_input(node, "edit", user)))
+# Block submission if abstract is empty.
+deny contains msg if {
+    input.action == "transition"
+    input.transition == "submit"
+    not input.entity.fields.abstract.value
+    msg := {
+        "level":      "error",
+        "message":    {"en": "Abstract is required for submission",
+                       "de": "Zusammenfassung für Einreichung erforderlich"},
+        "field_slug": "abstract",
+    }
+}
+
+# Staff can see all fields.
+viewable_fields contains slug if {
+    input.user.is_staff
+    slug := input.entity.fields[slug]
+}
 ```
 
-Rego entry points the policies must define:
+### 16.5 Evaluator module
 
-| Rule | Returns | Used for |
-|---|---|---|
-| `data.user_defined_model_entities.allow` | boolean | node-level view / create / delete, and transitions (`action`/`transition` in input) |
-| `data.user_defined_model_entities.viewable_fields` | set of slugs | which fields appear in a GET response |
-| `data.user_defined_model_entities.editable_fields` | set of slugs | which fields a PATCH may write |
+```python
+import json
+import regorus
 
-`viewable_fields` / `editable_fields` are returned as **sets in one evaluation** (not
-one user_defined_model_type per field) so field-level decisions cost a single `clone()`+`eval` per
-request, not one per field.
+def evaluate_policy(
+    user_defined_model_type: "UserDefinedModelType",
+    policy_input: "PolicyInput",
+) -> "PolicyOutput":
+    eng = build_engine(user_defined_model_type)   # cached per type+fingerprint
+    eng.set_input_json(policy_input.model_dump_json())
+    allow           = eng.eval_rule("data.udm.allow") is True
+    deny            = eng.eval_rule("data.udm.deny") or []
+    messages        = eng.eval_rule("data.udm.messages") or []
+    viewable_fields = list(eng.eval_rule("data.udm.viewable_fields") or [])
+    editable_fields = list(eng.eval_rule("data.udm.editable_fields") or [])
+    return PolicyOutput(
+        allow=allow,
+        messages=[PolicyMessage(**m) for m in (*deny, *messages)],
+        viewable_fields=viewable_fields,
+        editable_fields=editable_fields,
+    )
+```
 
-### 16.4 Enforcement points
+### 16.6 Enforcement points
 
-| Action | Enforced in | Rule | On deny |
+| Action | When evaluated | `allow=False` response | Blocking message response |
 |---|---|---|---|
-| **view node** | `GET /api/udm/entities/{id}/`, and list querysets | `allow` (`action="view"`) | 404 (list: filtered out) |
-| **create node** | `POST /api/udm/entities/` (root); `op:"create"` in PATCH (submodel) | `allow` (`action="create"`) | 403 |
-| **delete node** | `DELETE /api/udm/entities/{id}/` (root); `op:"delete"` in PATCH (submodel) | `allow` (`action="delete"`) | 403 |
-| **view field** | GET serialiser | `viewable_fields` | field omitted from response |
-| **edit field** | PATCH (§12), per slug in `changed_fields` | `editable_fields` | 403 listing the rejected slugs |
-| **transition** | §15.1 step 4 | `allow` (`action="transition"`, `transition=<name>`) | 403 |
+| **browse** (list IDs) | Before queryset | 403 | — |
+| **view node** | GET handler | 404 (list: filtered out) | — |
+| **create node** | POST handler | 403 | 422 with messages |
+| **save** (PATCH) | After lock, before write | 403 | 422 with messages |
+| **delete node** | DELETE handler | 403 | — |
+| **view field** | GET serialiser | field omitted | — |
+| **edit field** | PATCH per slug | 403 naming slugs | — |
+| **transition** | §15.1 step 4 | 403 | 422 with structured messages |
 
-PATCH gating runs **before** validation (§12 step 4, after the lock is taken): any
-slug in `changed_fields` not in `editable_fields` aborts the whole PATCH with a 403
-naming the rejected fields — partial silent dropping is avoided so the client never
-believes an edit was saved when it was refused. GET field filtering instead silently
-omits non-viewable fields (a viewer simply does not see them).
-
-This replaces the keyword-matching `UserDefinedModelEntity.has_object_permission` (existing code)
-and the per-transition `permission_codename` as the **primary** authorization path for
-user_defined_model_entity nodes and fields. `permission_codename` is retained only as a coarse fallback
-for transitions whose config has no Rego rule yet (during migration); when a Rego
-policy is present it is authoritative.
-
-The serialiser is reusable for offline policy authoring and tests:
-`GET /api/udm/entities/{id}/policy-document/` (staff-only) returns the §16.1 document so
-it can be fed to `regorus eval` / unit tests as `input` while writing `.rego` rules.
+`GET /api/udm/entities/{id}/policy-document/` (staff-only) returns the §16.2.1
+document so it can be used with `regorus eval` or unit tests while authoring policies.
 
 ---
 
@@ -2508,13 +2468,11 @@ _MAX_DESCRIPTION_LEN  = 5_000
 _MAX_NOTES_LEN        = 2_000
 _MAX_ADMIN_LABEL_LEN  = 200
 _MAX_LANG_CODE_LEN    = 10        # BCP-47, e.g. "en", "zh-Hant"
-_MAX_PERM_CODE_LEN    = 200
 _MAX_STATE_NAME_LEN   = 100
 _MAX_TRANS_NAME_LEN   = 100
 _MAX_MIME_LEN         = 100
 _MAX_REGEX_LEN        = 500
 _MAX_FAIL_MSG_LEN     = 200
-_MAX_POLICY_RULE_LEN  = 300
 _MAX_SORT_ORDER       = 32_767    # fits PositiveSmallIntegerField
 
 # List-cardinality caps — prevent one request from causing unbounded DB work
@@ -2524,8 +2482,6 @@ _MAX_CHOICES          = 500       # options in a select-type field
 _MAX_CHOICE_LEN       = 200       # each choice key
 _MAX_STATES           = 100       # WorkflowStates per WorkflowDefinition
 _MAX_TRANSITIONS      = 200       # WorkflowTransitions per WorkflowDefinition
-_MAX_VALIDATORS       = 100       # TransitionValidatorAssignments per transition
-_MAX_MANDATORY_FLDS   = 100       # TransitionMandatoryFields per transition
 _MAX_RULES            = 50        # single-field rules per FieldDefinition
 _MAX_MULTI_RULES      = 50        # multi-field rules per ConfigVersion
 _MAX_MIME_ENTRIES     = 50        # entries in AllowedMimeTypesRule
@@ -2834,28 +2790,12 @@ class WorkflowStateIn(Schema):
     allows_edit: bool = True
     model_config = {"extra": "forbid"}
 
-class MandatoryFieldIn(Schema):
-    field_slug: Slug
-    required_value: Optional[Any] = None   # null = "must merely be non-empty"
-    sort_order: int = Field(0, ge=0, le=_MAX_SORT_ORDER)
-    model_config = {"extra": "forbid"}
-
-class ValidatorAssignmentIn(Schema):
-    # References a rule by its admin_label (unique within a ConfigVersion draft).
-    rule_admin_label: Annotated[str, Field(min_length=1, max_length=_MAX_ADMIN_LABEL_LEN)]
-    sort_order: int = Field(0, ge=0, le=_MAX_SORT_ORDER)
-    model_config = {"extra": "forbid"}
-
 class WorkflowTransitionIn(Schema):
     name: Annotated[str, Field(min_length=1, max_length=_MAX_TRANS_NAME_LEN,
                                 pattern=r"^[a-z][a-z0-9_-]*$")]
     label: LocalizedLabel
     from_state: Optional[Annotated[str, Field(max_length=_MAX_STATE_NAME_LEN)]] = None
     to_state: Annotated[str, Field(min_length=1, max_length=_MAX_STATE_NAME_LEN)]
-    permission_codename: Annotated[str, Field(max_length=_MAX_PERM_CODE_LEN)] = ""
-    policy_rule: Annotated[str, Field(max_length=_MAX_POLICY_RULE_LEN)] = ""
-    mandatory_fields: list[MandatoryFieldIn] = Field(default_factory=list, max_length=_MAX_MANDATORY_FLDS)
-    validators: list[ValidatorAssignmentIn] = Field(default_factory=list, max_length=_MAX_VALIDATORS)
     model_config = {"extra": "forbid"}
 
 class WorkflowDefinitionIn(Schema):
@@ -2875,18 +2815,9 @@ class WorkflowDefinitionIn(Schema):
 class WorkflowStateOut(Schema):
     name: str; label: dict[str, str]; is_initial: bool; allows_edit: bool
 
-class MandatoryFieldOut(Schema):
-    field_slug: str; required_value: Optional[Any]
-
-class ValidatorOut(Schema):
-    field_slug: str; rule: dict[str, Any]
-
 class WorkflowTransitionOut(Schema):
     name: str; label: dict[str, str]
     from_state: Optional[str]; to_state: str
-    permission_codename: str
-    mandatory_fields: list[MandatoryFieldOut]
-    validators: list[ValidatorOut]
 
 class WorkflowOut(Schema):
     initial_state: str
@@ -3117,6 +3048,120 @@ class EditingNotAllowedError(Schema):
     current_state: str
 ```
 
+### 17.15 Policy input and output schemas
+
+```python
+# ── Policy API (§16) ─────────────────────────────────────────────────────────
+
+class PolicyAction(str, Enum):
+    BROWSE     = "browse"      # list entity IDs in search results
+    VIEW       = "view"        # read entity fields
+    EDIT       = "edit"        # write entity fields (field-level check)
+    CREATE     = "create"      # create a new entity
+    SAVE       = "save"        # validate + commit PATCH changes
+    DELETE     = "delete"      # delete entity
+    TRANSITION = "transition"  # fire a workflow transition
+
+class MessageLevel(str, Enum):
+    CRITICAL = "critical"   # hard stop — blocks save and transition
+    ERROR    = "error"      # blocks transition/submission; allows save
+    WARNING  = "warning"    # shown to user; does not block
+    INFO     = "info"
+    DEBUG    = "debug"
+
+# ── Input ─────────────────────────────────────────────────────────────────────
+
+class PolicyUserGroup(Schema):
+    id: int; name: str
+
+class PolicyUser(Schema):
+    id: uuid.UUID
+    username: str
+    is_active: bool
+    is_staff: bool
+    groups: list[int]           # auth.Group PKs
+    permissions: list[str]      # Django permission codenames
+
+class PolicyFieldValue(Schema):
+    data_type: str
+    localized: bool
+    value: Any                  # typed per data_type (see §16.2.1)
+
+class PolicyEntityDocument(Schema):
+    id: uuid.UUID
+    type: str                   # "entity" or "submodel:<slug>"
+    config_version_id: int
+    config_id: int
+    type_id: Optional[int]      # null for submodel nodes
+    owner: Optional[dict]       # {id, username, is_active}
+    editors: list[dict]
+    current_state: Optional[str]
+    fields: dict[str, PolicyFieldValue]
+    children: dict[str, list["PolicyEntityDocument"]]
+    overflow_data: dict[str, Any]
+    created_at: str
+    updated_at: str
+
+PolicyEntityDocument.model_rebuild()
+
+class PolicyInput(Schema):
+    """Serialised as JSON and passed to regorus as `input`."""
+    action: PolicyAction
+    # Populated for TRANSITION only.
+    transition: Optional[str] = None
+    # Populated for field-level VIEW/EDIT checks; null = node-level.
+    field: Optional[str] = None
+    # Null for CREATE and BROWSE actions.
+    entity: Optional[PolicyEntityDocument] = None
+    user: PolicyUser
+    # For SAVE: the incoming changed_fields before they are written.
+    changed_fields: Optional[dict[str, Any]] = None
+    # The UDMType the entity belongs to (or will belong to for CREATE).
+    type_id: Optional[int] = None
+
+# ── Output ────────────────────────────────────────────────────────────────────
+
+# Localized message: {BCP-47 code → text}, at least one language.
+LocalizedMessage = Annotated[dict[LangCode, Annotated[str, Field(max_length=2_000)]], Field(min_length=1, max_length=_MAX_LANGUAGES)]
+
+class PolicyMessage(Schema):
+    level: MessageLevel
+    message: LocalizedMessage
+    field_slug: Optional[str] = None   # null = entity-level message
+
+class PolicyOutput(Schema):
+    """Assembled from regorus rule evaluations (§16.5)."""
+    # False → 403 Forbidden (no permission to attempt the action).
+    allow: bool
+    # Union of deny[] and messages[] from all loaded policy modules.
+    messages: list[PolicyMessage] = []
+    # Fields included in GET responses. Empty = all visible (when allow=True).
+    viewable_fields: list[str] = []
+    # Fields a PATCH may write. Empty = all editable (when allow=True).
+    editable_fields: list[str] = []
+
+# ── Policy CRUD ───────────────────────────────────────────────────────────────
+
+class PolicyCreateIn(Schema):
+    slug: Slug
+    source: Annotated[str, Field(min_length=1, max_length=500_000)]  # Rego source
+    model_config = {"extra": "forbid"}
+
+class PolicyUpdateIn(Schema):
+    source: Annotated[str, Field(min_length=1, max_length=500_000)]
+    model_config = {"extra": "forbid"}
+
+class PolicyOut(Schema):
+    slug: str
+    source: str
+
+class PolicyAssignIn(Schema):
+    """POST /api/udm/types/{id}/policies/ — add a policy to a UDMType."""
+    policy_slug: Slug
+    sort_order: int = Field(0, ge=0, le=_MAX_SORT_ORDER)
+    model_config = {"extra": "forbid"}
+```
+
 ---
 
 ## 9. Implementation Phases
@@ -3127,7 +3172,9 @@ class EditingNotAllowedError(Schema):
 - [ ] `ConfigLanguage` model (supported languages per `FieldConfig`)
 - [ ] `FieldDefinitionTranslation`, `WorkflowStateTranslation`, `WorkflowTransitionTranslation` models
 - [ ] `field_config` FK added to `UserDefinedModelType`
-- [ ] `WorkflowDefinition`, `WorkflowState`, `WorkflowTransition`, `TransitionMandatoryField`, `TransitionValidatorAssignment`, `TransitionAction` hierarchy models
+- [ ] `WorkflowDefinition`, `WorkflowState`, `WorkflowTransition`, `TransitionAction` hierarchy models
+- [ ] `Policy` model + `UserDefinedModelTypePolicy` through-table + M2M on `UserDefinedModelType`
+- [ ] Policy CRUD endpoints (`/api/udm/policies/`) + UDMType policy assignment endpoints
 - [ ] `SingleFieldValidationRule` root (+ `clean()` type-check) + all concrete single-field subclasses including `RequiredInLanguageRule`
 - [ ] `AllowedMimeTypeEntry` child model
 - [ ] `MultiFieldValidationRule` root + `MultiFieldRuleAssociation` + concrete subclasses
@@ -3160,7 +3207,8 @@ class EditingNotAllowedError(Schema):
 - [ ] `UserDefinedModelEntityNode.to_policy_document()` + `build_policy_input()` serialiser and `GET /api/udm/entities/{id}/policy-document/` endpoint (§16.1–16.2)
 - [ ] `authz` module embedding regorus: startup policy load, per-request `clone()`+eval, `allows()` / `viewable_fields()` / `editable_fields()` (§16.3)
 - [ ] Enforce authz at every decision point (§16.4): view/create/delete node, GET field filtering, PATCH per-field gating (before validation), transition check in §15.1 step 4
-- [ ] Seed `.rego` policies reproducing current permissions (owner/editor edit in editable states, reviewer/staff visibility) + tests using the policy-document endpoint
+- [ ] `evaluate_policy()` evaluator (§16.5): build per-type regorus engine, evaluate all six rules, return `PolicyOutput`
+- [ ] Seed `.rego` policies reproducing current permissions (owner/editor edit in editable states, reviewer/staff visibility, transition validation) + tests using the policy-document endpoint
 
 ### Phase 4 — Migration system
 - [ ] `UserDefinedModelEntityMigration` + `MigrationFieldMapping` models (with `bulk_plan` FK)
