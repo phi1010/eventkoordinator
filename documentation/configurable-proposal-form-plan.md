@@ -59,6 +59,14 @@
 - Rich-text/markdown edits store the full old and new strings for client-side diff rendering → §13
 - Edit history is retained indefinitely → §13
 
+### Localisation
+- Every `FieldDefinition` has a single language-independent `slug` key; its human-readable `label` and `help_text` can be translated into any number of languages via `FieldDefinitionTranslation` rows → §2.7
+- `WorkflowState` and `WorkflowTransition` labels follow the same translation pattern → §2.7
+- Supported languages are defined per `FieldConfig` as `ConfigLanguage` rows; one language is marked as the default fallback → §2.7
+- Any field type (including file and image) can be made localized by setting `is_localized = True` on its `FieldDefinition`; a localized field stores one `FieldValue` per language using the same field definition and the same validators → §2.1, §2.3, §2.7
+- Validators apply independently to each language's value; per-language required-ness is expressed with a `RequiredInLanguageRule` → §2.5, §2.7, §4
+- The PATCH payload uses a `{language_code: value}` dict for localized fields; omitting a language leaves that language's stored value untouched → §6, §12
+
 ### Concurrent write safety
 - All relevant rows are locked (`SELECT FOR UPDATE NOWAIT`) before any validation runs, and locks are held through the write → §14
 - Validation results are never cached across a transaction boundary → §14.1
@@ -95,6 +103,8 @@ applies to proposals and all submodel instances through a shared base model.
 | **FieldEdit** | One changed field within an EditGroup (old value → new value) |
 | **ProposalMigration** | A recorded move of one Proposal to a different call / config version |
 | **BulkMigrationPlan** | A staff-configured mapping applied to many proposals at once (config switch or republish) |
+| **ConfigLanguage** | A supported BCP-47 language code registered on a `FieldConfig`; one is marked as default fallback |
+| **FieldDefinitionTranslation** | A translated `label` / `help_text` for one `FieldDefinition` in one language |
 | **Validation lock set** | The minimal set of rows that must be locked before validation can be treated as authoritative for a given write |
 
 ---
@@ -211,11 +221,16 @@ class FieldDefinition(HistoricalMetaBase):
 
     version         = models.ForeignKey(ConfigVersion, on_delete=models.CASCADE,
                                         related_name="field_definitions")
-    slug            = models.SlugField(max_length=80)  # stable identifier for migration mapping
+    # slug is the language-independent machine key; never translated.
+    slug            = models.SlugField(max_length=80)
+    # label / help_text are the default-language fallbacks; per-language
+    # translations live in FieldDefinitionTranslation rows (see §2.7).
     label           = models.CharField(max_length=200)
     help_text       = models.TextField(blank=True)
     data_type       = models.CharField(max_length=30, choices=DataType)
     sort_order      = models.PositiveSmallIntegerField(default=0)
+    # When True, one FieldValue row is stored per language (see §2.7).
+    is_localized    = models.BooleanField(default=False)
 
     # For SUBMODEL_LIST / SUBMODEL_SELECT: the config version that defines sub-fields.
     # Null for all other types.
@@ -369,12 +384,19 @@ class FieldValue(MetaBase):
                                    related_name="field_values")
     field      = models.ForeignKey(FieldDefinition, on_delete=models.PROTECT,
                                    related_name="values")
+    # BCP-47 language code for localized fields (field.is_localized=True).
+    # Empty string for non-localized fields — this lets a single unique
+    # constraint cover both cases without a nullable column.
+    language   = models.CharField(max_length=10, default="")
     # Scalar types (text, number, bool, date, datetime, time, select) stored here.
     value      = models.JSONField(null=True, blank=True)
 
     class Meta:
         constraints = [
-            UniqueConstraint(fields=["node", "field"], name="unique_value_per_node_field")
+            UniqueConstraint(
+                fields=["node", "field", "language"],
+                name="unique_value_per_node_field_language",
+            )
         ]
 
     def clean(self):
@@ -851,6 +873,154 @@ WorkflowDefinition ──1:N── WorkflowState
 
 ---
 
+### 2.7 Localisation
+
+#### Supported languages per FieldConfig
+
+Languages are defined once at the `FieldConfig` level and inherited by all its
+`ConfigVersion`s. They determine which language tabs the frontend shows on
+localized fields.
+
+```python
+class ConfigLanguage(MetaBase):
+    config      = models.ForeignKey(FieldConfig, on_delete=models.CASCADE,
+                                    related_name="languages")
+    code        = models.CharField(max_length=10)   # BCP-47, e.g. "en", "de"
+    label       = models.CharField(max_length=100)  # display name, e.g. "Deutsch"
+    is_default  = models.BooleanField(default=False)
+    sort_order  = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["config", "code"],
+                             name="unique_language_per_config"),
+            UniqueConstraint(fields=["config"],
+                             condition=Q(is_default=True),
+                             name="one_default_language_per_config"),
+        ]
+```
+
+The default language is used as the fallback when no translation exists for a
+requested language, and as the display language in contexts that show only one value.
+
+#### Translatable labels
+
+`FieldDefinition.label` and `FieldDefinition.help_text` are the **default-language
+fallbacks**. Per-language overrides live in `FieldDefinitionTranslation`:
+
+```python
+class FieldDefinitionTranslation(MetaBase):
+    field     = models.ForeignKey(FieldDefinition, on_delete=models.CASCADE,
+                                  related_name="translations")
+    language  = models.CharField(max_length=10)   # must be in config.languages
+    label     = models.CharField(max_length=200)
+    help_text = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["field", "language"],
+                             name="unique_label_translation_per_field_language")
+        ]
+```
+
+The same pattern applies to `WorkflowState` and `WorkflowTransition` via
+`WorkflowStateTranslation` and `WorkflowTransitionTranslation` (identical
+structure: FK to the parent + `language` + `label`).
+
+#### Localized field values
+
+When `FieldDefinition.is_localized = True`, the field stores one `FieldValue` row
+per language using the `language` column added in §2.3. For non-localized fields
+`language = ""`. All field types — including `image` and `file` — support
+`is_localized`; a localized image field stores a separate `FileAttachment` chain
+per language.
+
+The same `FieldDefinition` and all its attached `SingleFieldValidationRule` /
+`MultiFieldValidationRule` instances apply to **every language's value
+independently**. There are no separate rule sets per language.
+
+#### Per-language required-ness
+
+A new single-field rule subclass expresses "this field must be non-empty in a
+specific language":
+
+```python
+class RequiredInLanguageRule(SingleFieldValidationRule):
+    """Field must be non-empty for `language`; other languages are not checked."""
+    APPLICABLE_TYPES = frozenset(DataType) - {
+        DataType.SUBMODEL_SELECT, DataType.SUBMODEL_LIST
+    }
+    language = models.CharField(max_length=10)
+```
+
+This is the recommended way to require English and German independently while
+leaving other languages optional. The base `RequiredRule` on a localized field
+means "every configured language must have a non-empty value" — it runs once per
+language row found.
+
+#### PATCH payload for localized fields
+
+For localized fields the value in `changed_fields` is a `{language_code: value}`
+dict. Languages absent from the dict are left untouched. To clear one language's
+value pass `null` for that key; to clear all languages at once pass `null` as the
+top-level value.
+
+```jsonc
+{
+  "changed_fields": {
+    // non-localized field — same format as always
+    "duration_days": 3,
+
+    // localized text field — supply only the changed languages
+    "abstract": {
+      "en": "English abstract text",
+      "de": "Deutsches Abstract"
+    },
+
+    // clear one language value
+    "abstract": { "fr": null },
+
+    // clear all language values at once
+    "abstract": null
+  }
+}
+```
+
+#### Lock set for localized fields
+
+When a localized field slug is in `changed_fields`, `_compute_validation_lock_set`
+(§14.4) locks the `FieldValue` rows for **all languages** of that field (not just
+the ones included in the payload). This ensures `RequiredInLanguageRule` sees a
+consistent snapshot of the full language set during validation.
+
+#### Config schema representation
+
+The config JSON schema (§6) includes localized labels and the list of supported
+languages:
+
+```jsonc
+{
+  "version_id": 42,
+  "languages": [
+    { "code": "en", "label": "English", "is_default": true },
+    { "code": "de", "label": "Deutsch",  "is_default": false }
+  ],
+  "fields": [
+    {
+      "id": 7,
+      "slug": "abstract",
+      "is_localized": true,
+      "label": { "en": "Abstract", "de": "Zusammenfassung" },
+      "help_text": { "en": "...", "de": "..." },
+      "data_type": "text_markdown",
+      ...
+    }
+  ]
+}
+```
+
+---
+
 ## 3. Config Versioning Lifecycle
 
 ```
@@ -922,16 +1092,29 @@ def _validate(self, context: str):  # context = "save" or "submit"
     for rule in SingleFieldValidationRule.objects.filter(
         field__version=self.config_version, **filter_kwarg
     ).select_related("field"):
-        value = self.get_field_value(rule.field.slug)
-        for msg in rule.get_real_instance().validate(value):
-            errors[rule.field.slug].append(msg)
+        if rule.field.is_localized:
+            # Run the rule independently for each stored language value.
+            for fv in self.field_values.filter(field=rule.field):
+                for msg in rule.get_real_instance().validate(fv.value):
+                    errors[f"{rule.field.slug}[{fv.language}]"].append(msg)
+        else:
+            value = self.get_field_value(rule.field.slug)
+            for msg in rule.get_real_instance().validate(value):
+                errors[rule.field.slug].append(msg)
 
     # Multi-field rules — one DB query with prefetch
     for rule in MultiFieldValidationRule.objects.filter(
         config_version=self.config_version, **filter_kwarg
     ).prefetch_related("associations__field"):
+        # Multi-field rules receive non-localized values only; localized fields
+        # are passed as {language: value} dicts so the rule can inspect them.
         field_values = {
-            a.field.slug: self.get_field_value(a.field.slug)
+            a.field.slug: (
+                {fv.language: fv.value
+                 for fv in self.field_values.filter(field=a.field)}
+                if a.field.is_localized
+                else self.get_field_value(a.field.slug)
+            )
             for a in rule.associations.all()
         }
         msg = rule.get_real_instance().validate(field_values)
@@ -1801,10 +1984,12 @@ configs that have not yet been assigned a workflow.
 ## 9. Implementation Phases
 
 ### Phase 1 — Config infrastructure (no UI changes yet)
-- [ ] `FieldConfig`, `ConfigVersion` (+ `workflow` FK), `FieldDefinition` models + migrations
+- [ ] `FieldConfig`, `ConfigVersion` (+ `workflow` FK), `FieldDefinition` (+ `is_localized`) models + migrations
+- [ ] `ConfigLanguage` model (supported languages per `FieldConfig`)
+- [ ] `FieldDefinitionTranslation`, `WorkflowStateTranslation`, `WorkflowTransitionTranslation` models
 - [ ] `field_config` FK added to `Call`
 - [ ] `WorkflowDefinition`, `WorkflowState`, `WorkflowTransition`, `TransitionMandatoryField`, `TransitionValidatorAssignment`, `TransitionAction` hierarchy models
-- [ ] `SingleFieldValidationRule` root (+ `clean()` type-check) + all concrete single-field subclasses
+- [ ] `SingleFieldValidationRule` root (+ `clean()` type-check) + all concrete single-field subclasses including `RequiredInLanguageRule`
 - [ ] `AllowedMimeTypeEntry` child model
 - [ ] `MultiFieldValidationRule` root + `MultiFieldRuleAssociation` + concrete subclasses
 - [ ] `ConfigVersion.publish()` atomic method: deep-copies field defs, rules, and workflow into new DRAFT; auto-creates `BulkMigrationPlan` stubs for stale proposals
@@ -1814,7 +1999,7 @@ configs that have not yet been assigned a workflow.
 
 ### Phase 2 — ProposalNode base + FieldValue storage
 - [ ] `ProposalNode` (+ `current_state` FK), `Proposal` (MTI), `SubmodelInstance` models
-- [ ] `FieldValue`, `FileAttachment` (soft-delete with `deleted_at`) models
+- [ ] `FieldValue` (+ `language` column, updated unique constraint), `FileAttachment` (soft-delete with `deleted_at`) models
 - [ ] `validate_for_save()` / `validate_for_submit()` on `ProposalNode`
 - [ ] `FieldValue.clean()` data-type enforcement
 - [ ] Data migration: import existing hardcoded fields as `FieldDefinition` + `SingleFieldValidationRule` instances; convert existing `Proposal` / `Speaker` rows
@@ -1842,9 +2027,11 @@ configs that have not yet been assigned a workflow.
 - [ ] Overflow data admin view
 
 ### Phase 5 — Config and workflow UI (staff)
-- [ ] FieldConfig create/edit/assign to calls; workflow designer (states + transitions)
+- [ ] FieldConfig create/edit/assign to calls; language management (add/remove/reorder `ConfigLanguage`)
+- [ ] Workflow designer (states + transitions) with per-language label editor
 - [ ] Transition editor: permissions, validator assignments, mandatory fields, pre/post actions
-- [ ] Rule editor: add / edit / delete / copy single-field rules; multi-field rule picker
+- [ ] Rule editor: add / edit / delete / copy single-field rules (including `RequiredInLanguageRule`); multi-field rule picker
+- [ ] `FieldDefinition` form with `is_localized` toggle and per-language label/help_text editing
 - [ ] Publish flow with diff preview (fields, rules, workflow changes) + bulk migration notice
 - [ ] Datatype-change dry-run endpoint
 - [ ] Bulk migration mapping UI
