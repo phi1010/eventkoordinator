@@ -607,11 +607,12 @@ class FieldEdit(MetaBase):
                                       null=True, blank=True, related_name="+")
 ```
 
-**Creation rule:** An `EditGroup` (with its `FieldEdit` children) is created inside
-the same `transaction.atomic()` block as the `FieldValue` updates. If no field
-actually changed (the sent value equals the stored value), no `EditGroup` is created
-for that field — the group is only persisted if at least one `FieldEdit` would be
-non-empty.
+**Creation rule:** One `EditGroup` is created per PATCH call inside the same
+`transaction.atomic()` block. It covers all changes in that call — root-entity
+scalar writes, and any submodel creates/updates/deletes triggered by inline
+`submodel_list` operations (§6, §12). `FieldEdit`s for submodel field changes
+carry `affected_node` pointing to the relevant `SubmodelInstance` so the history
+UI can label them. If nothing actually changed the `EditGroup` is not persisted.
 
 **Immutability:** `EditGroup` and `FieldEdit` rows are never updated after creation.
 They are deleted only if the parent `UserDefinedModelEntityNode` is deleted.
@@ -1166,7 +1167,7 @@ class FieldDefaultValue(TypedValue, MetaBase):
 
 **Materialisation on create**
 
-`POST /api/udm/entities/` and `POST /api/udm/entities/{id}/nodes/` build the new node's
+`POST /api/udm/entities/` (root creation) and `op:"create"` submodel operations in a PATCH build the new node's
 `FieldValue` rows by copying every `FieldDefaultValue` of the node's
 `ConfigVersion` (one row per language for localized fields). Fields without a
 default are simply left unset. Materialisation runs inside the create transaction;
@@ -1674,35 +1675,62 @@ in the meantime — are never overwritten.
 // PATCH /api/udm/entities/{id}/
 {
   "changed_fields": {
-    "abstract":      "New abstract text",
-    "duration_days": 3,
-    "photo":         { "staging_id": "a1b2c3d4-..." },  // new file
-    "internal_notes": null                               // clear the field
+    // ── Scalar / file / localized fields ─────────────────────────────────
+    "abstract":       "New abstract text",
+    "duration_days":  3,
+    "photo":          { "staging_id": "a1b2c3d4-..." },  // promote staged file
+    "internal_notes": null,                               // clear the field
+
+    // ── submodel_list field — list of operations on child instances ───────
+    "speakers": [
+      // Create a new instance; sort_order is optional (appended if omitted).
+      { "op": "create", "sort_order": 0,
+        "fields": { "name": "Alice", "bio": "Short bio" } },
+
+      // Partial update of an existing instance — only named fields change.
+      { "op": "update", "id": "550e8400-e29b-41d4-a716-446655440000",
+        "fields": { "bio": "Longer bio now" } },
+
+      // Delete an existing instance.
+      { "op": "delete", "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8" }
+    ]
   }
 }
 ```
 
-Rules:
+Rules for scalar / file / localized fields (unchanged):
 - **Omit** a key → field is not touched.
 - **`null`** → field value is cleared (and its `FileAttachment` deleted if present).
 - **`{ "staging_id": "..." }`** → stage is promoted to `FileAttachment`;
   old attachment is replaced and deleted in the same transaction.
 - Any other value → treated as the new scalar value for the field.
 
-The response body always returns the **complete current state** of all fields on
-the node (including fields not touched by this save), so the frontend can update
-its `savedValue` store without a separate GET.
+Rules for `submodel_list` fields:
+- The value must be a list of operation objects; omitting the key leaves all child
+  instances untouched.
+- `"op": "create"` — creates a new `SubmodelInstance`; `fields` follows the same
+  partial-update semantics as the root entity PATCH (only provided keys are set;
+  defaults from §2.8 are applied first). `sort_order` defaults to one past the
+  current maximum if omitted.
+- `"op": "update"` — applies a partial field update to the instance identified by
+  `id`; fields absent from `fields` are left untouched.
+- `"op": "delete"` — deletes the instance identified by `id`; `fields` must be absent.
+- Instance IDs not mentioned in the list are left entirely untouched.
+- Submodel fields can themselves be `submodel_list` fields; nesting is handled
+  recursively within the same transaction.
+- The entire PATCH — root field writes and all submodel operations — executes in one
+  `transaction.atomic()` under the single root-entity lock (§14.2). If any
+  operation fails validation the whole PATCH is rolled back.
 
-### Submodel instances (nested endpoints)
+The response body always returns the **complete current state** of all fields on the
+root entity and all its child nodes, so the frontend can refresh its full saved-state
+in one round-trip.
 
-Each submodel operation creates its own `EditGroup` on the child node and sets
-`root_proposal` so it appears in the user_defined_model_entity's history.
+### Submodel instances
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/udm/entities/{id}/nodes/` | Create child SubmodelInstance (materialises submodel field defaults §2.8; NODE_ADDED edit recorded) |
-| `PATCH` | `/api/udm/entities/{id}/nodes/{nid}/` | Partial update of child (same format as user_defined_model_entity PATCH) |
-| `DELETE` | `/api/udm/entities/{id}/nodes/{nid}/` | Delete child (NODE_REMOVED edit recorded) |
+Submodel create / update / delete operations are sent inline in the root entity
+PATCH (see the `submodel_list` rules above). There are no separate per-node
+endpoints. All operations share the root-entity lock and commit in one transaction.
 
 ### Single-user_defined_model_entity migration
 
@@ -1860,24 +1888,43 @@ single `transaction.atomic()` block. The root-user_defined_model_entity lock is 
 validation so that the validated state is guaranteed to still hold when the write
 executes. See §14 for the full locking design.
 
-1. Parse `changed_fields` from the request body.
+1. Parse `changed_fields` from the request body; split into **scalar entries**
+   (non-submodel fields) and **submodel-list entries** (fields whose `data_type`
+   is `submodel_list`, whose values are lists of operation objects).
 2. Open `transaction.atomic()`.
-3. **Lock the root `UserDefinedModelEntity` row** (`SELECT FOR UPDATE NOWAIT, of=("self",)`; §14.2).
-   For a submodel PATCH the root is found by walking `parent_node` up to the
-   `UserDefinedModelEntity`. This single lock serialises the whole tree — no `FieldValue` rows
-   are locked.
-4. **Authorize the edit** — compute `authz.editable_fields(node, user)` (§16.3) and
-   reject the whole PATCH with `403` (naming the offending slugs) if any key in
-   `changed_fields` is not in that set. Runs after the lock, before any write.
-5. Load current `FieldValue` rows (these are the `old_value` entries for history).
-6. Run `validate_for_save()` — authoritative because the root lock blocks any
-   concurrent write to this tree.
-7. Apply writes (create/update/delete `FieldValue` rows, promote staging files).
-8. Create `EditGroup` + `FieldEdit` rows for fields whose value actually changed.
-9. Return the complete current state of **all** fields on the node.
+3. **Lock the root `UserDefinedModelEntity` row** (`SELECT FOR UPDATE NOWAIT,
+   of=("self",)`; §14.2). This single lock serialises the entire tree for the
+   duration of the PATCH — no `FieldValue` or node rows need separate locks.
+4. **Authorize scalar fields** — compute `authz.editable_fields(node, user)`
+   (§16.3) and reject the whole PATCH `403` if any scalar key in `changed_fields`
+   is not in that set.
+5. **Authorize submodel operations** — for each submodel-list entry, verify the
+   user holds the `create` / `edit` / `delete` permission on the parent node for
+   the respective op kind; reject `403` if any op is unauthorized.
+6. Load current `FieldValue` rows for the root node (for history old-values).
+7. Run `validate_for_save()` on the root node.
+8. Apply scalar writes (create/update/delete `FieldValue` rows, promote staging
+   files) on the root node.
+9. **Process submodel-list operations in declaration order:**
+   - `create` — instantiate a new `SubmodelInstance`, materialise its field
+     defaults (§2.8), then apply the operation's `fields` as a partial update;
+     run `validate_for_save()` on the new instance.
+   - `update` — look up the addressed instance (404 if not found or belongs to a
+     different parent); apply `fields` as a partial update; run
+     `validate_for_save()` on the instance.
+   - `delete` — look up and delete the addressed instance and all its descendants.
+   - Each operation's `fields` may itself contain `submodel_list` entries;
+     recurse into step 9 for those.
+10. Create **one** `EditGroup` (on the root entity, `root_proposal` = self) covering
+    all changes from this PATCH: `FieldEdit` rows for root scalar changes, plus
+    `NODE_ADDED` / `NODE_REMOVED` / `NODE_REORDERED` edits and per-field
+    `FIELD_VALUE` edits (with `affected_node` set) for each submodel op.
+11. Return the complete current state of **all** fields on the root entity and all
+    its child nodes.
 
-Fields absent from `changed_fields` are never written; concurrent edits by another
-user to those fields are preserved exactly as-is.
+Fields and submodel instances absent from `changed_fields` / the operations list
+are never written; concurrent changes by another user to those fields or instances
+are preserved exactly as-is.
 
 ### Frontend per-field state model
 
@@ -2338,8 +2385,8 @@ request, not one per field.
 | Action | Enforced in | Rule | On deny |
 |---|---|---|---|
 | **view node** | `GET /api/udm/entities/{id}/`, and list querysets | `allow` (`action="view"`) | 404 (list: filtered out) |
-| **create node** | `POST /api/udm/entities/`, `POST …/nodes/` | `allow` (`action="create"`) | 403 |
-| **delete node** | `DELETE …/{id}/`, `DELETE …/nodes/{nid}/` | `allow` (`action="delete"`) | 403 |
+| **create node** | `POST /api/udm/entities/` (root); `op:"create"` in PATCH (submodel) | `allow` (`action="create"`) | 403 |
+| **delete node** | `DELETE /api/udm/entities/{id}/` (root); `op:"delete"` in PATCH (submodel) | `allow` (`action="delete"`) | 403 |
 | **view field** | GET serialiser | `viewable_fields` | field omitted from response |
 | **edit field** | PATCH (§12), per slug in `changed_fields` | `editable_fields` | 403 listing the rejected slugs |
 | **transition** | §15.1 step 4 | `allow` (`action="transition"`, `transition=<name>`) | 403 |
@@ -2359,6 +2406,632 @@ policy is present it is authoritative.
 The serialiser is reusable for offline policy authoring and tests:
 `GET /api/udm/entities/{id}/policy-document/` (staff-only) returns the §16.1 document so
 it can be fed to `regorus eval` / unit tests as `input` while writing `.rego` rules.
+
+---
+
+## 17. Pydantic API Schemas (`userdefinedmodel/schemas.py`)
+
+All `*In` schemas (request bodies) carry `model_config = {"extra": "forbid"}` and
+hard field limits designed to prevent DoS via oversized payloads or deeply nested
+structures. `*Out` schemas are permissive — they are server-generated and need no
+extra-field guard.
+
+### 17.1 Shared limits and type aliases
+
+```python
+"""
+Pydantic / Django-Ninja schemas for the userdefinedmodel API (/api/udm/).
+Lives in backend/userdefinedmodel/schemas.py.
+"""
+from __future__ import annotations
+
+import uuid
+from decimal import Decimal
+from enum import Enum
+from typing import Annotated, Any, Literal, Optional
+
+from ninja import Schema
+from pydantic import Field, field_validator, model_validator
+
+# ── Cardinality / length caps (tune here to adjust the DoS profile) ───────────
+
+_MAX_SLUG_LEN         = 80
+_MAX_LABEL_LEN        = 200
+_MAX_HELP_TEXT_LEN    = 2_000
+_MAX_DESCRIPTION_LEN  = 5_000
+_MAX_NOTES_LEN        = 2_000
+_MAX_ADMIN_LABEL_LEN  = 200
+_MAX_LANG_CODE_LEN    = 10        # BCP-47, e.g. "en", "zh-Hant"
+_MAX_PERM_CODE_LEN    = 200
+_MAX_STATE_NAME_LEN   = 100
+_MAX_TRANS_NAME_LEN   = 100
+_MAX_MIME_LEN         = 100
+_MAX_REGEX_LEN        = 500
+_MAX_FAIL_MSG_LEN     = 200
+_MAX_POLICY_RULE_LEN  = 300
+_MAX_SORT_ORDER       = 32_767    # fits PositiveSmallIntegerField
+
+# List-cardinality caps — prevent one request from causing unbounded DB work
+_MAX_FIELDS           = 200       # FieldDefinitions per ConfigVersion
+_MAX_LANGUAGES        = 50        # ConfigLanguages per FieldConfig
+_MAX_CHOICES          = 500       # options in a select-type field
+_MAX_CHOICE_LEN       = 200       # each choice key
+_MAX_STATES           = 100       # WorkflowStates per WorkflowDefinition
+_MAX_TRANSITIONS      = 200       # WorkflowTransitions per WorkflowDefinition
+_MAX_VALIDATORS       = 100       # TransitionValidatorAssignments per transition
+_MAX_MANDATORY_FLDS   = 100       # TransitionMandatoryFields per transition
+_MAX_RULES            = 50        # single-field rules per FieldDefinition
+_MAX_MULTI_RULES      = 50        # multi-field rules per ConfigVersion
+_MAX_MIME_ENTRIES     = 50        # entries in AllowedMimeTypesRule
+_MAX_GROUP_IDS        = 100       # limit_to_group_ids in user/group type_config
+_MAX_CHANGED_FIELDS   = 200       # keys in a PATCH changed_fields payload
+_MAX_MAPPING_ENTRIES  = 300       # field mappings in a migration plan
+
+# Numeric bounds for type_config and rule values
+_MAX_TEXT_LENGTH      = 50_000    # max configurable max_length for text fields
+_MAX_FILE_BYTES       = 500_000_000   # 500 MB hard ceiling for MaxFileSizeRule
+_MAX_ITEMS_RULE       = 10_000    # min/max items for list-type fields
+
+# ── Reusable annotated types ──────────────────────────────────────────────────
+
+Slug     = Annotated[str, Field(min_length=1, max_length=_MAX_SLUG_LEN,
+                                 pattern=r"^[a-z][a-z0-9_-]*$")]
+LangCode = Annotated[str, Field(min_length=2, max_length=_MAX_LANG_CODE_LEN,
+                                 pattern=r"^[a-z]{2,3}(-[A-Za-z0-9]+)*$")]
+Label    = Annotated[str, Field(min_length=1, max_length=_MAX_LABEL_LEN)]
+HelpText = Annotated[str, Field(max_length=_MAX_HELP_TEXT_LEN)]
+
+# Localized maps: {BCP-47 code → text}.  Pydantic v2 validates key + value types.
+LocalizedLabel    = Annotated[dict[LangCode, Label],    Field(min_length=1, max_length=_MAX_LANGUAGES)]
+LocalizedHelpText = Annotated[dict[LangCode, HelpText], Field(max_length=_MAX_LANGUAGES)]
+```
+
+### 17.2 Enums
+
+```python
+class DataType(str, Enum):
+    TEXT_SHORT = "text_short"; TEXT_LONG = "text_long"
+    TEXT_MARKDOWN = "text_markdown"; TEXT_RICHTEXT = "text_richtext"
+    INTEGER = "integer"; FLOAT = "float"; BOOLEAN = "boolean"
+    DATE = "date"; TIME = "time"; DATETIME = "datetime"
+    SELECT_SINGLE = "select_single"; SELECT_MULTI = "select_multi"
+    IMAGE = "image"; FILE = "file"
+    USER_SELECT = "user_select"; USER_SELECT_MULTI = "user_select_multi"
+    GROUP_SELECT = "group_select"; GROUP_SELECT_MULTI = "group_select_multi"
+    SUBMODEL_SELECT = "submodel_select"; SUBMODEL_LIST = "submodel_list"
+
+class ConfigVersionStatus(str, Enum):
+    DRAFT = "draft"; PUBLISHED = "published"; ARCHIVED = "archived"
+
+class MigrationAction(str, Enum):
+    MAP = "map"; DISCARD = "discard"; OVERFLOW = "overflow"
+
+class BulkMigrationStatus(str, Enum):
+    DRAFT = "draft"; RUNNING = "running"; DONE = "done"; PARTIAL = "partial"
+```
+
+### 17.3 TypeConfig models (input, one per data-type group)
+
+Each is used inside `FieldDefinitionIn.validate_type_config()` to validate the
+otherwise-untyped `type_config` dict according to the field's `data_type`.
+
+```python
+class TextTypeConfig(Schema):
+    max_length: Optional[int] = Field(None, ge=1, le=_MAX_TEXT_LENGTH)
+    renderer: Optional[Literal["markdown_wysiwyg", "markdown_preview", "plaintext"]] = None
+    model_config = {"extra": "forbid"}
+
+class NumberTypeConfig(Schema):
+    min: Optional[Decimal] = Field(None, ge=Decimal("-1e15"), le=Decimal("1e15"))
+    max: Optional[Decimal] = Field(None, ge=Decimal("-1e15"), le=Decimal("1e15"))
+    decimal_places: Optional[int] = Field(None, ge=0, le=10)
+    model_config = {"extra": "forbid"}
+
+class SelectTypeConfig(Schema):
+    choices: list[Annotated[str, Field(min_length=1, max_length=_MAX_CHOICE_LEN)]] = Field(
+        ..., min_length=1, max_length=_MAX_CHOICES
+    )
+    model_config = {"extra": "forbid"}
+
+class UserGroupTypeConfig(Schema):
+    limit_to_group_ids: Optional[list[int]] = Field(None, max_length=_MAX_GROUP_IDS)
+    model_config = {"extra": "forbid"}
+
+class SubmodelTypeConfig(Schema):
+    renderer: Optional[Literal["table", "list"]] = None
+    model_config = {"extra": "forbid"}
+
+# Dispatch table — None means the type accepts no type_config keys at all
+_TYPE_CONFIG_CLS: dict[DataType, type[Schema] | None] = {
+    DataType.TEXT_SHORT: TextTypeConfig,   DataType.TEXT_LONG: TextTypeConfig,
+    DataType.TEXT_MARKDOWN: TextTypeConfig, DataType.TEXT_RICHTEXT: TextTypeConfig,
+    DataType.INTEGER: NumberTypeConfig,    DataType.FLOAT: NumberTypeConfig,
+    DataType.BOOLEAN: None, DataType.DATE: None,
+    DataType.TIME: None,    DataType.DATETIME: None,
+    DataType.SELECT_SINGLE: SelectTypeConfig, DataType.SELECT_MULTI: SelectTypeConfig,
+    DataType.IMAGE: None,   DataType.FILE: None,
+    DataType.USER_SELECT: UserGroupTypeConfig, DataType.USER_SELECT_MULTI: UserGroupTypeConfig,
+    DataType.GROUP_SELECT: UserGroupTypeConfig, DataType.GROUP_SELECT_MULTI: UserGroupTypeConfig,
+    DataType.SUBMODEL_SELECT: SubmodelTypeConfig, DataType.SUBMODEL_LIST: SubmodelTypeConfig,
+}
+```
+
+### 17.4 Single-field validation rule schemas (input, discriminated union)
+
+```python
+class RequiredRuleIn(Schema):
+    type: Literal["required"]
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+
+class MinLengthRuleIn(Schema):
+    type: Literal["min_length"]
+    min_length: int = Field(..., ge=0, le=_MAX_TEXT_LENGTH)
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+
+class MaxLengthRuleIn(Schema):
+    type: Literal["max_length"]
+    max_length: int = Field(..., ge=1, le=_MAX_TEXT_LENGTH)
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+
+class RegexRuleIn(Schema):
+    type: Literal["regex"]
+    pattern: Annotated[str, Field(min_length=1, max_length=_MAX_REGEX_LEN)]
+    failure_message: Annotated[str, Field(max_length=_MAX_FAIL_MSG_LEN)] = ""
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+
+class MinValueRuleIn(Schema):
+    type: Literal["min_value"]
+    min_value: Decimal = Field(..., ge=Decimal("-1e15"), le=Decimal("1e15"))
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+
+class MaxValueRuleIn(Schema):
+    type: Literal["max_value"]
+    max_value: Decimal = Field(..., ge=Decimal("-1e15"), le=Decimal("1e15"))
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+
+class MinItemsRuleIn(Schema):
+    type: Literal["min_items"]
+    min_items: int = Field(..., ge=0, le=_MAX_ITEMS_RULE)
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+
+class MaxItemsRuleIn(Schema):
+    type: Literal["max_items"]
+    max_items: int = Field(..., ge=0, le=_MAX_ITEMS_RULE)
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+
+class MaxFileSizeRuleIn(Schema):
+    type: Literal["max_file_size"]
+    max_bytes: int = Field(..., ge=1, le=_MAX_FILE_BYTES)
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+
+class AllowedMimeTypesRuleIn(Schema):
+    type: Literal["allowed_mime_types"]
+    mime_types: list[Annotated[str, Field(min_length=1, max_length=_MAX_MIME_LEN)]] = Field(
+        ..., min_length=1, max_length=_MAX_MIME_ENTRIES
+    )
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+
+class RequiredInLanguageRuleIn(Schema):
+    type: Literal["required_in_language"]
+    language: LangCode
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+
+SingleFieldRuleIn = Annotated[
+    RequiredRuleIn | MinLengthRuleIn | MaxLengthRuleIn | RegexRuleIn
+    | MinValueRuleIn | MaxValueRuleIn | MinItemsRuleIn | MaxItemsRuleIn
+    | MaxFileSizeRuleIn | AllowedMimeTypesRuleIn | RequiredInLanguageRuleIn,
+    Field(discriminator="type"),
+]
+```
+
+### 17.5 Multi-field rule schemas (input)
+
+```python
+class MultiFieldRuleKind(str, Enum):
+    AT_LEAST_ONE = "at_least_one_required"
+    EXACTLY_ONE  = "exactly_one_required"
+    MUTUAL_EXCL  = "mutual_exclusion"
+
+class MultiFieldRuleIn(Schema):
+    kind: MultiFieldRuleKind
+    field_slugs: list[Slug] = Field(..., min_length=2, max_length=_MAX_FIELDS)
+    applies_to_save: bool = False
+    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
+    model_config = {"extra": "forbid"}
+```
+
+### 17.6 FieldDefinition schemas
+
+```python
+class FieldDefinitionIn(Schema):
+    slug: Slug
+    data_type: DataType
+    sort_order: int = Field(0, ge=0, le=_MAX_SORT_ORDER)
+    is_localized: bool = False
+    labels: LocalizedLabel
+    help_texts: LocalizedHelpText = Field(default_factory=dict)
+    type_config: dict[str, Any] = Field(default_factory=dict)
+    submodel_config_version_id: Optional[int] = None
+    rules: list[SingleFieldRuleIn] = Field(default_factory=list, max_length=_MAX_RULES)
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def validate_type_config(self) -> "FieldDefinitionIn":
+        cls = _TYPE_CONFIG_CLS[self.data_type]
+        if cls is None:
+            if self.type_config:
+                raise ValueError(f"{self.data_type} does not accept type_config")
+        else:
+            cls.model_validate(self.type_config)
+        submodel_types = {DataType.SUBMODEL_SELECT, DataType.SUBMODEL_LIST}
+        if self.data_type in submodel_types and self.submodel_config_version_id is None:
+            raise ValueError("submodel_config_version_id required for submodel types")
+        if self.data_type not in submodel_types and self.submodel_config_version_id is not None:
+            raise ValueError("submodel_config_version_id must be null for non-submodel types")
+        return self
+
+class FieldDefinitionOut(Schema):
+    id: int
+    slug: str
+    data_type: str
+    sort_order: int
+    is_localized: bool
+    label: dict[str, str]      # {lang_code: label} from FieldDefinitionTranslation rows
+    help_text: dict[str, str]  # {lang_code: help_text}
+    type_config: dict[str, Any]
+    submodel_config: Optional["ConfigVersionOut"] = None  # inlined for SUBMODEL_* types
+    default: Optional[Any] = None   # omitted when no FieldDefaultValue exists
+    save_rules: dict[str, Any]      # rule summary for frontend validation
+```
+
+### 17.7 Languages and FieldConfig schemas
+
+```python
+class ConfigLanguageIn(Schema):
+    code: LangCode
+    label: Label
+    is_default: bool = False
+    sort_order: int = Field(0, ge=0, le=_MAX_SORT_ORDER)
+    model_config = {"extra": "forbid"}
+
+class ConfigLanguageOut(Schema):
+    code: str; label: str; is_default: bool; sort_order: int
+
+class FieldConfigCreateIn(Schema):
+    name: Annotated[str, Field(min_length=1, max_length=_MAX_LABEL_LEN)]
+    description: Annotated[str, Field(max_length=_MAX_DESCRIPTION_LEN)] = ""
+    languages: list[ConfigLanguageIn] = Field(..., min_length=1, max_length=_MAX_LANGUAGES)
+    model_config = {"extra": "forbid"}
+
+    @field_validator("languages")
+    @classmethod
+    def exactly_one_default(cls, langs: list[ConfigLanguageIn]) -> list[ConfigLanguageIn]:
+        if sum(1 for l in langs if l.is_default) != 1:
+            raise ValueError("exactly one language must have is_default=True")
+        return langs
+
+class FieldConfigUpdateIn(Schema):
+    name: Optional[Annotated[str, Field(min_length=1, max_length=_MAX_LABEL_LEN)]] = None
+    description: Optional[Annotated[str, Field(max_length=_MAX_DESCRIPTION_LEN)]] = None
+    model_config = {"extra": "forbid"}
+
+class FieldConfigOut(Schema):
+    id: int; name: str; description: str
+    stale_entity_count: int
+    type_ids: list[int]   # UserDefinedModelType IDs referencing this config
+    languages: list[ConfigLanguageOut]
+```
+
+### 17.8 Workflow schemas
+
+```python
+class WorkflowStateIn(Schema):
+    name: Annotated[str, Field(min_length=1, max_length=_MAX_STATE_NAME_LEN,
+                                pattern=r"^[a-z][a-z0-9_-]*$")]
+    label: LocalizedLabel
+    is_initial: bool = False
+    allows_edit: bool = True
+    model_config = {"extra": "forbid"}
+
+class MandatoryFieldIn(Schema):
+    field_slug: Slug
+    required_value: Optional[Any] = None   # null = "must merely be non-empty"
+    sort_order: int = Field(0, ge=0, le=_MAX_SORT_ORDER)
+    model_config = {"extra": "forbid"}
+
+class ValidatorAssignmentIn(Schema):
+    # References a rule by its admin_label (unique within a ConfigVersion draft).
+    rule_admin_label: Annotated[str, Field(min_length=1, max_length=_MAX_ADMIN_LABEL_LEN)]
+    sort_order: int = Field(0, ge=0, le=_MAX_SORT_ORDER)
+    model_config = {"extra": "forbid"}
+
+class WorkflowTransitionIn(Schema):
+    name: Annotated[str, Field(min_length=1, max_length=_MAX_TRANS_NAME_LEN,
+                                pattern=r"^[a-z][a-z0-9_-]*$")]
+    label: LocalizedLabel
+    from_state: Optional[Annotated[str, Field(max_length=_MAX_STATE_NAME_LEN)]] = None
+    to_state: Annotated[str, Field(min_length=1, max_length=_MAX_STATE_NAME_LEN)]
+    permission_codename: Annotated[str, Field(max_length=_MAX_PERM_CODE_LEN)] = ""
+    policy_rule: Annotated[str, Field(max_length=_MAX_POLICY_RULE_LEN)] = ""
+    mandatory_fields: list[MandatoryFieldIn] = Field(default_factory=list, max_length=_MAX_MANDATORY_FLDS)
+    validators: list[ValidatorAssignmentIn] = Field(default_factory=list, max_length=_MAX_VALIDATORS)
+    model_config = {"extra": "forbid"}
+
+class WorkflowDefinitionIn(Schema):
+    name: Annotated[str, Field(min_length=1, max_length=_MAX_LABEL_LEN)]
+    description: Annotated[str, Field(max_length=_MAX_DESCRIPTION_LEN)] = ""
+    states: list[WorkflowStateIn] = Field(..., min_length=1, max_length=_MAX_STATES)
+    transitions: list[WorkflowTransitionIn] = Field(default_factory=list, max_length=_MAX_TRANSITIONS)
+    model_config = {"extra": "forbid"}
+
+    @field_validator("states")
+    @classmethod
+    def exactly_one_initial(cls, states: list[WorkflowStateIn]) -> list[WorkflowStateIn]:
+        if sum(1 for s in states if s.is_initial) != 1:
+            raise ValueError("exactly one state must have is_initial=True")
+        return states
+
+class WorkflowStateOut(Schema):
+    name: str; label: dict[str, str]; is_initial: bool; allows_edit: bool
+
+class MandatoryFieldOut(Schema):
+    field_slug: str; required_value: Optional[Any]
+
+class ValidatorOut(Schema):
+    field_slug: str; rule: dict[str, Any]
+
+class WorkflowTransitionOut(Schema):
+    name: str; label: dict[str, str]
+    from_state: Optional[str]; to_state: str
+    permission_codename: str
+    mandatory_fields: list[MandatoryFieldOut]
+    validators: list[ValidatorOut]
+
+class WorkflowOut(Schema):
+    initial_state: str
+    states: list[WorkflowStateOut]
+    transitions: list[WorkflowTransitionOut]
+```
+
+### 17.9 ConfigVersion schemas
+
+```python
+class ConfigDraftIn(Schema):
+    """Body for PUT /api/udm/configs/{cid}/versions/draft/ – full replacement."""
+    notes: Annotated[str, Field(max_length=_MAX_NOTES_LEN)] = ""
+    fields: list[FieldDefinitionIn] = Field(..., min_length=0, max_length=_MAX_FIELDS)
+    multi_field_rules: list[MultiFieldRuleIn] = Field(default_factory=list, max_length=_MAX_MULTI_RULES)
+    workflow: Optional[WorkflowDefinitionIn] = None
+    model_config = {"extra": "forbid"}
+
+    @field_validator("fields")
+    @classmethod
+    def unique_slugs(cls, fields: list[FieldDefinitionIn]) -> list[FieldDefinitionIn]:
+        seen: set[str] = set()
+        for f in fields:
+            if f.slug in seen:
+                raise ValueError(f"duplicate slug '{f.slug}'")
+            seen.add(f.slug)
+        return fields
+
+class ConfigVersionOut(Schema):
+    """Shape returned by GET .../versions/published/ and .../versions/draft/."""
+    version_id: int
+    status: str
+    notes: str
+    published_at: Optional[str]
+    languages: list[ConfigLanguageOut]
+    fields: list[FieldDefinitionOut]
+    workflow: Optional[WorkflowOut] = None
+
+FieldDefinitionOut.model_rebuild()  # resolve forward ref to ConfigVersionOut
+```
+
+### 17.10 Entity (UserDefinedModelEntity) operation schemas
+
+```python
+class EntityCreateIn(Schema):
+    """POST /api/udm/entities/"""
+    user_defined_model_type_id: int
+    model_config = {"extra": "forbid"}
+
+class EntityPatchIn(Schema):
+    """PATCH /api/udm/entities/{id}/ — only send changed fields.
+    Values may be: null (clear), scalar, {lang: value} (localized),
+    {"staging_id": "…"} (file), or list (multi-select).
+    Per-field type validation is deferred to the business logic layer
+    (requires the live FieldDefinition rows). The dict size is bounded
+    to prevent unbounded DB lookups in a single request."""
+    changed_fields: dict[
+        Annotated[str, Field(min_length=1, max_length=_MAX_SLUG_LEN)],
+        Any,
+    ] = Field(..., max_length=_MAX_CHANGED_FIELDS)
+    model_config = {"extra": "forbid"}
+
+class TransitionIn(Schema):
+    """POST /api/udm/entities/{id}/transition/"""
+    transition: Annotated[str, Field(min_length=1, max_length=_MAX_TRANS_NAME_LEN)]
+    model_config = {"extra": "forbid"}
+
+class SubmodelOpKind(str, Enum):
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+
+class SubmodelOperationIn(Schema):
+    """One element in the list value of a submodel_list field in EntityPatchIn.
+    The 'fields' dict follows the same partial-update rules as EntityPatchIn
+    itself and may recursively contain submodel_list operations."""
+    op: SubmodelOpKind
+    # Required for UPDATE and DELETE; omitted (server-assigned) for CREATE.
+    id: Optional[uuid.UUID] = None
+    # Applied for CREATE and UPDATE; must be absent for DELETE.
+    fields: dict[
+        Annotated[str, Field(min_length=1, max_length=_MAX_SLUG_LEN)],
+        Any,
+    ] = Field(default_factory=dict, max_length=_MAX_CHANGED_FIELDS)
+    # Position within the parent list. Defaults to max+1 on CREATE; unchanged on UPDATE if omitted.
+    sort_order: Optional[int] = Field(None, ge=0, le=_MAX_SORT_ORDER)
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def validate_op_constraints(self) -> "SubmodelOperationIn":
+        if self.op in (SubmodelOpKind.UPDATE, SubmodelOpKind.DELETE) and self.id is None:
+            raise ValueError(f"id is required for op='{self.op}'")
+        if self.op == SubmodelOpKind.DELETE and self.fields:
+            raise ValueError("fields must be absent for op='delete'")
+        return self
+
+# The value type for a submodel_list key inside EntityPatchIn.changed_fields.
+# Bounded to the same cardinality limit as fields per version.
+SubmodelListPatch = Annotated[list[SubmodelOperationIn], Field(max_length=_MAX_FIELDS)]
+
+class UserRefOut(Schema):
+    id: uuid.UUID; display_name: str
+
+class FieldValueOut(Schema):
+    field_slug: str; data_type: str
+    value: Any         # typed by the application layer, not the schema
+    language: str = "" # "" for non-localized fields
+
+class EntityOut(Schema):
+    id: uuid.UUID
+    config_version_id: int
+    user_defined_model_type_id: Optional[int]
+    current_state: Optional[str]
+    owner: Optional[UserRefOut]
+    editors: list[UserRefOut]
+    field_values: list[FieldValueOut]
+    overflow_data: dict[str, Any]
+    created_at: str; updated_at: str
+```
+
+### 17.11 Edit history schemas
+
+```python
+class FieldEditOut(Schema):
+    change_kind: str                    # FieldEdit.ChangeKind value
+    field_slug: Optional[str] = None
+    field_label: Optional[str] = None  # resolved from active translation
+    old_value: Optional[Any] = None
+    new_value: Optional[Any] = None
+    old_file_name: Optional[str] = None
+    new_file_name: Optional[str] = None
+    old_file_url: Optional[str] = None   # pre-signed URL for soft-deleted attachment
+    new_file_url: Optional[str] = None
+    affected_node_id: Optional[uuid.UUID] = None
+
+class EditGroupOut(Schema):
+    id: int; saved_at: str
+    saved_by: Optional[UserRefOut]
+    node_id: uuid.UUID; node_type: str  # "proposal" or "submodel:<slug>"
+    edits: list[FieldEditOut]
+
+class EditHistoryOut(Schema):
+    count: int; next: Optional[str]; results: list[EditGroupOut]
+```
+
+### 17.12 Migration schemas
+
+```python
+class MigrationFieldMappingIn(Schema):
+    source_field_slug: Slug
+    action: MigrationAction
+    target_field_slug: Optional[Slug] = None   # required when action=MAP
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def target_required_for_map(self) -> "MigrationFieldMappingIn":
+        if self.action == MigrationAction.MAP and not self.target_field_slug:
+            raise ValueError("target_field_slug required when action is 'map'")
+        return self
+
+class MigrationExecuteIn(Schema):
+    """POST /api/udm/entities/{id}/migrate/"""
+    migration_id: int
+    confirmed: Literal[True]   # client must explicitly pass true
+    field_mappings: list[MigrationFieldMappingIn] = Field(..., max_length=_MAX_MAPPING_ENTRIES)
+    model_config = {"extra": "forbid"}
+
+class MigrationPreviewFieldOut(Schema):
+    source_slug: str; source_data_type: str
+    suggested_action: MigrationAction
+    suggested_target_slug: Optional[str]
+    conflict_reason: Optional[str]
+
+class MigrationPreviewOut(Schema):
+    migration_id: int
+    source_version_id: int; target_version_id: int
+    field_previews: list[MigrationPreviewFieldOut]
+
+class BulkMigrationCreateIn(Schema):
+    """POST /api/udm/bulk-migrations/"""
+    source_version_id: int; target_version_id: int
+    user_defined_model_type_filter_id: Optional[int] = None
+    field_mappings: list[MigrationFieldMappingIn] = Field(..., max_length=_MAX_MAPPING_ENTRIES)
+    model_config = {"extra": "forbid"}
+
+class BulkMigrationOut(Schema):
+    id: int; status: BulkMigrationStatus
+    source_version_id: int; target_version_id: int
+    user_defined_model_type_filter_id: Optional[int]
+    total_entities: int; done_entities: int; failed_entities: int
+    executed_at: Optional[str]
+```
+
+### 17.13 Staging file and autocomplete schemas
+
+```python
+class StagingFileOut(Schema):
+    staging_id: uuid.UUID
+    original_name: str; mime_type: str; size_bytes: int; expires_at: str
+
+class UserAutocompleteItem(Schema):
+    id: uuid.UUID; display_name: str
+
+class GroupAutocompleteItem(Schema):
+    id: int; name: str
+```
+
+### 17.14 Standard error response schemas
+
+```python
+class ConcurrentEditError(Schema):
+    """HTTP 409 — root proposal lock could not be acquired (§14.5)."""
+    error: Literal["concurrent_edit"]
+    retry_after_ms: int = 500
+
+class FieldErrorsOut(Schema):
+    """HTTP 400 — validation failure, field-keyed error lists."""
+    errors: dict[str, list[str]]
+
+class EditingNotAllowedError(Schema):
+    """HTTP 409 — WorkflowState.allows_edit is False (§15.3)."""
+    error: Literal["editing_not_allowed_in_state"]
+    current_state: str
+```
 
 ---
 
@@ -2397,7 +3070,7 @@ it can be fed to `regorus eval` / unit tests as `input` while writing `.rego` ru
 - [ ] Staging file upload endpoint + `cleanup_staging_files` management command
 - [ ] `cleanup_deleted_attachments` management command for soft-deleted `FileAttachment` rows
 - [ ] File staging → promotion + soft-delete-old flow within PATCH transaction
-- [ ] Submodel nested endpoints (create / partial-update / delete / transition)
+- [ ] Inline submodel operations in the root entity PATCH: `op:"create"` (materialises defaults then applies `fields`), `op:"update"` (partial field update on addressed instance), `op:"delete"` (deletes instance and descendants); recursive for nested `submodel_list` fields; all in one `transaction.atomic()` under the root lock
 - [ ] Edit history models with `old_attachment` / `new_attachment` FKs and `NODE_TRANSITION` kind
 - [ ] History list endpoint (`GET /api/udm/entities/{id}/history/`)
 - [ ] `UserDefinedModelEntityNode.to_policy_document()` + `build_policy_input()` serialiser and `GET /api/udm/entities/{id}/policy-document/` endpoint (§16.1–16.2)
