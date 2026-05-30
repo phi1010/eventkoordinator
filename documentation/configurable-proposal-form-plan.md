@@ -4,7 +4,7 @@
 
 ### Field configuration
 - Per-user_defined_model_type, configurable user_defined_model_entity form with a defined set of field types → §2.1, §8
-- Supported types: `text_short`, `text_long`, `text_markdown`, `text_richtext`, `integer`, `float`, `boolean`, `date`, `time`, `datetime`, `select_single`, `select_multi`, `image`, `file`, `user_select`, `user_select_multi`, `group_select`, `group_select_multi`, `submodel_select`, `submodel_list` → §2.1
+- Supported types: `text_short`, `text_long`, `text_markdown`, `text_richtext`, `integer`, `float`, `boolean`, `date`, `time`, `datetime`, `select_single`, `select_multi`, `image`, `file`, `user_select`, `user_select_multi`, `group_select`, `group_select_multi`, `submodel_select`, `submodel_list`, `entity_select`, `entity_select_multi` → §2.1
 - Multiple user_defined_model_types may share the same field configuration → §2.1, §3
 - A user_defined_model_type's configuration can be switched to a different one → §5.5, §6
 - `TEXT_RICHTEXT` content is sanitised with **`nh3`** on write → §2.1
@@ -222,6 +222,8 @@ class FieldDefinition(HistoricalMetaBase):
         GROUP_SELECT_MULTI   = "group_select_multi"   # list of auth.Group PKs
         SUBMODEL_SELECT      = "submodel_select"      # FK reference to existing SubmodelInstance
         SUBMODEL_LIST        = "submodel_list"        # inline children (1:N)
+        ENTITY_SELECT        = "entity_select"        # FK to a root UserDefinedModelEntity
+        ENTITY_SELECT_MULTI  = "entity_select_multi"  # list of root UserDefinedModelEntity PKs
 
     version         = models.ForeignKey(ConfigVersion, on_delete=models.CASCADE,
                                         related_name="field_definitions")
@@ -248,6 +250,7 @@ class FieldDefinition(HistoricalMetaBase):
     # number:             {"min": 0, "max": 100, "decimal_places": 2}
     # user_select*:       {"limit_to_group_ids": [3, 7]}   # optional; omit = all active users
     # group_select*:      {"limit_to_group_ids": [3, 7]}   # optional; omit = all groups
+    # entity_select*:     {"limit_to_type_ids": [4, 7]}    # optional; omit = any UDMType
 
     # Validation rules are stored as model instances — see §2.5 and §4.
     # Single-field rules carry a FK back to this FieldDefinition.
@@ -272,6 +275,7 @@ be losslessly converted. Permitted automatic conversions:
 | `select_single` | `select_multi` | wrap scalar in list |
 | `user_select` | `user_select_multi` | wrap scalar in list |
 | `group_select` | `group_select_multi` | wrap scalar in list |
+| `entity_select` | `entity_select_multi` | wrap scalar in list |
 
 All other changes are blocked. The admin/API must expose a dry-run endpoint that
 returns the count of unconvertible values before allowing the change.
@@ -283,7 +287,15 @@ active record (`is_active=True` for users). If `type_config` contains
 Deleted users/groups cause existing values to fail `clean()`; the API exposes this
 as a field error so staff can correct the value before the next submit.
 
-**API serialisation** — UserDefinedModelEntity GET responses resolve user/group PKs to display
+**Entity field validation** — `FieldValue.clean()` for `ENTITY_SELECT` and
+`ENTITY_SELECT_MULTI` verifies that every stored UUID refers to an existing root
+`UserDefinedModelEntity` (i.e. a `UserDefinedModelEntityNode` with no
+`parent_node`). If `type_config` contains `limit_to_type_ids`, the referenced
+entity's `user_defined_model_type_id` must be one of those IDs. Deleted or
+migrated entities cause existing values to fail `clean()`; the API exposes this as
+a field error so staff can correct the value before the next submit.
+
+**API serialisation** — UserDefinedModelEntity GET responses resolve reference PKs to display
 objects so the frontend never needs a separate lookup per stored ID:
 
 ```jsonc
@@ -300,9 +312,20 @@ objects so the frontend never needs a separate lookup per stored ID:
   "field_slug": "responsible_team",
   "value": { "id": 3, "name": "Workshop Committee" }
 }
+// field with data_type "entity_select_multi"
+// display_field_slug in type_config names which field of the referenced entity
+// to use as the human-readable label; falls back to the entity UUID if absent or blank.
+{
+  "field_slug": "related_sessions",
+  "value": [
+    { "id": "550e8400-e29b-41d4-a716-446655440000", "display": "Introduction to Rust" },
+    { "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8", "display": "Advanced Rust"        }
+  ]
+}
 ```
 
-PATCH input still uses raw PKs (or a list of PKs for multi variants).
+PATCH input uses raw UUIDs for `entity_select` and a list of UUIDs for
+`entity_select_multi` (same pattern as raw PKs for user/group variants).
 
 ---
 
@@ -413,7 +436,7 @@ class TypedValue(models.Model):
     value_group    = models.ForeignKey("auth.Group", on_delete=models.SET_NULL,
                                         null=True, blank=True, related_name="+")  # group_select
     value_node     = models.ForeignKey(UserDefinedModelEntityNode, on_delete=models.SET_NULL,
-                                        null=True, blank=True, related_name="+")  # submodel_select
+                                        null=True, blank=True, related_name="+")  # submodel_select, entity_select
     # SUBMODEL_LIST has no value column — children are UserDefinedModelEntityNode rows via parent_node.
 
     class Meta:
@@ -464,8 +487,8 @@ class FieldValue(TypedValue, MetaBase):
 | `integer`, `float` | `value_decimal` (exact NUMERIC; no float round-trip) |
 | `boolean` | `value_bool` |
 | `date` / `time` / `datetime` | `value_date` / `value_time` / `value_datetime` |
-| `select_multi`, `user_select_multi`, `group_select_multi` | `value_json` (list of keys / PKs) |
-| `user_select` / `group_select` / `submodel_select` | `value_user` / `value_group` / `value_node` |
+| `select_multi`, `user_select_multi`, `group_select_multi`, `entity_select_multi` | `value_json` (list of keys / PKs / UUIDs) |
+| `user_select` / `group_select` / `submodel_select` / `entity_select` | `value_user` / `value_group` / `value_node` / `value_node` |
 | `image`, `file` | *(no column — the `FileAttachment` FK points at this `FieldValue`)* |
 | `submodel_list` | *(no `FieldValue` row — children are `UserDefinedModelEntityNode`s via `parent_node`)* |
 
@@ -699,7 +722,7 @@ class SingleFieldValidationRule(PolymorphicMetaBase):
 | `RegexRule` | `pattern: CharField(500)`, `failure_message: CharField(200)` | `text_*` |
 | `MinValueRule` | `min_value: DecimalField(max_digits=20, decimal_places=6)` | `integer`, `float` |
 | `MaxValueRule` | `max_value: DecimalField(max_digits=20, decimal_places=6)` | `integer`, `float` |
-| `MinItemsRule` | `min_items: PositiveSmallIntegerField` | `submodel_list`, `select_multi`, `user_select_multi`, `group_select_multi` |
+| `MinItemsRule` | `min_items: PositiveSmallIntegerField` | `submodel_list`, `select_multi`, `user_select_multi`, `group_select_multi`, `entity_select_multi` |
 | `MaxItemsRule` | `max_items: PositiveSmallIntegerField` | same as above |
 | `MaxFileSizeRule` | `max_bytes: PositiveIntegerField` | `file`, `image` |
 | `AllowedMimeTypesRule` | *(see below)* | `file`, `image` |
@@ -1073,7 +1096,8 @@ specific language":
 class RequiredInLanguageRule(SingleFieldValidationRule):
     """Field must be non-empty for `language`; other languages are not checked."""
     APPLICABLE_TYPES = frozenset(DataType) - {
-        DataType.SUBMODEL_SELECT, DataType.SUBMODEL_LIST
+        DataType.SUBMODEL_SELECT, DataType.SUBMODEL_LIST,
+        DataType.ENTITY_SELECT, DataType.ENTITY_SELECT_MULTI,
     }
     language = models.CharField(max_length=10)
 ```
@@ -1187,6 +1211,9 @@ class FieldDefaultValue(TypedValue, MetaBase):
   default.
 - `image` / `file`: **no default** — there is no sensible config-owned file to
   pre-fill. A `FieldDefaultValue` for these types is rejected in `clean()`.
+- `entity_select` / `entity_select_multi`: **no default** — a default would have
+  to point at concrete entity instances that may not exist in the target
+  environment. Rejected in `clean()`.
 - `submodel_select`: not supported — a default would have to point at a concrete
   instance that does not exist until a user_defined_model_entity is created.
 - `submodel_list`: a field with no default starts with zero children. Optional
@@ -1664,16 +1691,20 @@ field it is a `{language_code: value}` dict, mirroring the PATCH payload convent
 
 ### User and group autocomplete
 
-These endpoints power the search-as-you-type UI for `USER_SELECT*` and
-`GROUP_SELECT*` fields. They are read-only and accessible to any authenticated user.
+These endpoints power the search-as-you-type UI for `USER_SELECT*`,
+`GROUP_SELECT*`, and `ENTITY_SELECT*` fields. They are read-only and accessible
+to any authenticated user.
 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/udm/users/?q=alice&group_ids=3,7` | Search active users; `group_ids` restricts to those groups (mirrors `type_config.limit_to_group_ids`) |
 | `GET` | `/api/udm/groups/?q=workshop` | Search groups |
+| `GET` | `/api/udm/entities/?q=rust&type_ids=4,7` | Search root entities by display field; `type_ids` restricts to those UDMTypes (mirrors `type_config.limit_to_type_ids`) |
 
-Both return `[{ "id": …, "display_name"/"name": … }]` and support a `?ids=1,2,3`
-param for bulk-resolving already-stored PKs on form load.
+All three return a list of match objects and support a `?ids=…` param for
+bulk-resolving already-stored PKs on form load. The entity search uses the
+`display_field_slug` from the field's `type_config` to match and render results;
+falls back to the entity UUID if the slug is absent or the field has no value.
 
 ### Staging files
 
@@ -2327,6 +2358,8 @@ Notes:
 - `submodel_select` serialises as the referenced node's `id`; the referenced node is
   **not** inlined (it may live under a different user_defined_model_entity tree) — follow the id if a
   policy needs it.
+- `entity_select` serialises as the referenced entity's UUID; `entity_select_multi`
+  as a list of UUIDs. Referenced entities are not inlined.
 - The document is value-only: it deliberately excludes edit history and validation
   rules, which are config/audit concerns, not policy inputs.
 
@@ -2528,6 +2561,7 @@ class DataType(str, Enum):
     USER_SELECT = "user_select"; USER_SELECT_MULTI = "user_select_multi"
     GROUP_SELECT = "group_select"; GROUP_SELECT_MULTI = "group_select_multi"
     SUBMODEL_SELECT = "submodel_select"; SUBMODEL_LIST = "submodel_list"
+    ENTITY_SELECT = "entity_select"; ENTITY_SELECT_MULTI = "entity_select_multi"
 
 class ConfigVersionStatus(str, Enum):
     DRAFT = "draft"; PUBLISHED = "published"; ARCHIVED = "archived"
@@ -2566,6 +2600,15 @@ class UserGroupTypeConfig(Schema):
     limit_to_group_ids: Optional[list[int]] = Field(None, max_length=_MAX_GROUP_IDS)
     model_config = {"extra": "forbid"}
 
+class EntitySelectTypeConfig(Schema):
+    # Restrict to entities whose user_defined_model_type_id is in this list.
+    # Omit (or empty list) to allow references to any UDMType.
+    limit_to_type_ids: Optional[list[int]] = Field(None, max_length=100)
+    # Slug of the field within the referenced entity to use as the display label
+    # in autocomplete results and GET response resolution. Falls back to UUID if absent.
+    display_field_slug: Optional[Annotated[str, Field(max_length=_MAX_SLUG_LEN)]] = None
+    model_config = {"extra": "forbid"}
+
 class SubmodelTypeConfig(Schema):
     renderer: Optional[Literal["table", "list"]] = None
     model_config = {"extra": "forbid"}
@@ -2582,6 +2625,7 @@ _TYPE_CONFIG_CLS: dict[DataType, type[Schema] | None] = {
     DataType.USER_SELECT: UserGroupTypeConfig, DataType.USER_SELECT_MULTI: UserGroupTypeConfig,
     DataType.GROUP_SELECT: UserGroupTypeConfig, DataType.GROUP_SELECT_MULTI: UserGroupTypeConfig,
     DataType.SUBMODEL_SELECT: SubmodelTypeConfig, DataType.SUBMODEL_LIST: SubmodelTypeConfig,
+    DataType.ENTITY_SELECT: EntitySelectTypeConfig, DataType.ENTITY_SELECT_MULTI: EntitySelectTypeConfig,
 }
 ```
 
@@ -2719,6 +2763,8 @@ class FieldDefinitionIn(Schema):
             raise ValueError("submodel_config_version_id required for submodel types")
         if self.data_type not in submodel_types and self.submodel_config_version_id is not None:
             raise ValueError("submodel_config_version_id must be null for non-submodel types")
+        # entity_select* needs no submodel_config_version_id; the referenced entities
+        # are root nodes whose config version is resolved at runtime.
         return self
 
 class FieldDefinitionOut(Schema):
@@ -3042,6 +3088,11 @@ class UserAutocompleteItem(Schema):
 
 class GroupAutocompleteItem(Schema):
     id: int; name: str
+
+class EntityAutocompleteItem(Schema):
+    id: uuid.UUID
+    display: str        # value of display_field_slug, or UUID string as fallback
+    type_id: Optional[int]   # UserDefinedModelType the entity belongs to
 ```
 
 ### 17.14 Standard error response schemas
