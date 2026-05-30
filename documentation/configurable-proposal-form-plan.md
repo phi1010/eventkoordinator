@@ -61,7 +61,7 @@
 - Edit history is retained indefinitely → §13
 
 ### Localisation
-- Every `FieldDefinition` has a single language-independent `slug` key; its human-readable `label` and `help_text` can be translated into any number of languages via `FieldDefinitionTranslation` rows → §2.7
+- Every `FieldDefinition` has a single language-independent `slug` key; its human-readable `label` and `help_text` are stored exclusively in `FieldDefinitionTranslation` rows — there are no direct `label`/`help_text` columns on `FieldDefinition` → §2.7
 - `WorkflowState` and `WorkflowTransition` labels follow the same translation pattern → §2.7
 - Supported languages are defined per `FieldConfig` as `ConfigLanguage` rows; one language is marked as the default fallback → §2.7
 - Any field type (including file and image) can be made localized by setting `is_localized = True` on its `FieldDefinition`; a localized field stores one `FieldValue` per language using the same field definition and the same validators → §2.1, §2.3, §2.7
@@ -223,10 +223,7 @@ class FieldDefinition(HistoricalMetaBase):
                                         related_name="field_definitions")
     # slug is the language-independent machine key; never translated.
     slug            = models.SlugField(max_length=80)
-    # label / help_text are the default-language fallbacks; per-language
-    # translations live in FieldDefinitionTranslation rows (see §2.7).
-    label           = models.CharField(max_length=200)
-    help_text       = models.TextField(blank=True)
+    # label / help_text live exclusively in FieldDefinitionTranslation rows (see §2.7).
     data_type       = models.CharField(max_length=30, choices=DataType)
     sort_order      = models.PositiveSmallIntegerField(default=0)
     # When True, one FieldValue row is stored per language (see §2.7).
@@ -998,8 +995,9 @@ requested language, and as the display language in contexts that show only one v
 
 #### Translatable labels
 
-`FieldDefinition.label` and `FieldDefinition.help_text` are the **default-language
-fallbacks**. Per-language overrides live in `FieldDefinitionTranslation`:
+`FieldDefinition` has no direct `label` or `help_text` columns. Labels and help text
+live exclusively in `FieldDefinitionTranslation` rows. The translation for the config's
+default language acts as the fallback when no translation exists for the requested language:
 
 ```python
 class FieldDefinitionTranslation(MetaBase):
