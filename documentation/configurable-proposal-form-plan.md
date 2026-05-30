@@ -832,7 +832,7 @@ class WorkflowState(HistoricalMetaBase):
     workflow    = models.ForeignKey(WorkflowDefinition, on_delete=models.CASCADE,
                                     related_name="states")
     name        = models.CharField(max_length=100)   # e.g. "draft", "submitted"
-    label       = models.CharField(max_length=200)   # display name
+    # label lives exclusively in WorkflowStateTranslation rows (see §2.7).
     is_initial  = models.BooleanField(default=False)  # assigned to new nodes on creation
     # Nodes in this state can have their field values edited (if False, PATCH is blocked).
     allows_edit = models.BooleanField(default=True)
@@ -851,7 +851,7 @@ class WorkflowTransition(HistoricalMetaBase):
     workflow        = models.ForeignKey(WorkflowDefinition, on_delete=models.CASCADE,
                                         related_name="transitions")
     name            = models.CharField(max_length=100)   # e.g. "submit", "accept"
-    label           = models.CharField(max_length=200)
+    # label lives exclusively in WorkflowTransitionTranslation rows (see §2.7).
     # Null from_state = transition is valid from any state.
     from_state      = models.ForeignKey(WorkflowState, on_delete=models.CASCADE,
                                         null=True, blank=True,
@@ -1019,9 +1019,38 @@ class FieldDefinitionTranslation(MetaBase):
         ]
 ```
 
-The same pattern applies to `WorkflowState` and `WorkflowTransition` via
-`WorkflowStateTranslation` and `WorkflowTransitionTranslation` (identical
-structure: FK to the parent + `language` + `label`).
+The same pattern applies to `WorkflowState` and `WorkflowTransition`. Neither
+model carries a direct `label` column; labels live exclusively in translation rows:
+
+```python
+class WorkflowStateTranslation(MetaBase):
+    state     = models.ForeignKey(WorkflowState, on_delete=models.CASCADE,
+                                  related_name="translations")
+    language  = models.CharField(max_length=10)   # must be in config.languages
+    label     = models.CharField(max_length=200)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["state", "language"],
+                             name="unique_state_translation_per_language")
+        ]
+
+
+class WorkflowTransitionTranslation(MetaBase):
+    transition = models.ForeignKey(WorkflowTransition, on_delete=models.CASCADE,
+                                   related_name="translations")
+    language   = models.CharField(max_length=10)
+    label      = models.CharField(max_length=200)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["transition", "language"],
+                             name="unique_transition_translation_per_language")
+        ]
+```
+
+The translation for the `FieldConfig`'s default language serves as the fallback
+when no translation exists for the requested language.
 
 #### Localized field values
 
