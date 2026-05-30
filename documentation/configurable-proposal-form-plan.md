@@ -85,6 +85,10 @@ Replace the current hardcoded `UserDefinedModelEntity` / `Speaker` fields with a
 multiple user_defined_model_types can reference the same one. The same validation and migration logic
 applies to user_defined_model_entities and all submodel instances through a shared base model.
 
+**Django app:** all models, views, serializers, Celery tasks, Rego policies, and
+management commands described in this plan live in a new Django app **`userdefinedmodel`**
+(`backend/userdefinedmodel/`). The app's API is mounted at `/api/udm/`.
+
 ---
 
 ## 1. Core Concepts
@@ -1162,7 +1166,7 @@ class FieldDefaultValue(TypedValue, MetaBase):
 
 **Materialisation on create**
 
-`POST /api/user_defined_model_entities/` and `POST /api/user_defined_model_entities/{id}/nodes/` build the new node's
+`POST /api/udm/entities/` and `POST /api/udm/entities/{id}/nodes/` build the new node's
 `FieldValue` rows by copying every `FieldDefaultValue` of the node's
 `ConfigVersion` (one row per language for localized fields). Fields without a
 default are simply left unset. Materialisation runs inside the create transaction;
@@ -1403,11 +1407,11 @@ class MigrationFieldMapping(MetaBase):
 
 ```
 1. Staff/user requests migration (target user_defined_model_type selected)
-2. GET /api/user_defined_model_entities/{id}/migration-preview/?target_user_defined_model_type={cid}
+2. GET /api/udm/entities/{id}/migration-preview/?target_user_defined_model_type={cid}
    → Returns auto-suggested mapping (matched by slug first, then label similarity)
    → Each source field has: suggested_action, suggested_target, conflict_reason
 3. User reviews and confirms/overrides each field decision
-4. POST /api/user_defined_model_entities/{id}/migrate/  { migration_id: ..., confirmed: true }
+4. POST /api/udm/entities/{id}/migrate/  { migration_id: ..., confirmed: true }
 5. Server executes atomically:
    a. Create new UserDefinedModelEntity under target user_defined_model_type / version
    b. For MAP entries: copy FieldValue (run type-compat check first)
@@ -1483,11 +1487,11 @@ When `ConfigVersion.publish()` runs on a `FieldConfig` used by one or more user_
 
 **Trigger 4 — UserDefinedModelType config switch**
 
-When `UserDefinedModelType.field_config` is changed (via `PATCH /api/user_defined_model_types/{id}/` with a new
+When `UserDefinedModelType.field_config` is changed (via `PATCH /api/udm/types/{id}/` with a new
 `field_config_id`):
 1. The API refuses to commit the change while any existing user_defined_model_entities under the user_defined_model_type
    are on a different `FieldConfig` without a confirmed `BulkMigrationPlan`.
-2. Staff first previews the mapping: `POST /api/bulk-migrations/preview/` with
+2. Staff first previews the mapping: `POST /api/udm/bulk-migrations/preview/` with
    `source_version`, `target_version`, and `user_defined_model_type_filter`.
 3. Staff creates the plan with confirmed field mappings.
 4. Staff executes the plan; only then can the `UserDefinedModelType.field_config` be changed.
@@ -1499,9 +1503,9 @@ takes effect immediately.
 
 **Execution — always via Celery**
 
-`POST /api/bulk-migrations/{id}/execute/` enqueues a Celery task and returns
+`POST /api/udm/bulk-migrations/{id}/execute/` enqueues a Celery task and returns
 `HTTP 202 Accepted` immediately. Progress is polled via
-`GET /api/bulk-migrations/{id}/`. The task:
+`GET /api/udm/bulk-migrations/{id}/`. The task:
 
 ```
 celery task: execute_bulk_migration(plan_id)
@@ -1518,7 +1522,7 @@ celery task: execute_bulk_migration(plan_id)
      PARTIAL leaves the user_defined_model_type's field_config unchanged (see §5.5 trigger 4).
 ```
 
-The preview endpoint (`GET /api/bulk-migrations/{id}/preview/`) returns the
+The preview endpoint (`GET /api/udm/bulk-migrations/{id}/preview/`) returns the
 same per-field mapping format as the single-user_defined_model_entity preview, plus an
 `affected_proposal_count` field and a breakdown by user_defined_model_type (when `user_defined_model_type_filter` is null).
 
@@ -1544,30 +1548,30 @@ All endpoints require authentication. Permission logic mirrors the existing
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/configs/` | List all FieldConfigs (staff) |
-| `POST` | `/api/configs/` | Create a new FieldConfig |
-| `GET` | `/api/configs/{cid}/` | Retrieve metadata (name, description, user_defined_model_types using it, stale-user_defined_model_entity count) |
-| `PATCH` | `/api/configs/{cid}/` | Update name / description |
-| `DELETE` | `/api/configs/{cid}/` | Delete only if no user_defined_model_types reference it and no user_defined_model_entities exist |
-| `GET` | `/api/configs/{cid}/versions/` | List all ConfigVersions |
-| `GET` | `/api/configs/{cid}/versions/published/` | Active published version as JSON schema |
-| `GET` | `/api/configs/{cid}/versions/draft/` | Current draft (staff) |
-| `PUT` | `/api/configs/{cid}/versions/draft/` | Replace draft field definitions |
-| `POST` | `/api/configs/{cid}/versions/draft/publish/` | Publish draft → auto-creates BulkMigrationPlans for stale user_defined_model_entities |
+| `GET` | `/api/udm/configs/` | List all FieldConfigs (staff) |
+| `POST` | `/api/udm/configs/` | Create a new FieldConfig |
+| `GET` | `/api/udm/configs/{cid}/` | Retrieve metadata (name, description, user_defined_model_types using it, stale-user_defined_model_entity count) |
+| `PATCH` | `/api/udm/configs/{cid}/` | Update name / description |
+| `DELETE` | `/api/udm/configs/{cid}/` | Delete only if no user_defined_model_types reference it and no user_defined_model_entities exist |
+| `GET` | `/api/udm/configs/{cid}/versions/` | List all ConfigVersions |
+| `GET` | `/api/udm/configs/{cid}/versions/published/` | Active published version as JSON schema |
+| `GET` | `/api/udm/configs/{cid}/versions/draft/` | Current draft (staff) |
+| `PUT` | `/api/udm/configs/{cid}/versions/draft/` | Replace draft field definitions |
+| `POST` | `/api/udm/configs/{cid}/versions/draft/publish/` | Publish draft → auto-creates BulkMigrationPlans for stale user_defined_model_entities |
 
 ### UserDefinedModelType ↔ FieldConfig assignment
 
 | Method | Path | Description |
 |---|---|---|
-| `PATCH` | `/api/user_defined_model_types/{id}/` | Change `field_config_id`; blocked if stale user_defined_model_entities exist without a confirmed BulkMigrationPlan |
+| `PATCH` | `/api/udm/types/{id}/` | Change `field_config_id`; blocked if stale user_defined_model_entities exist without a confirmed BulkMigrationPlan |
 
 ### Convenience read aliases (user_defined_model_type-scoped, for the user_defined_model_entity form frontend)
 
-These are read-only shortcuts; all writes go to `/api/configs/`.
+These are read-only shortcuts; all writes go to `/api/udm/configs/`.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/user_defined_model_types/{id}/config/` | Active published config for this user_defined_model_type (same shape as `/api/configs/{cid}/versions/published/`) |
+| `GET` | `/api/udm/types/{id}/config/` | Active published config for this user_defined_model_type (same shape as `/api/udm/configs/{cid}/versions/published/`) |
 
 ### Config JSON schema shape
 
@@ -1635,8 +1639,8 @@ These endpoints power the search-as-you-type UI for `USER_SELECT*` and
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/users/?q=alice&group_ids=3,7` | Search active users; `group_ids` restricts to those groups (mirrors `type_config.limit_to_group_ids`) |
-| `GET` | `/api/groups/?q=workshop` | Search groups |
+| `GET` | `/api/udm/users/?q=alice&group_ids=3,7` | Search active users; `group_ids` restricts to those groups (mirrors `type_config.limit_to_group_ids`) |
+| `GET` | `/api/udm/groups/?q=workshop` | Search groups |
 
 Both return `[{ "id": …, "display_name"/"name": … }]` and support a `?ids=1,2,3`
 param for bulk-resolving already-stored PKs on form load.
@@ -1645,20 +1649,20 @@ param for bulk-resolving already-stored PKs on form load.
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/staging-files/` | Upload a file; returns `staging_id`. Pre-validates MIME/size if `intended_field` is provided |
-| `DELETE` | `/api/staging-files/{sid}/` | Delete a staged file early (optional; it expires anyway) |
+| `POST` | `/api/udm/staging-files/` | Upload a file; returns `staging_id`. Pre-validates MIME/size if `intended_field` is provided |
+| `DELETE` | `/api/udm/staging-files/{sid}/` | Delete a staged file early (optional; it expires anyway) |
 
 ### UserDefinedModelEntities
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/user_defined_model_entities/` | Create draft; binds to user_defined_model_type's active published config; materialises field defaults (§2.8) into starting `FieldValue` rows |
-| `GET` | `/api/user_defined_model_entities/{id}/` | Retrieve with all field values and child nodes |
-| `PATCH` | `/api/user_defined_model_entities/{id}/` | Partial update — only send changed fields (see below) |
-| `POST` | `/api/user_defined_model_entities/{id}/transition/` | Fire a workflow transition by name, e.g. `{ "transition": "submit" }`; runs the subtree validation (§15). Submission is just the `submit` transition — there is no separate `/submit/` endpoint |
-| `DELETE` | `/api/user_defined_model_entities/{id}/` | Delete (DRAFT only, owner only) |
-| `GET` | `/api/user_defined_model_entities/{id}/history/` | Edit history (EditGroups + FieldEdits, newest first) |
-| `GET` | `/api/user_defined_model_entities/{id}/policy-document/` | Canonical full-tree JSON used as Rego `input` (§16); staff-only, for policy authoring/tests |
+| `POST` | `/api/udm/entities/` | Create draft; binds to user_defined_model_type's active published config; materialises field defaults (§2.8) into starting `FieldValue` rows |
+| `GET` | `/api/udm/entities/{id}/` | Retrieve with all field values and child nodes |
+| `PATCH` | `/api/udm/entities/{id}/` | Partial update — only send changed fields (see below) |
+| `POST` | `/api/udm/entities/{id}/transition/` | Fire a workflow transition by name, e.g. `{ "transition": "submit" }`; runs the subtree validation (§15). Submission is just the `submit` transition — there is no separate `/submit/` endpoint |
+| `DELETE` | `/api/udm/entities/{id}/` | Delete (DRAFT only, owner only) |
+| `GET` | `/api/udm/entities/{id}/history/` | Edit history (EditGroups + FieldEdits, newest first) |
+| `GET` | `/api/udm/entities/{id}/policy-document/` | Canonical full-tree JSON used as Rego `input` (§16); staff-only, for policy authoring/tests |
 
 ### PATCH payload — partial update format
 
@@ -1667,7 +1671,7 @@ untouched on the server; their stored values — even if another user modified t
 in the meantime — are never overwritten.
 
 ```jsonc
-// PATCH /api/user_defined_model_entities/{id}/
+// PATCH /api/udm/entities/{id}/
 {
   "changed_fields": {
     "abstract":      "New abstract text",
@@ -1696,25 +1700,25 @@ Each submodel operation creates its own `EditGroup` on the child node and sets
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/user_defined_model_entities/{id}/nodes/` | Create child SubmodelInstance (materialises submodel field defaults §2.8; NODE_ADDED edit recorded) |
-| `PATCH` | `/api/user_defined_model_entities/{id}/nodes/{nid}/` | Partial update of child (same format as user_defined_model_entity PATCH) |
-| `DELETE` | `/api/user_defined_model_entities/{id}/nodes/{nid}/` | Delete child (NODE_REMOVED edit recorded) |
+| `POST` | `/api/udm/entities/{id}/nodes/` | Create child SubmodelInstance (materialises submodel field defaults §2.8; NODE_ADDED edit recorded) |
+| `PATCH` | `/api/udm/entities/{id}/nodes/{nid}/` | Partial update of child (same format as user_defined_model_entity PATCH) |
+| `DELETE` | `/api/udm/entities/{id}/nodes/{nid}/` | Delete child (NODE_REMOVED edit recorded) |
 
 ### Single-user_defined_model_entity migration
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/user_defined_model_entities/{id}/migration-preview/` | Preview with `?target_user_defined_model_type=` or `?target_version=` |
-| `POST` | `/api/user_defined_model_entities/{id}/migrate/` | Execute confirmed single-user_defined_model_entity migration |
+| `GET` | `/api/udm/entities/{id}/migration-preview/` | Preview with `?target_user_defined_model_type=` or `?target_version=` |
+| `POST` | `/api/udm/entities/{id}/migrate/` | Execute confirmed single-user_defined_model_entity migration |
 
 ### Bulk migration (config switch / republish)
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/bulk-migrations/preview/` | Suggest field mapping for `{ source_version, target_version, user_defined_model_type_filter? }`; returns `affected_proposal_count` |
-| `POST` | `/api/bulk-migrations/` | Create a `BulkMigrationPlan` with confirmed field mappings |
-| `GET` | `/api/bulk-migrations/{id}/` | Retrieve plan and current progress counters |
-| `POST` | `/api/bulk-migrations/{id}/execute/` | Execute; returns immediately, plan status polled via GET |
+| `POST` | `/api/udm/bulk-migrations/preview/` | Suggest field mapping for `{ source_version, target_version, user_defined_model_type_filter? }`; returns `affected_proposal_count` |
+| `POST` | `/api/udm/bulk-migrations/` | Create a `BulkMigrationPlan` with confirmed field mappings |
+| `GET` | `/api/udm/bulk-migrations/{id}/` | Retrieve plan and current progress counters |
+| `POST` | `/api/udm/bulk-migrations/{id}/execute/` | Execute; returns immediately, plan status polled via GET |
 
 ---
 
@@ -1732,7 +1736,7 @@ The JS frontend receives a **config schema** (see §6 JSON shape) and a
 - Rendering the migration mapping UI when the user initiates a migration.
 - Displaying the edit history timeline (see §13).
 - For `USER_SELECT*` and `GROUP_SELECT*` fields: driving a search-as-you-type
-  autocomplete via `GET /api/users/` or `GET /api/groups/`. On form load, bulk-resolve
+  autocomplete via `GET /api/udm/users/` or `GET /api/udm/groups/`. On form load, bulk-resolve
   any already-stored PKs with `?ids=…` to display names without a query per value.
 
 The frontend should request the config schema once per page load and cache it
@@ -1741,7 +1745,7 @@ for the session; config changes only take effect for newly created user_defined_
 ### History endpoint response shape
 
 ```jsonc
-// GET /api/user_defined_model_entities/{id}/history/
+// GET /api/udm/entities/{id}/history/
 {
   "results": [
     {
@@ -1802,7 +1806,7 @@ They are held in a temporary `StagingFile` row and only promoted to a real
 User selects file
       │
       ▼
-POST /api/staging-files/
+POST /api/udm/staging-files/
   body: multipart { file, intended_field?, intended_node? }
   → 201 { "staging_id": "uuid", "original_name": "...", "mime_type": "...", "size_bytes": ... }
       │
@@ -1812,7 +1816,7 @@ POST /api/staging-files/
       │  User edits other fields...
       │
       ▼
-PATCH /api/user_defined_model_entities/{id}/
+PATCH /api/udm/entities/{id}/
   body: { "changed_fields": { "photo": { "staging_id": "uuid" } } }
       │
       ▼  server-side, inside transaction.atomic():
@@ -1833,7 +1837,7 @@ If the user resets the field before saving, the frontend simply drops the
 `staging_id` from its edit state. The `StagingFile` is eventually cleaned up
 by the `cleanup_staging_files` management command when `expires_at` passes.
 For immediate cleanup (e.g., on page unload), the frontend can send
-`DELETE /api/staging-files/{sid}/`.
+`DELETE /api/udm/staging-files/{sid}/`.
 
 ### Clearing an existing file
 
@@ -1910,7 +1914,7 @@ stagingId    ← undefined   (staging file left to expire)
 ```
 
 No API call is required to reset a scalar field. For a staged file, the frontend
-may optionally send `DELETE /api/staging-files/{sid}/` as a courtesy cleanup.
+may optionally send `DELETE /api/udm/staging-files/{sid}/` as a courtesy cleanup.
 
 ### Dirty-state indicator
 
@@ -1947,10 +1951,10 @@ to the child node.
 ### API pagination
 
 ```jsonc
-// GET /api/user_defined_model_entities/{id}/history/?page=1&page_size=20
+// GET /api/udm/entities/{id}/history/?page=1&page_size=20
 {
   "count": 42,
-  "next": "/api/user_defined_model_entities/7/history/?page=2&page_size=20",
+  "next": "/api/udm/entities/7/history/?page=2&page_size=20",
   "results": [ ... ]   // EditGroups with nested FieldEdits, newest first
 }
 ```
@@ -2115,7 +2119,7 @@ UserDefinedModelEntity row locked first (§14.3).
 ### 15.1 Execution sequence
 
 ```
-POST /api/user_defined_model_entities/{id}/transition/   { "transition": "submit" }
+POST /api/udm/entities/{id}/transition/   { "transition": "submit" }
 
 1.  Lock the root UserDefinedModelEntity row (SELECT FOR UPDATE NOWAIT, of=("self",); §14.2).
     This single lock covers the whole tree for the duration of the transition.
@@ -2271,7 +2275,7 @@ node-level ones).
     "is_active": true,
     "is_staff": false,
     "groups": [3, 7],               // auth.Group PKs the user belongs to
-    "permissions": ["apiv1.submit_proposal", "apiv1.moderate_proposal"]
+    "permissions": ["userdefinedmodel.submit_proposal", "userdefinedmodel.moderate_proposal"]
   },
   "user_defined_model_entity": { /* root node document from §16.1 */ }
 }
@@ -2286,7 +2290,7 @@ once submitted") are expressible in Rego — this subsumes `WorkflowState.allows
 ### 16.3 The `authz` evaluator
 
 A single module owns regorus. Policies (`.rego` files shipped in the repo, e.g.
-`backend/apiv1/policies/`) and any static `data` are loaded into one base
+`backend/userdefinedmodel/policies/`) and any static `data` are loaded into one base
 `regorus.Engine` **once** at startup. Per request the base engine is `clone()`d
 (cheap; avoids recompiling policies and keeps evaluation thread-safe), the input is
 set, and the relevant rule is evaluated:
@@ -2333,8 +2337,8 @@ request, not one per field.
 
 | Action | Enforced in | Rule | On deny |
 |---|---|---|---|
-| **view node** | `GET /api/user_defined_model_entities/{id}/`, and list querysets | `allow` (`action="view"`) | 404 (list: filtered out) |
-| **create node** | `POST /api/user_defined_model_entities/`, `POST …/nodes/` | `allow` (`action="create"`) | 403 |
+| **view node** | `GET /api/udm/entities/{id}/`, and list querysets | `allow` (`action="view"`) | 404 (list: filtered out) |
+| **create node** | `POST /api/udm/entities/`, `POST …/nodes/` | `allow` (`action="create"`) | 403 |
 | **delete node** | `DELETE …/{id}/`, `DELETE …/nodes/{nid}/` | `allow` (`action="delete"`) | 403 |
 | **view field** | GET serialiser | `viewable_fields` | field omitted from response |
 | **edit field** | PATCH (§12), per slug in `changed_fields` | `editable_fields` | 403 listing the rejected slugs |
@@ -2353,7 +2357,7 @@ for transitions whose config has no Rego rule yet (during migration); when a Reg
 policy is present it is authoritative.
 
 The serialiser is reusable for offline policy authoring and tests:
-`GET /api/user_defined_model_entities/{id}/policy-document/` (staff-only) returns the §16.1 document so
+`GET /api/udm/entities/{id}/policy-document/` (staff-only) returns the §16.1 document so
 it can be fed to `regorus eval` / unit tests as `input` while writing `.rego` rules.
 
 ---
@@ -2372,7 +2376,7 @@ it can be fed to `regorus eval` / unit tests as `input` while writing `.rego` ru
 - [ ] `MultiFieldValidationRule` root + `MultiFieldRuleAssociation` + concrete subclasses
 - [ ] `ConfigVersion.publish()` atomic method: validates the default combination (save-context, §2.8); deep-copies field defs, rules, workflow, and defaults into new DRAFT; auto-creates `BulkMigrationPlan` stubs for stale user_defined_model_entities
 - [ ] Config + workflow admin (Django admin for staff)
-- [ ] `/api/configs/` CRUD endpoints + `/api/user_defined_model_types/{id}/config/` read alias
+- [ ] `/api/udm/configs/` CRUD endpoints + `/api/udm/types/{id}/config/` read alias
 - [ ] Config JSON schema includes serialised rules and workflow states/transitions
 
 ### Phase 2 — UserDefinedModelEntityNode base + FieldValue storage
@@ -2389,14 +2393,14 @@ it can be fed to `regorus eval` / unit tests as `input` while writing `.rego` ru
 - [ ] Root-user_defined_model_entity lock in every write path per §14.2/§14.3 (`select_for_update(nowait=True, of=("self",))`), including a helper to resolve the root `UserDefinedModelEntity` from any submodel node
 - [ ] 409 handler for `OperationalError` (lock contention)
 - [ ] `WorkflowState.allows_edit` check in PATCH (§15.3)
-- [ ] Transition endpoint (`POST /api/user_defined_model_entities/{id}/transition/`) with full §15.1 sequence
+- [ ] Transition endpoint (`POST /api/udm/entities/{id}/transition/`) with full §15.1 sequence
 - [ ] Staging file upload endpoint + `cleanup_staging_files` management command
 - [ ] `cleanup_deleted_attachments` management command for soft-deleted `FileAttachment` rows
 - [ ] File staging → promotion + soft-delete-old flow within PATCH transaction
 - [ ] Submodel nested endpoints (create / partial-update / delete / transition)
 - [ ] Edit history models with `old_attachment` / `new_attachment` FKs and `NODE_TRANSITION` kind
-- [ ] History list endpoint (`GET /api/user_defined_model_entities/{id}/history/`)
-- [ ] `UserDefinedModelEntityNode.to_policy_document()` + `build_policy_input()` serialiser and `GET /api/user_defined_model_entities/{id}/policy-document/` endpoint (§16.1–16.2)
+- [ ] History list endpoint (`GET /api/udm/entities/{id}/history/`)
+- [ ] `UserDefinedModelEntityNode.to_policy_document()` + `build_policy_input()` serialiser and `GET /api/udm/entities/{id}/policy-document/` endpoint (§16.1–16.2)
 - [ ] `authz` module embedding regorus: startup policy load, per-request `clone()`+eval, `allows()` / `viewable_fields()` / `editable_fields()` (§16.3)
 - [ ] Enforce authz at every decision point (§16.4): view/create/delete node, GET field filtering, PATCH per-field gating (before validation), transition check in §15.1 step 4
 - [ ] Seed `.rego` policies reproducing current permissions (owner/editor edit in editable states, reviewer/staff visibility) + tests using the policy-document endpoint
