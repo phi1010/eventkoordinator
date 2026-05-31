@@ -27,10 +27,11 @@ def build_policy_input(node: "UserDefinedModelEntityNode", user: "OpenIDUser", a
     """Build the input document passed to regorus for a given action.
 
     For SAVE action, pass changed_fields=<incoming_dict> so Rego can see both
-    the old entity state (input.entity) and the new values (input.changed_fields).
-    Unchanged fields are visible via input.entity.fields.
+    the new entity state (input.entity, post-write) and which fields changed
+    (input.changed_fields, each wrapped as {"value": ...}).
     """
     policy_doc = node.to_policy_document()
+    logger.debug("build_policy_input node=%s action=%s user=%s", node.id, action, user.username)
 
     user_doc = {
         "id": str(user.id),
@@ -80,9 +81,11 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
         import regorus
         eng = regorus.Engine()
         for tp in type_policies:
+            logger.debug("loading policy slug=%s for node=%s", tp.policy.slug, node.id)
             eng.add_policy(f"policy_{tp.policy.slug}.rego", tp.policy.source)
 
         input_doc = build_policy_input(node, user, action, **kwargs)
+        logger.debug("policy input node=%s action=%s: %s", node.id, action, json.dumps(input_doc))
         eng.set_input_json(json.dumps(input_doc))
 
         def _eval_list(rule_path: str, default=None):
@@ -113,12 +116,18 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
         viewable_fields = _eval_list("data.udm.viewable_fields", default=None)
         editable_fields = _eval_list("data.udm.editable_fields", default=[])
 
-        return {
+        result = {
             "allow": allow,
             "messages": messages,
             "viewable_fields": viewable_fields,
             "editable_fields": editable_fields,
         }
+        logger.debug(
+            "policy result node=%s action=%s allow=%s messages=%d viewable=%s editable=%s",
+            node.id, action, allow, len(messages),
+            viewable_fields, editable_fields,
+        )
+        return result
     except Exception as exc:
         logger.exception("Policy evaluation failed: %s", exc)
         return {"allow": False, "messages": [], "viewable_fields": [], "editable_fields": []}

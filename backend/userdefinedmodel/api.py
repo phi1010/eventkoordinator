@@ -811,15 +811,17 @@ def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn):
                 return JsonResponse({"detail": "Not found"}, status=404)
             except OperationalError:
                 return _http409_concurrent()
-            try:
-                apply_patch(entity, payload.changed_fields, request.user)
-            except TransitionError as e:
-                if e.http_status == 409:
-                    return JsonResponse({"error": e.args[0], **e.details}, status=409)
-                return JsonResponse({"error": str(e)}, status=e.http_status)
-            except ValidationError as exc:
-                errors = exc.message_dict if hasattr(exc, "message_dict") else {"__all__": [str(exc)]}
-                return JsonResponse({"errors": errors}, status=400)
+            # Let TransitionError and ValidationError propagate out of the
+            # atomic block so Django rolls back all writes and history entries
+            # before we convert them to HTTP responses below.
+            apply_patch(entity, payload.changed_fields, request.user)
+    except TransitionError as e:
+        if e.http_status == 409:
+            return JsonResponse({"error": e.args[0], **e.details}, status=409)
+        return JsonResponse({"error": str(e)}, status=e.http_status)
+    except ValidationError as exc:
+        errors = exc.message_dict if hasattr(exc, "message_dict") else {"__all__": [str(exc)]}
+        return JsonResponse({"errors": errors}, status=400)
     except OperationalError:
         return _http409_concurrent()
     return _entity_out_for_user(entity, request.user)
@@ -853,10 +855,9 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn):
                 return JsonResponse({"detail": "Not found"}, status=404)
             except OperationalError:
                 return _http409_concurrent()
-            try:
-                execute_transition(entity, payload.transition, request.user)
-            except TransitionError as e:
-                return JsonResponse({"error": str(e), **e.details}, status=e.http_status)
+            execute_transition(entity, payload.transition, request.user)
+    except TransitionError as e:
+        return JsonResponse({"error": str(e), **e.details}, status=e.http_status)
     except OperationalError:
         return _http409_concurrent()
     return _entity_out_for_user(entity, request.user)
