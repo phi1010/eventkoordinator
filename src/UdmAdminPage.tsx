@@ -1206,7 +1206,7 @@ function PolicyEvaluator({ typeId }: PolicyEvaluatorProps) {
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<PolicyEvalOut | null>(null)
   const [evalError, setEvalError] = useState<string | null>(null)
-  const [activeResultTab, setActiveResultTab] = useState<'output' | 'input' | 'policies'>('output')
+  const [activeResultTab, setActiveResultTab] = useState<'output' | 'input' | 'policies' | 'prints'>('output')
 
   useEffect(() => {
     udmSearchEntities('', typeId).then(setEntities).catch(() => {})
@@ -1355,13 +1355,19 @@ function PolicyEvaluator({ typeId }: PolicyEvaluatorProps) {
 
           {/* Detail tabs */}
           <div className={styles.tabs} style={{ marginBottom: '0.5rem' }}>
-            {(['output', 'input', 'policies'] as const).map(tab => (
-              <button key={tab} type="button"
-                className={`${styles.tab} ${activeResultTab === tab ? styles.tabActive : ''}`}
-                onClick={() => setActiveResultTab(tab)}>
-                {tab === 'output' ? 'Full Output' : tab === 'input' ? 'Input Document' : `Policies (${result.policies.length})`}
-              </button>
-            ))}
+            {(['output', 'input', 'policies', 'prints'] as const).map(tab => {
+              if (tab === 'prints' && !(result.prints?.length)) return null
+              return (
+                <button key={tab} type="button"
+                  className={`${styles.tab} ${activeResultTab === tab ? styles.tabActive : ''}`}
+                  onClick={() => setActiveResultTab(tab)}>
+                  {tab === 'output' ? 'Full Output'
+                    : tab === 'input' ? 'Input Document'
+                    : tab === 'policies' ? `Policies (${result.policies.length})`
+                    : `Prints (${result.prints!.length})`}
+                </button>
+              )
+            })}
           </div>
 
           {activeResultTab === 'output' && (
@@ -1380,12 +1386,71 @@ function PolicyEvaluator({ typeId }: PolicyEvaluatorProps) {
             <div>
               {result.policies.length === 0 ? (
                 <div className={styles.emptyState}>No policies assigned to this type.</div>
-              ) : result.policies.map((p: Record<string, string>) => (
-                <div key={p['slug']} style={{ marginBottom: '0.75rem' }}>
-                  <div className={styles.monoText} style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{p['slug']}</div>
-                  <pre className={styles.monoText} style={{ margin: 0, padding: '0.75rem', background: '#f8f8f8', borderRadius: '6px', overflow: 'auto', maxHeight: '300px', fontSize: '0.8rem', border: '1px solid #e0e0e0' }}>
-                    {p['source']}
-                  </pre>
+              ) : result.policies.map((p: Record<string, string>) => {
+                const slug = p['slug'] as string
+                const coverageFile = result.coverage?.find(f => f.path === `policy_${slug}.rego`)
+                const coveredSet = new Set(coverageFile?.covered ?? [])
+                const notCoveredSet = new Set(coverageFile?.not_covered ?? [])
+
+                // Map line number → print values emitted at that line for this policy
+                const printsByLine = new Map<number, string[]>()
+                for (const raw of result.prints ?? []) {
+                  const m = raw.match(/^policy_(.+?)\.rego:(\d+): (.*)$/)
+                  if (m && m[1] === slug) {
+                    const lineNo = parseInt(m[2], 10)
+                    const val = m[3]
+                    if (!printsByLine.has(lineNo)) printsByLine.set(lineNo, [])
+                    printsByLine.get(lineNo)!.push(val)
+                  }
+                }
+
+                const lines = p['source'].split('\n')
+                return (
+                  <div key={slug} style={{ marginBottom: '0.75rem' }}>
+                    <div className={styles.monoText} style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
+                      {slug}
+                      {coverageFile && (
+                        <span style={{ fontWeight: 400, fontSize: '0.75rem', color: '#555', marginLeft: '0.6rem' }}>
+                          {coverageFile.covered.length} covered · {coverageFile.not_covered.length} not covered
+                        </span>
+                      )}
+                    </div>
+                    <div className={styles.monoText} style={{ padding: '0.5rem 0', background: '#f8f8f8', borderRadius: '6px', overflow: 'auto', maxHeight: '500px', fontSize: '0.8rem', border: '1px solid #e0e0e0' }}>
+                      {lines.map((line, idx) => {
+                        const lineNo = idx + 1
+                        const bg = coveredSet.has(lineNo) ? '#c6f6d5'
+                          : notCoveredSet.has(lineNo) ? '#fed7d7'
+                          : 'transparent'
+                        const linePrints = printsByLine.get(lineNo)
+                        return (
+                          <div key={idx}>
+                            <div style={{ display: 'flex', background: bg }}>
+                              <span style={{ minWidth: '2.8rem', padding: '0 0.5rem', color: '#999', userSelect: 'none', textAlign: 'right', flexShrink: 0 }}>
+                                {lineNo}
+                              </span>
+                              <span style={{ padding: '0 0.5rem', whiteSpace: 'pre' }}>{line}</span>
+                            </div>
+                            {linePrints?.map((val, pi) => (
+                              <div key={pi} style={{ display: 'flex', background: '#1e1e1e' }}>
+                                <span style={{ minWidth: '2.8rem', padding: '0 0.5rem', color: '#555', userSelect: 'none', textAlign: 'right', flexShrink: 0 }}>▶</span>
+                                <span style={{ padding: '0 0.5rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#d4d4d4' }}>{val}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {activeResultTab === 'prints' && result.prints && result.prints.length > 0 && (
+            <div style={{ background: '#1e1e1e', borderRadius: '6px', overflow: 'auto', maxHeight: '400px', padding: '0.75rem', border: '1px solid #333' }}>
+              {result.prints.map((line, i) => (
+                <div key={i} className={styles.monoText} style={{ fontSize: '0.8rem', color: '#d4d4d4', marginBottom: '0.15rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                  {line}
                 </div>
               ))}
             </div>

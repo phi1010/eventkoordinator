@@ -621,3 +621,5 @@ class PolicyEvalOut(Schema):
     policies: list[dict[str, str]]   # [{"slug": ..., "source": ...}]
     output: dict[str, Any]           # allow, messages, viewable_fields, editable_fields
     error: Optional[str] = None
+    prints: list[str] = []           # stdout lines emitted by print() in Rego
+    coverage: list[dict] = []        # per-file coverage: {path, covered, not_covered}

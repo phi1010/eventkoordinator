@@ -1075,6 +1075,14 @@ export interface components {
             policies: {
                 [key: string]: string;
             }[];
+            /** Prints — stdout lines from Rego print() calls */
+            prints?: string[];
+            /** Coverage — per-file {path, covered, not_covered} line arrays */
+            coverage?: {
+                path: string;
+                covered: number[];
+                not_covered: number[];
+            }[];
         };
         /** PolicyOut */
         PolicyOut: {

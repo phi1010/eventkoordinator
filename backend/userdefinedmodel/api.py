@@ -579,6 +579,8 @@ def eval_policy_for_type(
     # engine.evaluate_policy so this introspection view reflects real behavior.
     error_msg = None
     output = {"allow": False, "messages": [], "viewable_fields": [], "editable_fields": []}
+    eval_prints: list[str] = []
+    eval_coverage: list[dict] = []
     if policy_entries:
         try:
             import json as _json
@@ -587,6 +589,8 @@ def eval_policy_for_type(
             for entry in policy_entries:
                 eng.add_policy(f"policy_{entry['slug']}.rego", entry["source"])
             eng.set_input_json(_json.dumps(input_doc))
+            eng.set_gather_prints(True)
+            eng.set_enable_coverage(True)
 
             def _eval_list(rule_path):
                 try:
@@ -615,6 +619,14 @@ def eval_policy_for_type(
                 "viewable_fields": _eval_list("data.udm.viewable_fields"),
                 "editable_fields": _eval_list("data.udm.editable_fields"),
             }
+
+            eval_prints = eng.take_prints()
+            coverage_json = _json.loads(eng.get_coverage_report_as_json())
+            # Strip the redundant `code` field — sources are already in `policies`.
+            eval_coverage = [
+                {k: v for k, v in f.items() if k != "code"}
+                for f in coverage_json.get("files", [])
+            ]
         except Exception as exc:
             error_msg = str(exc)
             output = {"allow": False, "messages": [], "viewable_fields": [], "editable_fields": []}
@@ -624,6 +636,8 @@ def eval_policy_for_type(
         policies=policy_entries,
         output=output,
         error=error_msg,
+        prints=eval_prints,
+        coverage=eval_coverage,
     )
 
 

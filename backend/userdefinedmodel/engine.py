@@ -200,6 +200,7 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
         input_doc = build_policy_input(node, user, action, **kwargs)
         logger.debug("policy input node=%s action=%s: %s", node.id, action, json.dumps(input_doc))
         eng.set_input_json(json.dumps(input_doc))
+        eng.set_gather_prints(True)
 
         def _eval_list(rule_path: str, default=None):
             """Evaluate a Rego rule that should return a list; return default on undefined."""
@@ -232,6 +233,8 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
         messages = _normalize_policy_messages(raw_messages)
         viewable_fields = _eval_list("data.udm.viewable_fields", default=None)
         editable_fields = _eval_list("data.udm.editable_fields", default=[])
+
+        eng.take_prints()  # drain and discard prints from policy source
 
         result = {
             "allow": allow,
