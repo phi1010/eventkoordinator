@@ -49,6 +49,7 @@ class FieldEdit(MetaBase):
         null=True,
         blank=True,
     )
+    language = models.CharField(max_length=10, blank=True, default="")
     old_value = models.JSONField(null=True, blank=True)
     new_value = models.JSONField(null=True, blank=True)
     old_attachment = models.ForeignKey(

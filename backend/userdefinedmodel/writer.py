@@ -375,6 +375,7 @@ def _record_field_edit(edit_group, field, old_value, new_value, *, old_attachmen
         group=edit_group,
         change_kind=FieldEdit.ChangeKind.FIELD_VALUE,
         field=field,
+        language=lang,
         old_value=_json(old_value),
         new_value=_json(new_value),
         old_attachment=old_attachment,

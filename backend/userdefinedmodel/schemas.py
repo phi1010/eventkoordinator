@@ -437,6 +437,7 @@ class FieldEditOut(Schema):
     change_kind: str
     field_slug: Optional[str] = None
     field_label: Optional[str] = None
+    language: str = ""
     old_value: Optional[Any] = None
     new_value: Optional[Any] = None
     old_file_name: Optional[str] = None

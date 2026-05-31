@@ -1233,6 +1233,7 @@ def entity_history(request, entity_id: uuid.UUID, page: int = 1, page_size: int 
                 change_kind=fe.change_kind,
                 field_slug=slug,
                 field_label=label,
+                language=fe.language,
                 old_value=fe.old_value,
                 new_value=fe.new_value,
                 old_file_name=fe.old_attachment.original_name if fe.old_attachment else None,

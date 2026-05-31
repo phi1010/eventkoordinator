@@ -1626,7 +1626,13 @@ function HistoryPanel({ entityId }: { entityId: string }) {
             <div key={i} className={styles.historyEdit}>
               {edit.change_kind === 'field_value' ? (
                 <span>
-                  <strong>{edit.field_label ?? edit.field_slug}</strong>:{' '}
+                  <strong>{edit.field_label ?? edit.field_slug}</strong>
+                  {edit.language ? (
+                    <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', background: '#f0f0f0', borderRadius: '3px', padding: '0.05rem 0.3rem', marginLeft: '0.3rem', color: '#555' }}>
+                      {edit.language}
+                    </span>
+                  ) : null}
+                  {': '}
                   {edit.old_file_name
                     ? <>{edit.old_file_name} → {edit.new_file_name ?? '—'}</>
                     : <>{JSON.stringify(edit.old_value)} → {JSON.stringify(edit.new_value)}</>
