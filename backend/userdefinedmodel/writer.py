@@ -99,6 +99,7 @@ def apply_patch(
     user: "OpenIDUser",
     edit_group=None,
     validate_only: bool = False,
+    _old_entity_doc: dict | None = None,
 ) -> "EditGroup":
     """
     Apply a partial PATCH to node. Must be called inside transaction.atomic()
@@ -150,6 +151,17 @@ def apply_patch(
     except UserDefinedModelEntity.DoesNotExist:
         root_entity = node.get_root()
 
+    # Capture the pre-write root entity document once at the top level so the
+    # policy can inspect state that no longer exists after writes (e.g. the author
+    # field of a deleted review submodel). Threaded to recursive calls unchanged.
+    if _old_entity_doc is None:
+        from userdefinedmodel.engine import _expand_fields
+        _old_entity_doc = root_entity.to_policy_document()
+        _expand_fields(_old_entity_doc.get("fields", {}))
+        for _child_list in _old_entity_doc.get("children", {}).values():
+            for _child_doc in _child_list:
+                _expand_fields(_child_doc.get("fields", {}))
+
     if edit_group is None:
         edit_group = EditGroup.objects.create(node=node, root_entity=root_entity, saved_by=user)
 
@@ -161,7 +173,7 @@ def apply_patch(
     for slug, ops in submodel_changes.items():
         field = field_map[slug]
         if isinstance(ops, list):
-            _apply_submodel_ops(node, field, ops, user, edit_group, validate_only=validate_only)
+            _apply_submodel_ops(node, field, ops, user, edit_group, validate_only=validate_only, old_entity_doc=_old_entity_doc)
 
     # 7. Validate for save (runs on the new state; transaction rolls back on failure)
     node.validate_for_save()
@@ -169,12 +181,12 @@ def apply_patch(
     # Evaluate policy for SAVE. At this point writes are already flushed to the
     # transaction so input.entity.fields reflects the new state; changed_fields
     # tells the policy which slugs were explicitly submitted in this request.
-    messages = _evaluate_save_policy(node, user, changed_fields, validate_only=validate_only)
+    messages = _evaluate_save_policy(node, user, changed_fields, validate_only=validate_only, old_entity_doc=_old_entity_doc)
 
     return edit_group, messages
 
 
-def _evaluate_save_policy(node, user, changed_fields: dict, validate_only: bool = False) -> list:
+def _evaluate_save_policy(node, user, changed_fields: dict, validate_only: bool = False, old_entity_doc: dict | None = None) -> list:
     """Evaluate Rego policy for SAVE action.
 
     Returns the full message list (including warnings).
@@ -209,7 +221,7 @@ def _evaluate_save_policy(node, user, changed_fields: dict, validate_only: bool 
         node.id, user.username, list(safe_changed.keys()),
     )
 
-    output = evaluate_policy(node, user, "save", changed_fields=safe_changed, validate_only=validate_only)
+    output = evaluate_policy(node, user, "save", changed_fields=safe_changed, validate_only=validate_only, old_entity=old_entity_doc)
 
     logger.debug(
         "policy save result node=%s allow=%s messages=%s",
@@ -386,7 +398,7 @@ def _record_field_edit(edit_group, field, old_value, new_value, *, old_attachmen
     )
 
 
-def _apply_submodel_ops(parent_node, field, ops, user, edit_group, validate_only: bool = False) -> None:
+def _apply_submodel_ops(parent_node, field, ops, user, edit_group, validate_only: bool = False, old_entity_doc: dict | None = None) -> None:
     from userdefinedmodel.models.node import SubmodelInstance
     from userdefinedmodel.models.history import FieldEdit
 
@@ -415,7 +427,7 @@ def _apply_submodel_ops(parent_node, field, ops, user, edit_group, validate_only
             child.materialize_user_defaults(user)
 
             if op_fields:
-                _, _msgs = apply_patch(child, op_fields, user, edit_group=edit_group, validate_only=validate_only)
+                _, _msgs = apply_patch(child, op_fields, user, edit_group=edit_group, validate_only=validate_only, _old_entity_doc=old_entity_doc)
 
             FieldEdit.objects.create(
                 group=edit_group,
@@ -444,7 +456,7 @@ def _apply_submodel_ops(parent_node, field, ops, user, edit_group, validate_only
                 )
 
             if op_fields:
-                _, _msgs = apply_patch(child, op_fields, user, edit_group=edit_group, validate_only=validate_only)
+                _, _msgs = apply_patch(child, op_fields, user, edit_group=edit_group, validate_only=validate_only, _old_entity_doc=old_entity_doc)
 
         elif op == "delete":
             try:

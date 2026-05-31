@@ -219,13 +219,15 @@ error_messages contains msg if {
 	}
 }
 
-# Block changing another user's review.
+# Block modifying or deleting another user's review.
+# Uses input.old_entity (pre-write snapshot) so the check works even for
+# delete operations where the review no longer exists in input.entity.
 error_messages contains msg if {
 	input.action == "save"
 	not is_superuser_sudo
 	some op in input.changed_fields.reviews.value
 	op.op in {"update", "delete"}
-	some existing in input.entity.children.reviews
+	some existing in input.old_entity.children.reviews
 	existing.id == op.id
 	existing.fields.author.value.id != input.user.id
 	msg := {
@@ -261,6 +263,21 @@ error_messages contains msg if {
 		"level": "critical",
 		"text": "You can only create reviews as yourself.",
 		"field_slug": "reviews",
+	}
+}
+
+_changing_reviewer_assignments if { input.changed_fields["requested-reviewer-groups"] }
+_changing_reviewer_assignments if { input.changed_fields["requested-reviewer-users"] }
+
+error_messages contains msg if {
+	input.action == "save"
+	not is_moderator
+	not is_superuser_sudo
+	_changing_reviewer_assignments
+	msg := {
+		"level": "critical",
+		"text": "Only moderators may change reviewer assignments.",
+		"field_slug": null,
 	}
 }
 
@@ -527,6 +544,19 @@ success_messages contains msg if {
 	}
 }
 
+# reviewer (not moderator, not owner/editor): no transitions available — explain why
+success_messages contains msg if {
+	input.action in {"view", "save"}
+	is_reviewer
+	not is_moderator
+	not is_owner_or_editor
+	msg := {
+		"level": "info",
+		"text": "No transitions available for reviewers. Submit your review and the moderator will decide.",
+		"field_slug": "status",
+	}
+}
+
 # ── Save: context messages ──
 success_messages contains msg if {
 	input.action == "save"
@@ -690,12 +720,12 @@ editable_fields := [f | some f in _editable_set]
 
 _editable_set contains f if { is_superuser_sudo; input.entity.fields[f] }
 
-# Owner/editors can edit all content fields except the immutable ones.
+# Owner/editors can edit content fields; reviewer assignment is moderator-only.
 _editable_set contains f if {
 	is_owner_or_editor
 	current_status in EDITABLE_STATUSES
 	input.entity.fields[f]
-	not f in {"owner", "proposal-id"}
+	not f in {"owner", "proposal-id", "requested-reviewer-groups", "requested-reviewer-users"}
 }
 
 # Moderators can manage the reviewer assignment fields.

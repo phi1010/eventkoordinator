@@ -1833,8 +1833,11 @@ export function UdmEntityEditor() {
   // until it is migrated to the current version.
   const isArchived = config?.status === 'archived'
 
-  // Determine editability from workflow state (archived overrides everything)
-    const editable = !isArchived
+  // Determine editability: archived overrides everything; otherwise defer to
+  // the per-field editable_fields list returned by the policy.
+  const editable = !isArchived
+  const editableFieldSlugs: Set<string> | null =
+    entity.editable_fields != null ? new Set(entity.editable_fields) : null
 
   const languages = (config?.languages ?? []).map(l => l.code)
   if (languages.length === 0) languages.push('')
@@ -1976,7 +1979,7 @@ export function UdmEntityEditor() {
             dirty={dirty}
             onDirty={handleDirty}
             onReset={handleReset}
-            editable={editable}
+            editable={editable && (editableFieldSlugs == null || editableFieldSlugs.has(fd.slug))}
             languages={fd.is_localized ? languages.filter(Boolean) : ['']}
             uiLang={uiLang}
             severity={fieldSeverities[fd.slug]}
