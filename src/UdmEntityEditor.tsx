@@ -1017,6 +1017,12 @@ function FileFieldInput({ fd, value, onChange, disabled }: FileFieldProps) {
   const currentFile = value && typeof value === 'object' ? value as Record<string, string> : null
   const currentUrl = currentFile?.['url'] ?? null
   const isImage = fd.data_type === 'image'
+  const hasValue = stagingName !== null || currentUrl !== null
+
+  function handleClear() {
+    setStagingName(null)
+    onChange(null)
+  }
 
   return (
     <div>
@@ -1024,7 +1030,7 @@ function FileFieldInput({ fd, value, onChange, disabled }: FileFieldProps) {
         <div className={styles.fileInfo}>
           {isImage ? (
             <img src={currentUrl} alt={currentFile?.['original_name'] ?? 'image'}
-              style={{ maxWidth: '100%', maxHeight: '200px', display: 'block', borderRadius: '4px' }} />
+              style={{ maxWidth: '100%', maxHeight: '200px', display: 'block', borderRadius: '4px', marginBottom: '0.4rem' }} />
           ) : (
             <a href={currentUrl} target="_blank" rel="noopener noreferrer">
               {currentFile?.['original_name'] ?? 'View file'}
@@ -1036,15 +1042,25 @@ function FileFieldInput({ fd, value, onChange, disabled }: FileFieldProps) {
         <div className={styles.fileInfo}>Staged: {stagingName} — will be saved on next save</div>
       )}
       {!disabled && (
-        <>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.4rem' }}>
           <div
             className={styles.fileUploadArea}
+            style={{ flex: 1, marginTop: 0 }}
             onClick={() => inputRef.current?.click()}
             onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) void handleFile(f) }}
             onDragOver={e => e.preventDefault()}
           >
             {uploading ? `Uploading… ${progress}%` : 'Click or drop to upload'}
           </div>
+          {hasValue && (
+            <button
+              type="button"
+              onClick={handleClear}
+              style={{ padding: '0.4rem 0.75rem', border: '1px solid #dc2626', borderRadius: '4px', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+            >
+              Clear
+            </button>
+          )}
           <input
             ref={inputRef}
             type="file"
@@ -1052,7 +1068,7 @@ function FileFieldInput({ fd, value, onChange, disabled }: FileFieldProps) {
             accept={fd.data_type === 'image' ? 'image/*' : undefined}
             onChange={e => { const f = e.target.files?.[0]; if (f) void handleFile(f) }}
           />
-        </>
+        </div>
       )}
     </div>
   )
