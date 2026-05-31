@@ -523,10 +523,15 @@ export async function udmDeleteEntity(entityId: string): Promise<void> {
   if (error || !response.ok) throw new Error('Failed to delete entity')
 }
 
-export async function udmTransitionEntity(entityId: string, field: string, transition: string): Promise<EntityOut> {
+export async function udmTransitionEntity(
+  entityId: string,
+  field: string,
+  transition: string,
+  changedFields: Record<string, unknown> = {},
+): Promise<EntityOut> {
   const { data, error, response } = await udmClient.POST('/api/udm/entities/{entity_id}/transition/', {
     params: { path: { entity_id: entityId } },
-    body: { field, transition },
+    body: { field, transition, changed_fields: changedFields },
   })
   if (error || !response.ok || !data) throwApiError(error, 'Transition failed')
   return data as EntityOut

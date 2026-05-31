@@ -1849,8 +1849,9 @@ export function UdmEntityEditor() {
     setErrors([])
     setSuccess(null)
     try {
-      const updated = await udmTransitionEntity(resolvedEntityId, fieldSlug, transitionName)
+      const updated = await udmTransitionEntity(resolvedEntityId, fieldSlug, transitionName, dirty)
       setEntity(updated)
+      setDirty({})
       setPolicyMessages(updated.policy_messages)
       const globalMsgs = (updated.policy_messages ?? []).filter((m: PolicyMessage) => !m.highlight_fields?.length)
       if (globalMsgs.length > 0) {

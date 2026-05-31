@@ -377,6 +377,7 @@ class EntityPatchIn(Schema):
 class TransitionIn(Schema):
     field: Slug
     transition: Annotated[str, Field(min_length=1, max_length=_MAX_TRANS_NAME_LEN)]
+    changed_fields: dict = Field(default_factory=dict)
     model_config = {"extra": "forbid"}
 
 

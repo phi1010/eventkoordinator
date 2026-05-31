@@ -1123,6 +1123,9 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
     from userdefinedmodel.models import UserDefinedModelEntity
     from userdefinedmodel.engine import execute_transition, TransitionError
 
+    from userdefinedmodel.writer import apply_patch
+    from userdefinedmodel.engine import PolicyError
+
     if validate_only:
         result = {"valid": True, "policy_messages": [], "errors": {}}
         try:
@@ -1137,11 +1140,18 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
                 except OperationalError:
                     return _http409_concurrent()
                 try:
+                    if payload.changed_fields:
+                        apply_patch(entity, payload.changed_fields, request.user)
                     msgs = execute_transition(entity, payload.field, payload.transition, request.user)
                     result = {"valid": True, "policy_messages": msgs, "errors": {}}
+                except PolicyError as e:
+                    result = {"valid": False, "policy_messages": e.messages, "errors": {}}
                 except TransitionError as e:
                     result = {"valid": False, "policy_messages": e.details.get("policy_messages", []),
                               "errors": {"__all__": [str(e)]}}
+                except ValidationError as exc:
+                    errors = exc.message_dict if hasattr(exc, "message_dict") else {"__all__": [str(exc)]}
+                    result = {"valid": False, "policy_messages": [], "errors": errors}
                 finally:
                     transaction.set_rollback(True)
         except OperationalError:
@@ -1160,9 +1170,16 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
                 return JsonResponse({"detail": "Not found"}, status=404)
             except OperationalError:
                 return _http409_concurrent()
+            if payload.changed_fields:
+                apply_patch(entity, payload.changed_fields, request.user)
             transition_messages = execute_transition(entity, payload.field, payload.transition, request.user)
+    except PolicyError as e:
+        return JsonResponse({"policy_messages": e.messages}, status=422)
     except TransitionError as e:
         return JsonResponse({"error": str(e), **e.details}, status=e.http_status)
+    except ValidationError as exc:
+        errors = exc.message_dict if hasattr(exc, "message_dict") else {"__all__": [str(exc)]}
+        return JsonResponse({"errors": errors}, status=400)
     except OperationalError:
         return _http409_concurrent()
     return _entity_out_for_user(entity, request.user, policy_messages=transition_messages)
