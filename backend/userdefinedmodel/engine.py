@@ -268,7 +268,7 @@ class TransitionError(Exception):
         self.details = details or {}
 
 
-def execute_transition(node: "UserDefinedModelEntityNode", field_slug: str, name: str, user: "OpenIDUser") -> None:
+def execute_transition(node: "UserDefinedModelEntityNode", field_slug: str, name: str, user: "OpenIDUser") -> list:
     """
     Execute a named workflow transition on the specified workflow field of `node`.
     Must be called inside an existing transaction.atomic() with the root lock held.
@@ -372,6 +372,8 @@ def execute_transition(node: "UserDefinedModelEntityNode", field_slug: str, name
             action.get_real_instance().execute(node, user)
         except Exception as exc:
             logger.warning("Post-transition action %s failed: %s", action.pk, exc)
+
+    return output.get("messages") or []
 
 
 def _validate_subtree(node: "UserDefinedModelEntityNode") -> None:

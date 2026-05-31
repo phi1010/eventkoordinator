@@ -1137,9 +1137,10 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
                 except OperationalError:
                     return _http409_concurrent()
                 try:
-                    execute_transition(entity, payload.field, payload.transition, request.user)
+                    msgs = execute_transition(entity, payload.field, payload.transition, request.user)
+                    result = {"valid": True, "policy_messages": msgs, "errors": {}}
                 except TransitionError as e:
-                    result = {"valid": False, "policy_messages": e.details.get("messages", []),
+                    result = {"valid": False, "policy_messages": e.details.get("policy_messages", []),
                               "errors": {"__all__": [str(e)]}}
                 finally:
                     transaction.set_rollback(True)
@@ -1147,6 +1148,7 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
             return _http409_concurrent()
         return JsonResponse(result)
 
+    transition_messages = []
     try:
         with transaction.atomic():
             try:
@@ -1158,12 +1160,12 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
                 return JsonResponse({"detail": "Not found"}, status=404)
             except OperationalError:
                 return _http409_concurrent()
-            execute_transition(entity, payload.field, payload.transition, request.user)
+            transition_messages = execute_transition(entity, payload.field, payload.transition, request.user)
     except TransitionError as e:
         return JsonResponse({"error": str(e), **e.details}, status=e.http_status)
     except OperationalError:
         return _http409_concurrent()
-    return _entity_out_for_user(entity, request.user)
+    return _entity_out_for_user(entity, request.user, policy_messages=transition_messages)
 
 
 @api.get("/entities/{entity_id}/history/", response=EditHistoryOut, auth=django_auth)

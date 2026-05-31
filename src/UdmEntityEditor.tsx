@@ -1552,6 +1552,50 @@ function PolicyMessageList({ messages }: { messages: PolicyMessage[] }) {
   )
 }
 
+// ── Transition message popup ──────────────────────────────────────────────────
+
+function TransitionMessagePopup({ messages, onClose }: { messages: PolicyMessage[]; onClose: () => void }) {
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: '#fff', borderRadius: '8px', padding: '1.5rem',
+          maxWidth: '440px', width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Transition messages</span>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#888', lineHeight: 1, padding: '0 0.2rem' }}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <PolicyMessageList messages={messages} />
+        <div style={{ marginTop: '1rem', textAlign: 'right' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ padding: '0.4rem 1rem', background: '#f5f5f5', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem' }}
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── History panel ─────────────────────────────────────────────────────────────
 
 function HistoryPanel({ entityId }: { entityId: string }) {
@@ -1612,6 +1656,7 @@ export function UdmEntityEditor() {
   const [success, setSuccess] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [policyMessages, setPolicyMessages] = useState<PolicyMessage[]>([])
+  const [transitionPopup, setTransitionPopup] = useState<PolicyMessage[]>([])
 
   const fieldSeverities = useMemo(() => {
     const out: Record<string, string> = {}
@@ -1806,9 +1851,25 @@ export function UdmEntityEditor() {
     try {
       const updated = await udmTransitionEntity(resolvedEntityId, fieldSlug, transitionName)
       setEntity(updated)
-      setSuccess(`Transition "${transitionName}" applied.`)
+      setPolicyMessages(updated.policy_messages)
+      const globalMsgs = (updated.policy_messages ?? []).filter((m: PolicyMessage) => !m.highlight_fields?.length)
+      if (globalMsgs.length > 0) {
+        setTransitionPopup(globalMsgs)
+      } else {
+        setSuccess(`Transition "${transitionName}" applied.`)
+      }
     } catch (e) {
-      setErrors(e instanceof UdmApiError ? e.allMessages : [e instanceof Error ? e.message : 'Transition failed'])
+      if (e instanceof UdmApiError) {
+        const globalMsgs = e.policyMessages.filter(m => !m.highlight_fields?.length)
+        if (globalMsgs.length > 0) {
+          setTransitionPopup(globalMsgs)
+        } else {
+          const plainErrors = e.allMessages
+          setErrors(plainErrors.length > 0 ? plainErrors : ['Transition failed'])
+        }
+      } else {
+        setErrors([e instanceof Error ? e.message : 'Transition failed'])
+      }
     } finally {
       setTransitioning(false)
     }
@@ -1818,6 +1879,9 @@ export function UdmEntityEditor() {
 
   return (
     <div className={styles.page}>
+      {transitionPopup.length > 0 && (
+        <TransitionMessagePopup messages={transitionPopup} onClose={() => setTransitionPopup([])} />
+      )}
       <div className={styles.header}>
         <button type="button" className={styles.backBtn} onClick={() => navigate(-1)}>
           ← Back
