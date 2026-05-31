@@ -182,9 +182,13 @@ Django permission codenames (not content-type qualified).
 ## 5. Save action — `changed_fields`
 
 When `action == "save"`, the `changed_fields` key contains the fields that were explicitly submitted in
-this PATCH request. The entity has already been written to the database before policy evaluation, so
-`input.entity.fields` reflects the **new** state. `changed_fields` tells the policy **which** fields were
-part of this request.
+this PATCH request.
+
+All writes (scalar fields and submodel operations) are flushed to the database **within the open
+transaction** before policy evaluation runs. This means `input.entity.fields` reflects the **post-write
+state**. If the policy denies the save (returns `allow: false` or any `critical` message), the exception
+propagates out of `transaction.atomic()` and the entire transaction is rolled back — nothing is permanently
+committed. `changed_fields` tells the policy **which** fields were part of this request.
 
 ```json
 {
@@ -201,8 +205,12 @@ the field map and the changed-fields map.
 
 Fields that were not submitted (unchanged) do not appear in `changed_fields`.
 
-Submodel operations (list add/update/delete) do **not** appear as slugs in `changed_fields`; they are
-reflected only through the updated `children` in `input.entity`.
+`changed_fields` is the raw submitted payload, so it includes **all** submitted keys:
+- Scalar field slugs — value is the new scalar, encoded as above.
+- `submodel_list` slugs — value is the raw ops array `[{"op": "create"|"update"|"delete", ...}]` wrapped as `{"value": [...]}`. The child nodes are already written; the `children` key of `input.entity` reflects the result.
+- `_`-prefixed control keys (e.g. `_undelete`) — these are skipped by the writer but still appear in `changed_fields` passed to the policy engine.
+
+`workflow` field slugs are never present — the writer raises a `ValidationError` before reaching policy evaluation if one is submitted.
 
 **Example:**
 ```json
