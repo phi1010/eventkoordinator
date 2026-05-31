@@ -104,7 +104,6 @@ class ConfigVersionFactory(DjangoModelFactory):
     config = factory.SubFactory(FieldConfigFactory)
     status = "draft"
     notes = ""
-    workflow = None
 
 
 class PublishedConfigVersionFactory(ConfigVersionFactory):
@@ -300,10 +299,9 @@ def make_simple_config(data_type="text_short", required=True, max_length=None):
     return config, version, field, lang
 
 
-def make_full_workflow(version=None):
+def make_full_workflow():
     """
     Create a WorkflowDefinition with draft→submitted states and a submit transition.
-    If version is provided, assigns it as version.workflow.
 
     Returns: (workflow, draft_state, submitted_state, submit_transition)
     """
@@ -323,11 +321,26 @@ def make_full_workflow(version=None):
     )
     WorkflowTransitionTranslation.objects.create(transition=trans, language="en", label="Submit")
 
-    if version is not None:
-        version.workflow = wf
-        version.save(update_fields=["workflow"])
-
     return wf, draft, submitted, trans
+
+
+def add_workflow_field(version, workflow, slug="status"):
+    """
+    Add a WORKFLOW field definition to a config version, linked to the given workflow.
+
+    Returns the FieldDefinition.
+    """
+    from userdefinedmodel.models import FieldDefinition, FieldDefinitionTranslation
+
+    field = FieldDefinition.objects.create(
+        version=version,
+        slug=slug,
+        data_type="workflow",
+        sort_order=999,
+        workflow_definition=workflow,
+    )
+    FieldDefinitionTranslation.objects.create(field=field, language="en", label="Status")
+    return field
 
 
 def make_entity_with_type(owner=None, policy_source=ALLOW_ALL_POLICY):
@@ -416,6 +429,7 @@ allow := true
 messages contains msg if {
     input.action == "transition"
     input.transition == "submit"
+    input.field == "status"
     not input.entity.fields.title.value
     msg := {
         "level": "error",

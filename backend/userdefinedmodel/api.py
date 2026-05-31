@@ -52,9 +52,11 @@ from userdefinedmodel.schemas import (
     UDMTypeCreateIn,
     UserAutocompleteItem,
     UserRefOut,
+    WorkflowCreateIn,
+    WorkflowDefinitionOut,
     WorkflowStateOut,
     WorkflowTransitionOut,
-    WorkflowOut,
+    WorkflowUpdateIn,
 )
 
 logger = logging.getLogger(__name__)
@@ -108,9 +110,43 @@ def _entity_out_for_user(entity, user, policy_messages: list | None = None, view
     return EntityOut(**data)
 
 
+def _serialize_workflow(wf) -> WorkflowDefinitionOut:
+    states = []
+    for state in wf.states.prefetch_related("translations").all():
+        label_dict = {t.language: t.label for t in state.translations.all()}
+        states.append(WorkflowStateOut(
+            name=state.name, label=label_dict,
+            is_initial=state.is_initial, allows_edit=state.allows_edit,
+        ))
+    transitions = []
+    for trans in wf.transitions.prefetch_related("translations").select_related("from_state", "to_state").all():
+        label_dict = {t.language: t.label for t in trans.translations.all()}
+        transitions.append(WorkflowTransitionOut(
+            name=trans.name, label=label_dict,
+            from_state=trans.from_state.name if trans.from_state else None,
+            from_undefined_only=trans.from_undefined_only,
+            to_state=trans.to_state.name,
+        ))
+    initial = next((s for s in states if s.is_initial), None)
+    return WorkflowDefinitionOut(
+        id=wf.id,
+        name=wf.name,
+        description=wf.description,
+        initial_state=initial.name if initial else None,
+        states=states,
+        transitions=transitions,
+    )
+
+
 def _serialize_config_version(version) -> ConfigVersionOut:
     fields_out = []
-    for fd in version.field_definitions.prefetch_related("translations", "defaults", "single_field_rules").all():
+    for fd in version.field_definitions.prefetch_related(
+        "translations", "defaults", "single_field_rules",
+        "workflow_definition__states__translations",
+        "workflow_definition__transitions__translations",
+        "workflow_definition__transitions__from_state",
+        "workflow_definition__transitions__to_state",
+    ).all():
         label_dict = {t.language: t.label for t in fd.translations.all()}
         help_dict = {t.language: t.help_text for t in fd.translations.all()}
 
@@ -128,6 +164,8 @@ def _serialize_config_version(version) -> ConfigVersionOut:
             else:
                 default_val = defaults_qs[0].get_value(field=fd)
 
+        workflow_def_out = _serialize_workflow(fd.workflow_definition) if fd.workflow_definition else None
+
         fields_out.append(FieldDefinitionOut(
             id=fd.id,
             slug=fd.slug,
@@ -141,32 +179,8 @@ def _serialize_config_version(version) -> ConfigVersionOut:
             default=default_val,
             save_rules=save_rules,
             submodel_config=_serialize_config_version(fd.submodel_config) if fd.submodel_config else None,
+            workflow_definition=workflow_def_out,
         ))
-
-    workflow_out = None
-    if version.workflow:
-        wf = version.workflow
-        states = []
-        for state in wf.states.prefetch_related("translations").all():
-            label_dict = {t.language: t.label for t in state.translations.all()}
-            states.append(WorkflowStateOut(
-                name=state.name, label=label_dict,
-                is_initial=state.is_initial, allows_edit=state.allows_edit,
-            ))
-        transitions = []
-        for trans in wf.transitions.prefetch_related("translations").all():
-            label_dict = {t.language: t.label for t in trans.translations.all()}
-            transitions.append(WorkflowTransitionOut(
-                name=trans.name, label=label_dict,
-                from_state=trans.from_state.name if trans.from_state else None,
-                to_state=trans.to_state.name,
-            ))
-        initial = next((s for s in states if s.is_initial), None)
-        workflow_out = WorkflowOut(
-            initial_state=initial.name if initial else "",
-            states=states,
-            transitions=transitions,
-        )
 
     return ConfigVersionOut(
         version_id=version.id,
@@ -178,7 +192,6 @@ def _serialize_config_version(version) -> ConfigVersionOut:
             for l in version.config.languages.all()
         ],
         fields=fields_out,
-        workflow=workflow_out,
     )
 
 
@@ -351,8 +364,7 @@ def get_draft_version(request, config_id: uuid.UUID):
 def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
     from userdefinedmodel.models import (
         ConfigVersion, FieldConfig, FieldDefinition, FieldDefinitionTranslation,
-        WorkflowDefinition, WorkflowState, WorkflowStateTranslation,
-        WorkflowTransition, WorkflowTransitionTranslation,
+        WorkflowDefinition,
     )
     if denied := _require_perms(request, "userdefinedmodel.change_fieldconfig"):
         return denied
@@ -367,30 +379,6 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
             defaults={"notes": payload.notes},
         )
         draft.notes = payload.notes
-
-        if payload.workflow:
-            wf_data = payload.workflow
-            wf = WorkflowDefinition.objects.create(name=wf_data.name, description=wf_data.description)
-            state_map = {}
-            for state_in in wf_data.states:
-                state = WorkflowState.objects.create(
-                    workflow=wf, name=state_in.name,
-                    is_initial=state_in.is_initial, allows_edit=state_in.allows_edit,
-                )
-                state_map[state_in.name] = state
-                for lang, label in state_in.label.items():
-                    WorkflowStateTranslation.objects.create(state=state, language=lang, label=label)
-            for trans_in in wf_data.transitions:
-                trans = WorkflowTransition.objects.create(
-                    workflow=wf,
-                    name=trans_in.name,
-                    from_state=state_map.get(trans_in.from_state) if trans_in.from_state else None,
-                    to_state=state_map[trans_in.to_state],
-                )
-                for lang, label in trans_in.label.items():
-                    WorkflowTransitionTranslation.objects.create(transition=trans, language=lang, label=label)
-            draft.workflow = wf
-
         draft.save()
         draft.field_definitions.all().delete()
 
@@ -418,6 +406,13 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
                 except ConfigVersion.DoesNotExist:
                     return JsonResponse({"detail": f"ConfigVersion {fd_in.submodel_config_version_id} not found"}, status=400)
 
+            workflow_definition = None
+            if fd_in.workflow_definition_id:
+                try:
+                    workflow_definition = WorkflowDefinition.objects.get(id=fd_in.workflow_definition_id)
+                except WorkflowDefinition.DoesNotExist:
+                    return JsonResponse({"detail": f"WorkflowDefinition {fd_in.workflow_definition_id} not found"}, status=400)
+
             fd = FieldDefinition.objects.create(
                 version=draft,
                 slug=fd_in.slug,
@@ -426,6 +421,7 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
                 is_localized=fd_in.is_localized,
                 is_preview=fd_in.is_preview,
                 submodel_config=submodel_config,
+                workflow_definition=workflow_definition,
                 type_config=fd_in.type_config,
             )
             field_map[fd_in.slug] = fd
@@ -619,7 +615,7 @@ def eval_policy_for_type(
 
     try:
         entity = UserDefinedModelEntity.objects.select_related(
-            "config_version__workflow", "current_state", "user_defined_model_type"
+            "config_version", "user_defined_model_type"
         ).get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
         return JsonResponse({"detail": "Entity not found"}, status=404)
@@ -738,6 +734,129 @@ def update_udm_type(request, type_id: uuid.UUID, field_config_id: Optional[uuid.
         udm_type.field_config = cfg
         udm_type.save()
     return UDMTypeOut(id=udm_type.id, name=udm_type.name, description=udm_type.description, field_config_id=udm_type.field_config_id)
+
+
+# ─── Workflow CRUD ────────────────────────────────────────────────────────────
+
+@api.get("/workflows/", response=list[WorkflowDefinitionOut], auth=django_auth)
+def list_workflows(request):
+    from userdefinedmodel.models import WorkflowDefinition
+    if denied := _require_perms(request, "userdefinedmodel.view_fielddefinition"):
+        return denied
+    workflows = WorkflowDefinition.objects.prefetch_related(
+        "states__translations", "transitions__translations",
+        "transitions__from_state", "transitions__to_state",
+    ).all()
+    return [_serialize_workflow(wf) for wf in workflows]
+
+
+@api.post("/workflows/", response={201: WorkflowDefinitionOut}, auth=django_auth)
+def create_workflow(request, payload: WorkflowCreateIn):
+    from userdefinedmodel.models import (
+        WorkflowDefinition, WorkflowState, WorkflowStateTranslation,
+        WorkflowTransition, WorkflowTransitionTranslation,
+    )
+    if denied := _require_perms(request, "userdefinedmodel.add_fielddefinition"):
+        return denied
+    with transaction.atomic():
+        wf = WorkflowDefinition.objects.create(name=payload.name, description=payload.description)
+        state_map = {}
+        for state_in in payload.states:
+            state = WorkflowState.objects.create(
+                workflow=wf, name=state_in.name,
+                is_initial=state_in.is_initial, allows_edit=state_in.allows_edit,
+            )
+            state_map[state_in.name] = state
+            for lang, label in state_in.label.items():
+                WorkflowStateTranslation.objects.create(state=state, language=lang, label=label)
+        for trans_in in payload.transitions:
+            trans = WorkflowTransition.objects.create(
+                workflow=wf,
+                name=trans_in.name,
+                from_state=state_map.get(trans_in.from_state) if trans_in.from_state else None,
+                to_state=state_map[trans_in.to_state],
+                from_undefined_only=trans_in.from_undefined_only,
+            )
+            for lang, label in trans_in.label.items():
+                WorkflowTransitionTranslation.objects.create(transition=trans, language=lang, label=label)
+    return 201, _serialize_workflow(wf)
+
+
+@api.get("/workflows/{workflow_id}/", response=WorkflowDefinitionOut, auth=django_auth)
+def get_workflow(request, workflow_id: uuid.UUID):
+    from userdefinedmodel.models import WorkflowDefinition
+    if denied := _require_perms(request, "userdefinedmodel.view_fielddefinition"):
+        return denied
+    try:
+        wf = WorkflowDefinition.objects.prefetch_related(
+            "states__translations", "transitions__translations",
+            "transitions__from_state", "transitions__to_state",
+        ).get(id=workflow_id)
+    except WorkflowDefinition.DoesNotExist:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    return _serialize_workflow(wf)
+
+
+@api.put("/workflows/{workflow_id}/", response=WorkflowDefinitionOut, auth=django_auth)
+def update_workflow(request, workflow_id: uuid.UUID, payload: WorkflowUpdateIn):
+    from userdefinedmodel.models import (
+        WorkflowDefinition, WorkflowState, WorkflowStateTranslation,
+        WorkflowTransition, WorkflowTransitionTranslation,
+    )
+    if denied := _require_perms(request, "userdefinedmodel.change_fielddefinition"):
+        return denied
+    try:
+        wf = WorkflowDefinition.objects.get(id=workflow_id)
+    except WorkflowDefinition.DoesNotExist:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    with transaction.atomic():
+        if payload.name is not None:
+            wf.name = payload.name
+        if payload.description is not None:
+            wf.description = payload.description
+        wf.save()
+        if payload.states is not None:
+            if sum(1 for s in payload.states if s.is_initial) != 1:
+                return JsonResponse({"detail": "exactly one state must have is_initial=True"}, status=400)
+            wf.states.all().delete()
+            state_map = {}
+            for state_in in payload.states:
+                state = WorkflowState.objects.create(
+                    workflow=wf, name=state_in.name,
+                    is_initial=state_in.is_initial, allows_edit=state_in.allows_edit,
+                )
+                state_map[state_in.name] = state
+                for lang, label in state_in.label.items():
+                    WorkflowStateTranslation.objects.create(state=state, language=lang, label=label)
+            if payload.transitions is not None:
+                wf.transitions.all().delete()
+                for trans_in in payload.transitions:
+                    trans = WorkflowTransition.objects.create(
+                        workflow=wf,
+                        name=trans_in.name,
+                        from_state=state_map.get(trans_in.from_state) if trans_in.from_state else None,
+                        to_state=state_map[trans_in.to_state],
+                        from_undefined_only=trans_in.from_undefined_only,
+                    )
+                    for lang, label in trans_in.label.items():
+                        WorkflowTransitionTranslation.objects.create(transition=trans, language=lang, label=label)
+    return _serialize_workflow(wf)
+
+
+@api.delete("/workflows/{workflow_id}/", auth=django_auth)
+def delete_workflow(request, workflow_id: uuid.UUID):
+    from userdefinedmodel.models import WorkflowDefinition
+    if denied := _require_perms(request, "userdefinedmodel.delete_fielddefinition"):
+        return denied
+    try:
+        wf = WorkflowDefinition.objects.get(id=workflow_id)
+    except WorkflowDefinition.DoesNotExist:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    try:
+        wf.delete()
+    except Exception:
+        return JsonResponse({"detail": "Workflow is in use and cannot be deleted"}, status=409)
+    return JsonResponse({}, status=204)
 
 
 # ─── Policies ─────────────────────────────────────────────────────────────────
@@ -865,11 +984,6 @@ def create_entity(request, payload: EntityCreateIn):
         entity = UserDefinedModelEntity.objects.create(
             config_version=version, user_defined_model_type=udm_type, owner=request.user,
         )
-        if version.workflow_id:
-            initial_state = version.workflow.states.filter(is_initial=True).first()
-            if initial_state:
-                entity.current_state = initial_state
-                entity.save(update_fields=["current_state"])
         entity.materialize_defaults()
     return 201, _entity_out_for_user(entity, request.user)
 
@@ -880,7 +994,7 @@ def get_entity(request, entity_id: uuid.UUID):
     from userdefinedmodel.engine import evaluate_policy
     try:
         entity = UserDefinedModelEntity.objects.select_related(
-            "config_version", "user_defined_model_type", "owner", "current_state"
+            "config_version", "user_defined_model_type", "owner"
         ).prefetch_related("editors", "field_values__field", "children").get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
         return JsonResponse({"detail": "Not found"}, status=404)
@@ -905,7 +1019,7 @@ def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn, validate
                 try:
                     entity = (UserDefinedModelEntity.objects
                               .select_for_update(nowait=True, of=("self",))
-                              .select_related("config_version", "current_state")
+                              .select_related("config_version")
                               .get(id=entity_id))
                 except UserDefinedModelEntity.DoesNotExist:
                     return JsonResponse({"detail": "Not found"}, status=404)
@@ -933,7 +1047,7 @@ def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn, validate
             try:
                 entity = (UserDefinedModelEntity.objects
                           .select_for_update(nowait=True, of=("self",))
-                          .select_related("config_version", "current_state")
+                          .select_related("config_version")
                           .get(id=entity_id))
             except UserDefinedModelEntity.DoesNotExist:
                 return JsonResponse({"detail": "Not found"}, status=404)
@@ -981,14 +1095,14 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
                 try:
                     entity = (UserDefinedModelEntity.objects
                               .select_for_update(nowait=True, of=("self",))
-                              .select_related("config_version__workflow", "current_state")
+                              .select_related("config_version")
                               .get(id=entity_id))
                 except UserDefinedModelEntity.DoesNotExist:
                     return JsonResponse({"detail": "Not found"}, status=404)
                 except OperationalError:
                     return _http409_concurrent()
                 try:
-                    execute_transition(entity, payload.transition, request.user)
+                    execute_transition(entity, payload.field, payload.transition, request.user)
                 except TransitionError as e:
                     result = {"valid": False, "policy_messages": e.details.get("messages", []),
                               "errors": {"__all__": [str(e)]}}
@@ -1003,13 +1117,13 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
             try:
                 entity = (UserDefinedModelEntity.objects
                           .select_for_update(nowait=True, of=("self",))
-                          .select_related("config_version__workflow", "current_state")
+                          .select_related("config_version")
                           .get(id=entity_id))
             except UserDefinedModelEntity.DoesNotExist:
                 return JsonResponse({"detail": "Not found"}, status=404)
             except OperationalError:
                 return _http409_concurrent()
-            execute_transition(entity, payload.transition, request.user)
+            execute_transition(entity, payload.field, payload.transition, request.user)
     except TransitionError as e:
         return JsonResponse({"error": str(e), **e.details}, status=e.http_status)
     except OperationalError:

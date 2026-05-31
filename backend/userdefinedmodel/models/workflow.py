@@ -62,6 +62,9 @@ class WorkflowTransition(MetaBase):
         blank=True,
         related_name="outgoing_transitions",
     )
+    # When True and from_state is null: only allowed when current state is undefined (null).
+    # When False and from_state is null: allowed from any state (including undefined).
+    from_undefined_only = models.BooleanField(default=False)
     to_state = models.ForeignKey(
         WorkflowState,
         on_delete=models.CASCADE,

@@ -163,36 +163,55 @@ class TransitionError(Exception):
         self.details = details or {}
 
 
-def execute_transition(node: "UserDefinedModelEntityNode", name: str, user: "OpenIDUser") -> None:
+def execute_transition(node: "UserDefinedModelEntityNode", field_slug: str, name: str, user: "OpenIDUser") -> None:
     """
-    Execute a named workflow transition on `node` (§15.1).
+    Execute a named workflow transition on the specified workflow field of `node`.
     Must be called inside an existing transaction.atomic() with the root lock held.
     """
-    from userdefinedmodel.models import WorkflowTransition, WorkflowState
+    from userdefinedmodel.models import WorkflowTransition, FieldDefinition, FieldValue
     from userdefinedmodel.models.history import EditGroup, FieldEdit
 
-    # 2. Load transition
-    if node.config_version.workflow_id is None:
-        raise TransitionError(f"No workflow defined for this node's config version.", http_status=404)
+    # Locate the workflow field definition on this node's config version
+    try:
+        field_def = node.config_version.field_definitions.select_related("workflow_definition").get(
+            slug=field_slug, data_type=FieldDefinition.DataType.WORKFLOW
+        )
+    except FieldDefinition.DoesNotExist:
+        raise TransitionError(f"No workflow field '{field_slug}' on this node.", http_status=404)
+
+    if not field_def.workflow_definition_id:
+        raise TransitionError(f"Workflow field '{field_slug}' has no workflow definition.", http_status=404)
+
+    # Get the current state from the field value
+    fv = FieldValue.objects.filter(node=node, field=field_def, language="").select_related("value_workflow_state").first()
+    current_state = fv.value_workflow_state if fv else None
 
     try:
         transition = WorkflowTransition.objects.get(
-            workflow=node.config_version.workflow, name=name
+            workflow=field_def.workflow_definition, name=name
         )
     except WorkflowTransition.DoesNotExist:
-        raise TransitionError(f"Transition '{name}' not found.", http_status=404)
+        raise TransitionError(f"Transition '{name}' not found in workflow '{field_slug}'.", http_status=404)
 
-    # 3. Check from_state
-    if transition.from_state is not None:
-        if node.current_state_id != transition.from_state_id:
-            current = node.current_state.name if node.current_state else "None"
+    # Check from_state / from_undefined_only
+    if transition.from_undefined_only:
+        # Only allowed when current state is undefined (null)
+        if current_state is not None:
             raise TransitionError(
-                f"Node is in state '{current}', but transition '{name}' requires '{transition.from_state.name}'.",
+                f"Transition '{name}' only allowed from undefined state, but field '{field_slug}' is in '{current_state.name}'.",
                 http_status=409,
             )
+    elif transition.from_state is not None:
+        if current_state is None or current_state.id != transition.from_state_id:
+            current_name = current_state.name if current_state else "None"
+            raise TransitionError(
+                f"Field '{field_slug}' is in state '{current_name}', but transition '{name}' requires '{transition.from_state.name}'.",
+                http_status=409,
+            )
+    # else: from_state is None and not from_undefined_only → allowed from any state (including undefined)
 
-    # 4. Evaluate policy
-    output = evaluate_policy(node, user, "transition", transition=name)
+    # Evaluate policy — pass field slug so Rego can see which workflow is transitioning
+    output = evaluate_policy(node, user, "transition", transition=name, field=field_slug)
     if not output["allow"]:
         raise TransitionError(f"Policy denied transition '{name}'.", http_status=403)
 
@@ -201,13 +220,13 @@ def execute_transition(node: "UserDefinedModelEntityNode", name: str, user: "Ope
         if isinstance(m, dict) and m.get("level") in ("critical", "error")
     ]
 
-    # 5. Execute PRE-phase actions
+    # Execute PRE-phase actions
     from userdefinedmodel.models.workflow import TransitionAction
     pre_actions = list(transition.actions.filter(phase=TransitionAction.Phase.PRE).order_by("sort_order"))
     for action in pre_actions:
         action.get_real_instance().execute(node, user)
 
-    # 6. Subtree validation (save-rule floor)
+    # Subtree validation (save-rule floor)
     _validate_subtree(node)
 
     # Check blocking policy messages after subtree validation
@@ -218,10 +237,12 @@ def execute_transition(node: "UserDefinedModelEntityNode", name: str, user: "Ope
             details={"messages": blocking_messages},
         )
 
-    # 9. Apply state change
-    old_state_name = node.current_state.name if node.current_state else None
-    node.current_state = transition.to_state
-    node.save(update_fields=["current_state"])
+    # Apply state change to the workflow field value
+    old_state_name = current_state.name if current_state else None
+    if fv is None:
+        fv = FieldValue.objects.create(node=node, field=field_def, language="")
+    fv.value_workflow_state = transition.to_state
+    fv.save(update_fields=["value_workflow_state"])
 
     # Record transition in history
     root_entity = None
@@ -239,12 +260,13 @@ def execute_transition(node: "UserDefinedModelEntityNode", name: str, user: "Ope
     FieldEdit.objects.create(
         group=edit_group,
         change_kind=FieldEdit.ChangeKind.NODE_TRANSITION,
+        field=field_def,
         affected_node=node,
         old_value={"state": old_state_name},
         new_value={"state": transition.to_state.name},
     )
 
-    # 10. Execute POST-phase actions (failures logged, don't roll back)
+    # Execute POST-phase actions (failures logged, don't roll back)
     post_actions = list(transition.actions.filter(phase=TransitionAction.Phase.POST).order_by("sort_order"))
     for action in post_actions:
         try:

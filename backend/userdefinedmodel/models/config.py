@@ -49,13 +49,6 @@ class ConfigVersion(MetaBase):
     status = models.CharField(max_length=10, choices=Status, default=Status.DRAFT)
     published_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
-    workflow = models.ForeignKey(
-        "userdefinedmodel.WorkflowDefinition",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="config_versions",
-    )
 
     class Meta:
         constraints = [
@@ -173,7 +166,6 @@ class ConfigVersion(MetaBase):
             config=self.config,
             status=ConfigVersion.Status.DRAFT,
             notes="",
-            workflow=self.workflow,
         )
         field_map = {}  # old field id → new field
         for old_field in self.field_definitions.all():
@@ -185,6 +177,7 @@ class ConfigVersion(MetaBase):
                 is_localized=old_field.is_localized,
                 is_preview=old_field.is_preview,
                 submodel_config=old_field.submodel_config,
+                workflow_definition=old_field.workflow_definition,
                 type_config=old_field.type_config,
             )
             field_map[old_field.pk] = new_field
@@ -275,6 +268,7 @@ class FieldDefinition(MetaBase):
         ENTITY_SELECT = "entity_select"
         ENTITY_SELECT_MULTI = "entity_select_multi"
         SLUG_ID = "slug_id"
+        WORKFLOW = "workflow"
 
     version = models.ForeignKey(ConfigVersion, on_delete=models.CASCADE, related_name="field_definitions")
     slug = models.SlugField(max_length=80)
@@ -288,6 +282,13 @@ class FieldDefinition(MetaBase):
         null=True,
         blank=True,
         related_name="used_as_submodel",
+    )
+    workflow_definition = models.ForeignKey(
+        "userdefinedmodel.WorkflowDefinition",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="field_definitions",
     )
     type_config = models.JSONField(default=dict)
 
@@ -355,6 +356,13 @@ class TypedValue(models.Model):
         blank=True,
         related_name="%(class)s_set",
     )
+    value_workflow_state = models.ForeignKey(
+        "userdefinedmodel.WorkflowState",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
 
     class Meta:
         abstract = True
@@ -383,6 +391,7 @@ class TypedValue(models.Model):
         FieldDefinition.DataType.ENTITY_SELECT: "value_node",
         FieldDefinition.DataType.IMAGE: "value_file",
         FieldDefinition.DataType.FILE: "value_file",
+        FieldDefinition.DataType.WORKFLOW: "value_workflow_state",
         # SUBMODEL_LIST: no value column
     }
 
@@ -394,6 +403,10 @@ class TypedValue(models.Model):
         col = self._DATA_TYPE_COLUMN.get(field.data_type)
         if col is None:
             return None
+        # WORKFLOW: resolve FK to state name string for serialization
+        if field.data_type == FieldDefinition.DataType.WORKFLOW:
+            state = self.value_workflow_state
+            return state.name if state else None
         # FK columns: return the PK directly to avoid lazy-loading ORM objects
         # which are not JSON-serialisable and cause N+1 queries.
         if col in ("value_user", "value_group", "value_node", "value_file"):
@@ -418,6 +431,7 @@ class TypedValue(models.Model):
             "value_text", "value_decimal", "value_bool", "value_date",
             "value_time", "value_datetime", "value_json",
             "value_user_id", "value_group_id", "value_node_id", "value_file_id",
+            "value_workflow_state_id",
         ]
         for c in all_cols:
             if c != col and c != col + "_id":
@@ -429,7 +443,7 @@ class TypedValue(models.Model):
             value = nh3.clean(value)
 
         # FK columns use _id suffix
-        if col in ("value_user", "value_group", "value_node", "value_file"):
+        if col in ("value_user", "value_group", "value_node", "value_file", "value_workflow_state"):
             setattr(self, col + "_id", value.pk if hasattr(value, "pk") else value)
         else:
             setattr(self, col, value)
@@ -441,14 +455,15 @@ class TypedValue(models.Model):
         dt = field.data_type
         col = self._DATA_TYPE_COLUMN.get(dt)
 
-        if dt == FieldDefinition.DataType.SUBMODEL_LIST:
-            return  # No value column
+        if dt in (FieldDefinition.DataType.SUBMODEL_LIST, FieldDefinition.DataType.WORKFLOW):
+            return  # No value column to validate here; WORKFLOW state is set via transition only
 
         # Verify the correct column is set (or all are null)
         has_value = False
         for c in ["value_text", "value_decimal", "value_bool", "value_date",
                   "value_time", "value_datetime", "value_json",
-                  "value_user_id", "value_group_id", "value_node_id", "value_file_id"]:
+                  "value_user_id", "value_group_id", "value_node_id", "value_file_id",
+                  "value_workflow_state_id"]:
             v = getattr(self, c, None)
             if v is not None:
                 if c == col or c == col + "_id":
@@ -459,7 +474,7 @@ class TypedValue(models.Model):
                     )
 
         # Type-specific validation
-        val = getattr(self, col if col not in ("value_user", "value_group", "value_node", "value_file") else col + "_id", None)
+        val = getattr(self, col if col not in ("value_user", "value_group", "value_node", "value_file", "value_workflow_state") else col + "_id", None)
 
         if val is None:
             return  # null is always OK at this layer (required validation is in rules)
@@ -498,7 +513,8 @@ class FieldDefaultValue(TypedValue, MetaBase):
             )
         ]
 
-    # Types that cannot have defaults (per §2.8); SLUG_ID uses auto-generated sequence
+    # Types that cannot have defaults (per §2.8); SLUG_ID uses auto-generated sequence,
+    # WORKFLOW initial state comes from is_initial on WorkflowState.
     _NO_DEFAULT_TYPES = frozenset([
         FieldDefinition.DataType.IMAGE,
         FieldDefinition.DataType.FILE,
@@ -507,6 +523,7 @@ class FieldDefaultValue(TypedValue, MetaBase):
         FieldDefinition.DataType.SUBMODEL_SELECT,
         FieldDefinition.DataType.SUBMODEL_LIST,
         FieldDefinition.DataType.SLUG_ID,
+        FieldDefinition.DataType.WORKFLOW,
     ])
 
     def clean(self):

@@ -68,6 +68,7 @@ class DataType(str, Enum):
     SUBMODEL_SELECT = "submodel_select"; SUBMODEL_LIST = "submodel_list"
     ENTITY_SELECT = "entity_select"; ENTITY_SELECT_MULTI = "entity_select_multi"
     SLUG_ID = "slug_id"
+    WORKFLOW = "workflow"
 
 
 class ConfigVersionStatus(str, Enum):
@@ -127,6 +128,10 @@ class SlugIdTypeConfig(Schema):
     model_config = {"extra": "forbid"}
 
 
+class WorkflowTypeConfig(Schema):
+    model_config = {"extra": "forbid"}
+
+
 _TYPE_CONFIG_CLS: dict[DataType, type[Schema] | None] = {
     DataType.TEXT_SHORT: TextTypeConfig, DataType.TEXT_LONG: TextTypeConfig,
     DataType.TEXT_MARKDOWN: TextTypeConfig, DataType.TEXT_RICHTEXT: TextTypeConfig,
@@ -140,6 +145,7 @@ _TYPE_CONFIG_CLS: dict[DataType, type[Schema] | None] = {
     DataType.SUBMODEL_SELECT: SubmodelTypeConfig, DataType.SUBMODEL_LIST: SubmodelTypeConfig,
     DataType.ENTITY_SELECT: EntitySelectTypeConfig, DataType.ENTITY_SELECT_MULTI: EntitySelectTypeConfig,
     DataType.SLUG_ID: SlugIdTypeConfig,
+    DataType.WORKFLOW: WorkflowTypeConfig,
 }
 
 # ─── Single-field rule schemas ────────────────────────────────────────────────
@@ -269,6 +275,7 @@ class FieldDefinitionIn(Schema):
     type_config: dict[str, Any] = Field(default_factory=dict)
     default: Optional[Any] = None
     submodel_config_version_id: Optional[uuid.UUID] = None
+    workflow_definition_id: Optional[uuid.UUID] = None
     rules: list[SingleFieldRuleIn] = Field(default_factory=list, max_length=_MAX_RULES)
     model_config = {"extra": "forbid"}
 
@@ -285,6 +292,10 @@ class FieldDefinitionIn(Schema):
             raise ValueError("submodel_config_version_id required for submodel types")
         if self.data_type not in submodel_types and self.submodel_config_version_id is not None:
             raise ValueError("submodel_config_version_id must be null for non-submodel types")
+        if self.data_type == DataType.WORKFLOW and self.workflow_definition_id is None:
+            raise ValueError("workflow_definition_id required for workflow type")
+        if self.data_type != DataType.WORKFLOW and self.workflow_definition_id is not None:
+            raise ValueError("workflow_definition_id must be null for non-workflow types")
         return self
 
 
@@ -299,6 +310,7 @@ class FieldDefinitionOut(Schema):
     help_text: dict[str, str]
     type_config: dict[str, Any]
     submodel_config: Optional["ConfigVersionOut"] = None
+    workflow_definition: Optional["WorkflowDefinitionOut"] = None
     default: Optional[Any] = None
     save_rules: dict[str, Any]
 
@@ -356,8 +368,17 @@ class WorkflowTransitionIn(Schema):
     name: Annotated[str, Field(min_length=1, max_length=_MAX_TRANS_NAME_LEN, pattern=r"^[a-z][a-z0-9_-]*$")]
     label: LocalizedLabel
     from_state: Optional[Annotated[str, Field(max_length=_MAX_STATE_NAME_LEN)]] = None
+    # True: only fires when current state is undefined (null). from_state must be null.
+    # False (default): fires from the named from_state, or from any state if from_state is null.
+    from_undefined_only: bool = False
     to_state: Annotated[str, Field(min_length=1, max_length=_MAX_STATE_NAME_LEN)]
     model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def validate_from_state_constraints(self) -> "WorkflowTransitionIn":
+        if self.from_undefined_only and self.from_state is not None:
+            raise ValueError("from_undefined_only=True requires from_state to be null")
+        return self
 
 
 class WorkflowDefinitionIn(Schema):
@@ -381,7 +402,7 @@ class WorkflowStateOut(Schema):
 
 class WorkflowTransitionOut(Schema):
     name: str; label: dict[str, str]
-    from_state: Optional[str]; to_state: str
+    from_state: Optional[str]; from_undefined_only: bool; to_state: str
 
 
 class WorkflowOut(Schema):
@@ -389,13 +410,44 @@ class WorkflowOut(Schema):
     states: list[WorkflowStateOut]
     transitions: list[WorkflowTransitionOut]
 
+
+class WorkflowDefinitionOut(Schema):
+    id: uuid.UUID
+    name: str
+    description: str
+    initial_state: Optional[str]
+    states: list[WorkflowStateOut]
+    transitions: list[WorkflowTransitionOut]
+
+
+class WorkflowCreateIn(Schema):
+    name: Annotated[str, Field(min_length=1, max_length=_MAX_LABEL_LEN)]
+    description: Annotated[str, Field(max_length=_MAX_DESCRIPTION_LEN)] = ""
+    states: list[WorkflowStateIn] = Field(..., min_length=1, max_length=_MAX_STATES)
+    transitions: list[WorkflowTransitionIn] = Field(default_factory=list, max_length=_MAX_TRANSITIONS)
+    model_config = {"extra": "forbid"}
+
+    @field_validator("states")
+    @classmethod
+    def exactly_one_initial(cls, states: list[WorkflowStateIn]) -> list[WorkflowStateIn]:
+        if sum(1 for s in states if s.is_initial) != 1:
+            raise ValueError("exactly one state must have is_initial=True")
+        return states
+
+
+class WorkflowUpdateIn(Schema):
+    name: Optional[Annotated[str, Field(min_length=1, max_length=_MAX_LABEL_LEN)]] = None
+    description: Optional[Annotated[str, Field(max_length=_MAX_DESCRIPTION_LEN)]] = None
+    states: Optional[list[WorkflowStateIn]] = Field(None, max_length=_MAX_STATES)
+    transitions: Optional[list[WorkflowTransitionIn]] = Field(None, max_length=_MAX_TRANSITIONS)
+    model_config = {"extra": "forbid"}
+
 # ─── ConfigVersion schemas ────────────────────────────────────────────────────
 
 class ConfigDraftIn(Schema):
     notes: Annotated[str, Field(max_length=_MAX_NOTES_LEN)] = ""
     fields: list[FieldDefinitionIn] = Field(..., min_length=0, max_length=_MAX_FIELDS)
     multi_field_rules: list[MultiFieldRuleIn] = Field(default_factory=list, max_length=_MAX_MULTI_RULES)
-    workflow: Optional[WorkflowDefinitionIn] = None
     model_config = {"extra": "forbid"}
 
     @field_validator("fields")
@@ -416,10 +468,10 @@ class ConfigVersionOut(Schema):
     published_at: Optional[str]
     languages: list[ConfigLanguageOut]
     fields: list[FieldDefinitionOut]
-    workflow: Optional[WorkflowOut] = None
 
 
 FieldDefinitionOut.model_rebuild()
+WorkflowDefinitionOut.model_rebuild()
 
 # ─── Entity schemas ───────────────────────────────────────────────────────────
 
@@ -437,6 +489,7 @@ class EntityPatchIn(Schema):
 
 
 class TransitionIn(Schema):
+    field: Slug
     transition: Annotated[str, Field(min_length=1, max_length=_MAX_TRANS_NAME_LEN)]
     model_config = {"extra": "forbid"}
 
@@ -483,7 +536,6 @@ class EntityOut(Schema):
     id: uuid.UUID
     config_version_id: uuid.UUID
     user_defined_model_type_id: Optional[uuid.UUID]
-    current_state: Optional[str]
     owner: Optional[UserRefOut]
     editors: list[UserRefOut]
     field_values: list[FieldValueOut]

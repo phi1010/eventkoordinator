@@ -57,7 +57,6 @@ def serialize_node(node: "UserDefinedModelEntityNode") -> dict:
         "id": str(node.id),
         "config_version_id": str(node.config_version_id),
         "user_defined_model_type_id": None,
-        "current_state": node.current_state.name if node.current_state else None,
         "owner": None,
         "editors": [],
         "field_values": field_values,
@@ -118,13 +117,25 @@ def apply_patch(
     from userdefinedmodel.models.history import EditGroup, FieldEdit
     from userdefinedmodel.models.node import StagingFile, FileAttachment
 
-    # 1. Check allows_edit
-    if node.current_state and not node.current_state.allows_edit:
+    # 1. Check allows_edit — blocked if any active workflow state disallows editing
+    from userdefinedmodel.models.config import FieldDefinition
+    blocking_wf = (
+        node.field_values
+        .filter(field__data_type=FieldDefinition.DataType.WORKFLOW)
+        .select_related("value_workflow_state")
+        .filter(value_workflow_state__allows_edit=False)
+        .select_related("field")
+        .first()
+    )
+    if blocking_wf:
         from userdefinedmodel.engine import TransitionError
         raise TransitionError(
             "editing_not_allowed_in_state",
             http_status=409,
-            details={"current_state": node.current_state.name},
+            details={
+                "workflow_field": blocking_wf.field.slug,
+                "current_state": blocking_wf.value_workflow_state.name,
+            },
         )
 
     # Build field map for this version
@@ -148,6 +159,9 @@ def apply_patch(
             continue
         if field.data_type == FieldDefinition.DataType.SUBMODEL_LIST:
             submodel_changes[slug] = value
+        elif field.data_type == FieldDefinition.DataType.WORKFLOW:
+            # Workflow state is read-only via PATCH; advance via /transition/ endpoint
+            raise ValidationError({slug: ["Workflow state cannot be set directly. Use the /transition/ endpoint."]})
         else:
             scalar_changes[slug] = (field, value)
 
@@ -295,12 +309,6 @@ def _write_field_value(node, field, value, language, user, edit_group) -> None:
             op_fields = value.get("fields") or {}
             if op_fields:
                 _, _msgs = apply_patch(child, op_fields, user, edit_group)
-            # Assign initial workflow state after initial field values are written
-            if field.submodel_config and field.submodel_config.workflow_id:
-                initial = field.submodel_config.workflow.states.filter(is_initial=True).first()
-                if initial:
-                    child.current_state = initial
-                    child.save(update_fields=["current_state"])
             value = child.id  # fall through to set value_node_id
         elif op == "update":
             # Update the fields of the currently-referenced child; the FK itself
@@ -441,18 +449,8 @@ def _apply_submodel_ops(parent_node, field, ops, user, edit_group) -> None:
 
             child.materialize_defaults()
 
-            # Apply caller-supplied field values while current_state is still None
-            # (so the allows_edit check in apply_patch never blocks initial values).
-            # The initial workflow state is assigned afterwards.
             if op_fields:
                 _, _msgs = apply_patch(child, op_fields, user, edit_group=edit_group)
-
-            # Assign initial workflow state after initial field values are written
-            if field.submodel_config and field.submodel_config.workflow_id:
-                initial = field.submodel_config.workflow.states.filter(is_initial=True).first()
-                if initial:
-                    child.current_state = initial
-                    child.save(update_fields=["current_state"])
 
             FieldEdit.objects.create(
                 group=edit_group,

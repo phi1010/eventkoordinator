@@ -26,7 +26,7 @@ from userdefinedmodel.tests.factories import (
     ConfigVersionFactory, PublishedConfigVersionFactory, FieldDefinitionFactory,
     FieldDefinitionTranslationFactory, UserDefinedModelTypeFactory,
     UserDefinedModelEntityFactory, PolicyFactory,
-    make_simple_config, make_full_workflow, make_entity_with_type,
+    make_simple_config, make_full_workflow, add_workflow_field, make_entity_with_type,
     ALLOW_ALL_POLICY, REGO_DENY_ALL, REGO_OWNER_EDIT, REGO_BLOCK_SUBMIT_IF_TITLE_EMPTY,
 )
 
@@ -165,7 +165,6 @@ class ConfigVersionTests(BaseAPITest):
                 }
             ],
             "multi_field_rules": [],
-            "workflow": None,
         })
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -443,40 +442,55 @@ class WorkflowTransitionTests(BaseAPITest):
     def setUp(self):
         super().setUp()
         config, self.version, self.field, self.lang = make_simple_config()
-        self.wf, self.draft_state, self.submitted_state, self.submit_trans = make_full_workflow(self.version)
+        self.wf, self.draft_state, self.submitted_state, self.submit_trans = make_full_workflow()
+        self.wf_field = add_workflow_field(self.version, self.wf, slug="status")
         self.udm_type = UserDefinedModelTypeFactory(field_config=config)
         self.entity = UserDefinedModelEntityFactory(
             config_version=self.version,
             user_defined_model_type=self.udm_type,
             owner=self.staff,
-            current_state=self.draft_state,
         )
+        # Materialize defaults to set initial workflow state
+        self.entity.materialize_defaults()
+
+    def _get_workflow_state(self):
+        from userdefinedmodel.models import FieldValue
+        fv = FieldValue.objects.select_related("value_workflow_state").get(
+            node=self.entity, field=self.wf_field, language=""
+        )
+        return fv.value_workflow_state
 
     def test_submit_transition(self):
-        resp = self.post(f"/entities/{self.entity.id}/transition/", {"transition": "submit"})
+        resp = self.post(f"/entities/{self.entity.id}/transition/", {"field": "status", "transition": "submit"})
         self.assertEqual(resp.status_code, 200)
-        self.entity.refresh_from_db()
-        self.assertEqual(self.entity.current_state_id, self.submitted_state.id)
+        state = self._get_workflow_state()
+        self.assertEqual(state.name, "submitted")
 
     def test_transition_wrong_state_409(self):
-        # Entity starts in draft; transition requires draft, but if we force submitted state...
-        self.entity.current_state = self.submitted_state
-        self.entity.save(update_fields=["current_state"])
-        resp = self.post(f"/entities/{self.entity.id}/transition/", {"transition": "submit"})
+        # Force entity into submitted state, then try to submit again
+        from userdefinedmodel.models import FieldValue
+        FieldValue.objects.filter(node=self.entity, field=self.wf_field).update(
+            value_workflow_state=self.submitted_state
+        )
+        resp = self.post(f"/entities/{self.entity.id}/transition/", {"field": "status", "transition": "submit"})
         self.assertEqual(resp.status_code, 409)
 
     def test_transition_unknown_name_404(self):
-        resp = self.post(f"/entities/{self.entity.id}/transition/", {"transition": "nonexistent"})
+        resp = self.post(f"/entities/{self.entity.id}/transition/", {"field": "status", "transition": "nonexistent"})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_transition_unknown_field_404(self):
+        resp = self.post(f"/entities/{self.entity.id}/transition/", {"field": "nonexistent", "transition": "submit"})
         self.assertEqual(resp.status_code, 404)
 
     def test_allows_edit_false_blocks_patch(self):
-        self.entity.current_state = self.submitted_state
-        self.entity.save(update_fields=["current_state"])
+        # Advance to submitted (allows_edit=False)
+        self.post(f"/entities/{self.entity.id}/transition/", {"field": "status", "transition": "submit"})
         resp = self.patch(f"/entities/{self.entity.id}/", {"changed_fields": {"content": "new value"}})
         self.assertEqual(resp.status_code, 409)
 
     def test_transition_creates_history_entry(self):
-        self.post(f"/entities/{self.entity.id}/transition/", {"transition": "submit"})
+        self.post(f"/entities/{self.entity.id}/transition/", {"field": "status", "transition": "submit"})
         from userdefinedmodel.models.history import EditGroup, FieldEdit
         group = EditGroup.objects.filter(root_entity=self.entity).first()
         self.assertIsNotNone(group)
@@ -484,6 +498,74 @@ class WorkflowTransitionTests(BaseAPITest):
         self.assertIsNotNone(edit)
         self.assertEqual(edit.old_value, {"state": "draft"})
         self.assertEqual(edit.new_value, {"state": "submitted"})
+
+    def test_workflow_state_in_field_values(self):
+        """Workflow state appears as a field value in entity output."""
+        resp = self.get(f"/entities/{self.entity.id}/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        fvs = {fv["field_slug"]: fv["value"] for fv in data["field_values"]}
+        self.assertIn("status", fvs)
+        self.assertEqual(fvs["status"], "draft")
+
+    def test_from_undefined_only_transition(self):
+        """from_undefined_only=True blocks transition when state is already defined."""
+        from userdefinedmodel.models import WorkflowTransition
+        # Add a transition that only fires from undefined state
+        from userdefinedmodel.models import WorkflowState
+        init = WorkflowState.objects.create(workflow=self.wf, name="init", is_initial=False, allows_edit=True)
+        WorkflowTransition.objects.create(
+            workflow=self.wf, name="initialize", from_state=None,
+            from_undefined_only=True, to_state=init,
+        )
+        # Entity already has "draft" state → should be blocked
+        resp = self.post(f"/entities/{self.entity.id}/transition/", {"field": "status", "transition": "initialize"})
+        self.assertEqual(resp.status_code, 409)
+
+    def test_workflow_field_write_blocked_via_patch(self):
+        """Directly patching a workflow field via PATCH is rejected."""
+        resp = self.patch(f"/entities/{self.entity.id}/", {"changed_fields": {"status": "submitted"}})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_multiple_workflows_independent(self):
+        """Two workflow fields on the same entity advance independently."""
+        from userdefinedmodel.models import (
+            WorkflowDefinition, WorkflowState, WorkflowTransition,
+            FieldDefinition, FieldDefinitionTranslation, FieldValue,
+        )
+        wf2 = WorkflowDefinition.objects.create(name="Review Workflow")
+        pending = WorkflowState.objects.create(workflow=wf2, name="pending", is_initial=True, allows_edit=True)
+        approved = WorkflowState.objects.create(workflow=wf2, name="approved", is_initial=False, allows_edit=True)
+        WorkflowTransition.objects.create(workflow=wf2, name="approve", from_state=pending, to_state=approved)
+
+        review_field = add_workflow_field(self.version, wf2, slug="review")
+        # Set initial state for the new field on the existing entity
+        FieldValue.objects.create(node=self.entity, field=review_field, language="", value_workflow_state=pending)
+
+        # Advance status → review stays pending
+        self.post(f"/entities/{self.entity.id}/transition/", {"field": "status", "transition": "submit"})
+        review_fv = FieldValue.objects.select_related("value_workflow_state").get(node=self.entity, field=review_field)
+        self.assertEqual(review_fv.value_workflow_state.name, "pending")
+
+        # Advance review independently
+        resp = self.post(f"/entities/{self.entity.id}/transition/", {"field": "review", "transition": "approve"})
+        self.assertEqual(resp.status_code, 200)
+        review_fv.refresh_from_db()
+        self.assertEqual(review_fv.value_workflow_state.name, "approved")
+
+    def test_any_workflow_allows_edit_false_blocks_patch(self):
+        """Patch is blocked when ANY workflow field has allows_edit=False."""
+        from userdefinedmodel.models import (
+            WorkflowDefinition, WorkflowState, FieldValue,
+        )
+        wf2 = WorkflowDefinition.objects.create(name="Blocking Workflow")
+        locked = WorkflowState.objects.create(workflow=wf2, name="locked", is_initial=True, allows_edit=False)
+        review_field = add_workflow_field(self.version, wf2, slug="review2")
+        FieldValue.objects.create(node=self.entity, field=review_field, language="", value_workflow_state=locked)
+
+        # status is in "draft" (allows_edit=True) but review2 is "locked" (allows_edit=False)
+        resp = self.patch(f"/entities/{self.entity.id}/", {"changed_fields": {"content": "x"}})
+        self.assertEqual(resp.status_code, 409)
 
 
 # ─── Workflow with Rego policy tests ─────────────────────────────────────────
@@ -494,12 +576,13 @@ class PolicyEnforcementTests(BaseAPITest):
         entity, udm_type, version, config = make_entity_with_type(
             owner=self.staff, policy_source=REGO_BLOCK_SUBMIT_IF_TITLE_EMPTY
         )
-        wf, draft, submitted, trans = make_full_workflow(version)
-        entity.current_state = draft
-        entity.save(update_fields=["current_state"])
+        wf, draft, submitted, trans = make_full_workflow()
+        add_workflow_field(version, wf, slug="status")
+        # materialize_defaults sets the initial state
+        entity.materialize_defaults()
 
-        # Title field is empty → Rego policy denies
-        resp = self.post(f"/entities/{entity.id}/transition/", {"transition": "submit"})
+        # Title field is empty → Rego policy blocks the transition messages
+        resp = self.post(f"/entities/{entity.id}/transition/", {"field": "status", "transition": "submit"})
         self.assertEqual(resp.status_code, 422)
 
     def test_rego_allow_passes_transition(self):
@@ -507,16 +590,69 @@ class PolicyEnforcementTests(BaseAPITest):
         entity, udm_type, version, config = make_entity_with_type(
             owner=self.staff, policy_source=REGO_BLOCK_SUBMIT_IF_TITLE_EMPTY
         )
-        wf, draft, submitted, trans = make_full_workflow(version)
-        entity.current_state = draft
-        entity.save(update_fields=["current_state"])
+        wf, draft, submitted, trans = make_full_workflow()
+        add_workflow_field(version, wf, slug="status")
+        entity.materialize_defaults()
 
         # Fill the title field
         field = version.field_definitions.get(slug="title")
         from userdefinedmodel.models import FieldValue
         FieldValue.objects.create(node=entity, field=field, language="", value_text="My Title")
 
-        resp = self.post(f"/entities/{entity.id}/transition/", {"transition": "submit"})
+        resp = self.post(f"/entities/{entity.id}/transition/", {"field": "status", "transition": "submit"})
+        self.assertEqual(resp.status_code, 200)
+
+    def test_overall_state_gates_transition(self):
+        """Policy can deny transition on workflow A based on workflow B's state."""
+        CROSS_WORKFLOW_POLICY = """
+package udm
+import rego.v1
+
+allow := true
+
+# Block submit on "status" unless "review" workflow is in "approved"
+messages contains msg if {
+    input.action == "transition"
+    input.field == "status"
+    input.transition == "submit"
+    input.entity.fields.review.value != "approved"
+    msg := {
+        "level": "error",
+        "message": {"en": "Must be approved before submitting"},
+        "field_slug": "status",
+    }
+}
+"""
+        from userdefinedmodel.models import (
+            WorkflowDefinition, WorkflowState, WorkflowTransition,
+            FieldValue, Policy, UserDefinedModelTypePolicy,
+        )
+        entity, udm_type, version, config = make_entity_with_type(
+            owner=self.staff, policy_source=CROSS_WORKFLOW_POLICY
+        )
+
+        # Workflow A: status
+        wf_a, a_draft, a_submitted, a_trans = make_full_workflow()
+        add_workflow_field(version, wf_a, slug="status")
+
+        # Workflow B: review (pending → approved)
+        wf_b = WorkflowDefinition.objects.create(name="Review")
+        b_pending = WorkflowState.objects.create(workflow=wf_b, name="pending", is_initial=True, allows_edit=True)
+        b_approved = WorkflowState.objects.create(workflow=wf_b, name="approved", is_initial=False, allows_edit=True)
+        WorkflowTransition.objects.create(workflow=wf_b, name="approve", from_state=b_pending, to_state=b_approved)
+        add_workflow_field(version, wf_b, slug="review")
+
+        entity.materialize_defaults()
+
+        # review is "pending" → submit blocked
+        resp = self.post(f"/entities/{entity.id}/transition/", {"field": "status", "transition": "submit"})
+        self.assertEqual(resp.status_code, 422)
+
+        # Advance review to approved
+        self.post(f"/entities/{entity.id}/transition/", {"field": "review", "transition": "approve"})
+
+        # Now submit should pass
+        resp = self.post(f"/entities/{entity.id}/transition/", {"field": "status", "transition": "submit"})
         self.assertEqual(resp.status_code, 200)
 
 

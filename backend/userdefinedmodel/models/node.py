@@ -81,13 +81,6 @@ class UserDefinedModelEntityNode(MetaBase):
         related_name="child_nodes",
     )
     overflow_data = models.JSONField(default=dict)
-    current_state = models.ForeignKey(
-        "userdefinedmodel.WorkflowState",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="nodes_in_state",
-    )
 
     def get_root(self) -> "UserDefinedModelEntity":
         node = self
@@ -199,7 +192,6 @@ class UserDefinedModelEntityNode(MetaBase):
             "type_id": None,
             "owner": None,
             "editors": [],
-            "current_state": self.current_state.name if self.current_state else None,
             "fields": fields_data,
             "children": children_data,
             "overflow_data": self.overflow_data,
@@ -238,6 +230,18 @@ class UserDefinedModelEntityNode(MetaBase):
             if created:
                 fv.set_value(default.get_value(field=field), field=field)
                 fv.save()
+
+        # WORKFLOW: set initial state from the linked WorkflowDefinition
+        for field in self.config_version.field_definitions.filter(
+            data_type=FieldDefinition.DataType.WORKFLOW,
+            workflow_definition__isnull=False,
+        ).select_related("workflow_definition"):
+            initial = field.workflow_definition.states.filter(is_initial=True).first()
+            if initial:
+                fv, created = FieldValue.objects.get_or_create(node=self, field=field, language="")
+                if created:
+                    fv.value_workflow_state = initial
+                    fv.save()
 
         # SLUG_ID: auto-generate from the global sequence (never reuses after deletion)
         for field in self.config_version.field_definitions.filter(data_type=FieldDefinition.DataType.SLUG_ID):
