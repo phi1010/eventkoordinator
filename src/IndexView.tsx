@@ -14,6 +14,7 @@ import {ProposalSelectionPanel} from "./ProposalSelectionPanel.tsx";
 import { ProposalDashboard } from './ProposalDashboard'
 import { UdmAdminPage } from './UdmAdminPage'
 import { UdmEntityEditor, UdmEntityPanel } from './UdmEntityEditor'
+import { WorkflowEditor } from './WorkflowEditor'
 
 export function IndexView() {
   const { t } = useTranslation()
@@ -104,6 +105,7 @@ export function IndexView() {
           />
           <Route path="/udm-entity" element={<UdmEntityPanel />} />
           <Route path="/udm-entity/:entityId" element={<UdmEntityEditor />} />
+          <Route path="/workflow-editor" element={<WorkflowEditor />} />
           <Route
             path="/proposal/:proposalId/event/:eventId"
             element={

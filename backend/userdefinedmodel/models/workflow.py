@@ -17,6 +17,8 @@ class WorkflowState(MetaBase):
     name = models.CharField(max_length=100)
     is_initial = models.BooleanField(default=False)
     allows_edit = models.BooleanField(default=True)
+    position_x = models.FloatField(default=0.0)
+    position_y = models.FloatField(default=0.0)
 
     class Meta:
         constraints = [
@@ -70,6 +72,8 @@ class WorkflowTransition(MetaBase):
         on_delete=models.CASCADE,
         related_name="incoming_transitions",
     )
+    source_handle = models.CharField(max_length=30, blank=True, default="")
+    target_handle = models.CharField(max_length=30, blank=True, default="")
 
     def __str__(self):
         return f"{self.workflow} / {self.name}"

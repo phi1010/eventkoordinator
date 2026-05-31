@@ -155,6 +155,16 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
               UDM Admin
             </Link>
           )}
+          {permissions?.is_staff && (
+            <Link
+              role="listitem"
+              className={location.pathname.startsWith('/workflow-editor') ? styles.activeNavLink : styles.navLink}
+              to="/workflow-editor"
+              aria-current={location.pathname.startsWith('/workflow-editor') ? 'page' : undefined}
+            >
+              Workflow Editor
+            </Link>
+          )}
           <Link
             role="listitem"
             className={location.pathname.startsWith('/udm-entity') ? styles.activeNavLink : styles.navLink}
@@ -257,6 +267,16 @@ export function Navbar({ user, onLogin, onLogout }: NavbarProps) {
                       role="menuitem"
                     >
                       UDM Admin
+                    </Link>
+                  )}
+                  {permissions?.is_staff && (
+                    <Link
+                      to="/workflow-editor"
+                      className={location.pathname.startsWith('/workflow-editor') ? styles.dropdownNavLinkActive : styles.menuLink}
+                      onClick={() => setIsDropdownOpen(false)}
+                      role="menuitem"
+                    >
+                      Workflow Editor
                     </Link>
                   )}
                   <Link

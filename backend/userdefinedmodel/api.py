@@ -117,6 +117,7 @@ def _serialize_workflow(wf) -> WorkflowDefinitionOut:
         states.append(WorkflowStateOut(
             name=state.name, label=label_dict,
             is_initial=state.is_initial, allows_edit=state.allows_edit,
+            position_x=state.position_x, position_y=state.position_y,
         ))
     transitions = []
     for trans in wf.transitions.prefetch_related("translations").select_related("from_state", "to_state").all():
@@ -126,6 +127,8 @@ def _serialize_workflow(wf) -> WorkflowDefinitionOut:
             from_state=trans.from_state.name if trans.from_state else None,
             from_undefined_only=trans.from_undefined_only,
             to_state=trans.to_state.name,
+            source_handle=trans.source_handle,
+            target_handle=trans.target_handle,
         ))
     initial = next((s for s in states if s.is_initial), None)
     return WorkflowDefinitionOut(
@@ -765,6 +768,7 @@ def create_workflow(request, payload: WorkflowCreateIn):
             state = WorkflowState.objects.create(
                 workflow=wf, name=state_in.name,
                 is_initial=state_in.is_initial, allows_edit=state_in.allows_edit,
+                position_x=state_in.position_x, position_y=state_in.position_y,
             )
             state_map[state_in.name] = state
             for lang, label in state_in.label.items():
@@ -776,6 +780,8 @@ def create_workflow(request, payload: WorkflowCreateIn):
                 from_state=state_map.get(trans_in.from_state) if trans_in.from_state else None,
                 to_state=state_map[trans_in.to_state],
                 from_undefined_only=trans_in.from_undefined_only,
+                source_handle=trans_in.source_handle,
+                target_handle=trans_in.target_handle,
             )
             for lang, label in trans_in.label.items():
                 WorkflowTransitionTranslation.objects.create(transition=trans, language=lang, label=label)
@@ -824,6 +830,7 @@ def update_workflow(request, workflow_id: uuid.UUID, payload: WorkflowUpdateIn):
                 state = WorkflowState.objects.create(
                     workflow=wf, name=state_in.name,
                     is_initial=state_in.is_initial, allows_edit=state_in.allows_edit,
+                    position_x=state_in.position_x, position_y=state_in.position_y,
                 )
                 state_map[state_in.name] = state
                 for lang, label in state_in.label.items():
@@ -837,6 +844,8 @@ def update_workflow(request, workflow_id: uuid.UUID, payload: WorkflowUpdateIn):
                         from_state=state_map.get(trans_in.from_state) if trans_in.from_state else None,
                         to_state=state_map[trans_in.to_state],
                         from_undefined_only=trans_in.from_undefined_only,
+                        source_handle=trans_in.source_handle,
+                        target_handle=trans_in.target_handle,
                     )
                     for lang, label in trans_in.label.items():
                         WorkflowTransitionTranslation.objects.create(transition=trans, language=lang, label=label)

@@ -361,6 +361,8 @@ class WorkflowStateIn(Schema):
     label: LocalizedLabel
     is_initial: bool = False
     allows_edit: bool = True
+    position_x: float = 0.0
+    position_y: float = 0.0
     model_config = {"extra": "forbid"}
 
 
@@ -372,6 +374,8 @@ class WorkflowTransitionIn(Schema):
     # False (default): fires from the named from_state, or from any state if from_state is null.
     from_undefined_only: bool = False
     to_state: Annotated[str, Field(min_length=1, max_length=_MAX_STATE_NAME_LEN)]
+    source_handle: Annotated[str, Field(max_length=30)] = ""
+    target_handle: Annotated[str, Field(max_length=30)] = ""
     model_config = {"extra": "forbid"}
 
     @model_validator(mode="after")
@@ -398,11 +402,13 @@ class WorkflowDefinitionIn(Schema):
 
 class WorkflowStateOut(Schema):
     name: str; label: dict[str, str]; is_initial: bool; allows_edit: bool
+    position_x: float; position_y: float
 
 
 class WorkflowTransitionOut(Schema):
     name: str; label: dict[str, str]
     from_state: Optional[str]; from_undefined_only: bool; to_state: str
+    source_handle: str; target_handle: str
 
 
 class WorkflowOut(Schema):

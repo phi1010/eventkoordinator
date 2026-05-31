@@ -1,0 +1,385 @@
+/* ── Page layout ─────────────────────────────────────────────────────────── */
+.page {
+  display: flex;
+  height: calc(100vh - 60px);
+  overflow: hidden;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: #f8f9fa;
+  border-right: 1px solid #dee2e6;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.sidebarHeader {
+  padding: 12px 14px 8px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #333;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.sidebarSection {
+  padding: 8px 14px 4px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+  font-weight: 600;
+}
+
+.sidebarNewBtn {
+  margin: 10px 10px 6px;
+  padding: 6px 10px;
+  border: 1px solid #0d6efd;
+  background: #0d6efd;
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.83rem;
+  text-align: left;
+}
+
+.sidebarNewBtn:hover {
+  background: #0b5ed7;
+}
+
+.sidebarItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebarItem:hover {
+  background: #e9ecef;
+}
+
+.sidebarItemActive {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.sidebarEmpty {
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  color: #aaa;
+  font-style: italic;
+}
+
+.deleteWorkflowBtn {
+  margin: 12px 10px 10px;
+  padding: 6px 10px;
+  border: 1px solid #dc3545;
+  background: transparent;
+  color: #dc3545;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.deleteWorkflowBtn:hover:not(:disabled) {
+  background: #dc3545;
+  color: #fff;
+}
+
+.deleteWorkflowBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.loadError {
+  padding: 8px 14px;
+  color: #dc3545;
+  font-size: 0.82rem;
+}
+
+/* ── Editor area ─────────────────────────────────────────────────────────── */
+.editorArea {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Editor root (toolbar + canvas + panel) ──────────────────────────────── */
+.editorRoot {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  border-bottom: 1px solid #dee2e6;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.nameInput {
+  padding: 5px 9px;
+  border: 1px solid #ced4da;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  width: 200px;
+}
+
+.descInput {
+  padding: 5px 9px;
+  border: 1px solid #ced4da;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  flex: 1;
+  min-width: 180px;
+  max-width: 400px;
+}
+
+.toolbarBtn {
+  padding: 5px 12px;
+  border: 1px solid #6c757d;
+  background: #fff;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.toolbarBtn:hover {
+  background: #f8f9fa;
+}
+
+.saveBtn {
+  border-color: #198754;
+  color: #198754;
+}
+
+.saveBtn:hover:not(:disabled) {
+  background: #198754;
+  color: #fff;
+}
+
+.saveBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.saveOk {
+  color: #198754;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.saveErr {
+  color: #dc3545;
+  font-size: 0.82rem;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Canvas + panel row ──────────────────────────────────────────────────── */
+.canvasAndPanel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.canvas {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Properties panel ────────────────────────────────────────────────────── */
+.propsPanel {
+  width: 260px;
+  flex-shrink: 0;
+  border-left: 1px solid #dee2e6;
+  background: #fff;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.propsPanelHint {
+  color: #aaa;
+  font-size: 0.82rem;
+  font-style: italic;
+  margin: 0;
+  padding-top: 8px;
+}
+
+.propsPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.deleteBtn {
+  padding: 3px 8px;
+  border: 1px solid #dc3545;
+  background: transparent;
+  color: #dc3545;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.deleteBtn:hover {
+  background: #dc3545;
+  color: #fff;
+}
+
+.propsSection {
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.propsSectionTitle {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.propsLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.8rem;
+  color: #555;
+}
+
+.propsInput {
+  padding: 4px 7px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.propsInput[readonly] {
+  background: #f8f9fa;
+  color: #888;
+}
+
+.propsCheckbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+/* ── Custom 16:9 workflow state node ─────────────────────────────────────── */
+.wfNode {
+  background: #ffffff;
+  border: 2px solid #6c757d;
+  border-radius: 6px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.wfNodeSelected {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+}
+
+.wfNodeInitial {
+  border-color: #198754;
+  background: #f0fdf4;
+}
+
+.wfNodeContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px;
+  pointer-events: none;
+  text-align: center;
+  width: 100%;
+}
+
+.initialBadge {
+  font-size: 10px;
+  color: #198754;
+  position: absolute;
+  top: 5px;
+  left: 7px;
+}
+
+.wfNodeLabel {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #212529;
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+.wfNodeSlug {
+  font-size: 0.68rem;
+  color: #aaa;
+  font-family: monospace;
+}
+
+/* ── Handles ─────────────────────────────────────────────────────────────── */
+.handle {
+  width: 10px !important;
+  height: 10px !important;
+  background: #6c757d !important;
+  border: 2px solid #fff !important;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.wfNode:hover .handle,
+.wfNodeSelected .handle {
+  opacity: 1;
+}
+
+/* ── Hint bar ────────────────────────────────────────────────────────────── */
+.hint {
+  font-size: 0.75rem;
+  color: #888;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
