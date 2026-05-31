@@ -98,6 +98,7 @@ def apply_patch(
     changed_fields: dict[str, Any],
     user: "OpenIDUser",
     edit_group=None,
+    validate_only: bool = False,
 ) -> "EditGroup":
     """
     Apply a partial PATCH to node. Must be called inside transaction.atomic()
@@ -160,7 +161,7 @@ def apply_patch(
     for slug, ops in submodel_changes.items():
         field = field_map[slug]
         if isinstance(ops, list):
-            _apply_submodel_ops(node, field, ops, user, edit_group)
+            _apply_submodel_ops(node, field, ops, user, edit_group, validate_only=validate_only)
 
     # 7. Validate for save (runs on the new state; transaction rolls back on failure)
     node.validate_for_save()
@@ -168,12 +169,12 @@ def apply_patch(
     # Evaluate policy for SAVE. At this point writes are already flushed to the
     # transaction so input.entity.fields reflects the new state; changed_fields
     # tells the policy which slugs were explicitly submitted in this request.
-    messages = _evaluate_save_policy(node, user, changed_fields)
+    messages = _evaluate_save_policy(node, user, changed_fields, validate_only=validate_only)
 
     return edit_group, messages
 
 
-def _evaluate_save_policy(node, user, changed_fields: dict) -> list:
+def _evaluate_save_policy(node, user, changed_fields: dict, validate_only: bool = False) -> list:
     """Evaluate Rego policy for SAVE action.
 
     Returns the full message list (including warnings).
@@ -208,7 +209,7 @@ def _evaluate_save_policy(node, user, changed_fields: dict) -> list:
         node.id, user.username, list(safe_changed.keys()),
     )
 
-    output = evaluate_policy(node, user, "save", changed_fields=safe_changed)
+    output = evaluate_policy(node, user, "save", changed_fields=safe_changed, validate_only=validate_only)
 
     logger.debug(
         "policy save result node=%s allow=%s messages=%s",
@@ -266,6 +267,7 @@ def _write_field_value(node, field, value, language, user, edit_group) -> None:
                 sort_order=0,
             )
             child.materialize_defaults()
+            child.materialize_user_defaults(user)
             # Apply caller-supplied field values before setting the initial state
             op_fields = value.get("fields") or {}
             if op_fields:
@@ -384,7 +386,7 @@ def _record_field_edit(edit_group, field, old_value, new_value, *, old_attachmen
     )
 
 
-def _apply_submodel_ops(parent_node, field, ops, user, edit_group) -> None:
+def _apply_submodel_ops(parent_node, field, ops, user, edit_group, validate_only: bool = False) -> None:
     from userdefinedmodel.models.node import SubmodelInstance
     from userdefinedmodel.models.history import FieldEdit
 
@@ -410,9 +412,10 @@ def _apply_submodel_ops(parent_node, field, ops, user, edit_group) -> None:
             )
 
             child.materialize_defaults()
+            child.materialize_user_defaults(user)
 
             if op_fields:
-                _, _msgs = apply_patch(child, op_fields, user, edit_group=edit_group)
+                _, _msgs = apply_patch(child, op_fields, user, edit_group=edit_group, validate_only=validate_only)
 
             FieldEdit.objects.create(
                 group=edit_group,
@@ -441,7 +444,7 @@ def _apply_submodel_ops(parent_node, field, ops, user, edit_group) -> None:
                 )
 
             if op_fields:
-                _, _msgs = apply_patch(child, op_fields, user, edit_group=edit_group)
+                _, _msgs = apply_patch(child, op_fields, user, edit_group=edit_group, validate_only=validate_only)
 
         elif op == "delete":
             try:

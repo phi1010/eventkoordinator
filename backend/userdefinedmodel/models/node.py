@@ -158,7 +158,16 @@ class UserDefinedModelEntityNode(MetaBase):
         return val
 
     def to_policy_document(self) -> dict:
-        fields_data = {}
+        # Seed null entries for every field defined in the config version so that
+        # policy rules can reference any field slug, even before a value is set.
+        fields_data = {
+            fd.slug: {
+                "data_type": fd.data_type,
+                "localized": fd.is_localized,
+                "value": {} if fd.is_localized else None,
+            }
+            for fd in self.config_version.field_definitions.all()
+        }
         for fv in self.field_values.select_related("field").all():
             slug = fv.field.slug
             val = self._json_safe_value(fv.get_value())

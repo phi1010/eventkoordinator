@@ -49,6 +49,7 @@ def _serialize_user(user, *, include_group_members: bool = True) -> dict:
         "phone_number": user.phone_number,
         "is_active": user.is_active,
         "is_staff": user.is_staff,
+        "is_superuser": user.is_superuser,
         "groups": groups,
     }
 
@@ -126,7 +127,8 @@ def _normalize_policy_messages(messages: list) -> list:
             result.append(m)
             continue
         m = dict(m)
-        m['highlight_fields'] = [m.pop('field_slug')]
+        field_slug = m.pop('field_slug')
+        m['highlight_fields'] = [field_slug] if field_slug is not None else []
         result.append(m)
     return result
 
@@ -137,8 +139,14 @@ def build_policy_input(node: "UserDefinedModelEntityNode", user: "OpenIDUser", a
     For SAVE action, pass changed_fields=<incoming_dict> so Rego can see both
     the new entity state (input.entity, post-write) and which fields changed
     (input.changed_fields, each wrapped as {"value": ...}).
+
+    When node is a submodel the policy document is built from the root entity so
+    the policy always has access to the full proposal context (owner, status,
+    reviewer lists, etc.) regardless of which node triggered the evaluation.
     """
-    policy_doc = node.to_policy_document()
+    root = node.get_root()
+    context_node = root if root.pk != node.pk else node
+    policy_doc = context_node.to_policy_document()
     logger.debug("build_policy_input node=%s action=%s user=%s", node.id, action, user.username)
 
     user_doc = _serialize_user(user, include_group_members=True)

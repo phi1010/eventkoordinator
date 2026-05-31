@@ -312,7 +312,7 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
                     fd={subFd}
                     value={getChildFieldValue(item, subFd.slug, lang)}
                     onChange={val => handleFieldChange(subFd.slug, lang, val)}
-                    disabled={disabled}
+                    disabled={disabled || !!(subFd.type_config as Record<string, unknown>)?.default_current_user}
                     lang={lang}
                     entityChildren={item.saved?.children}
                   />
@@ -1774,7 +1774,7 @@ export function UdmEntityEditor() {
       // (rules that inspect input.entity.fields rather than input.changed_fields).
       try {
         const validation = await udmValidateEntity(entityId, {})
-        setPolicyMessages(validation.policy_messages)
+        setPolicyMessages(validation.policy_messages ?? [])
       } catch { /* validation is best-effort */ }
     } catch (err) {
       if (err instanceof UdmApiError && err.policyMessages.length > 0) {
@@ -1796,7 +1796,7 @@ export function UdmEntityEditor() {
     pendingValidation.current = setTimeout(async () => {
       try {
         const result = await udmValidateEntity(entityId, dirty)
-        setPolicyMessages(result.policy_messages)
+        setPolicyMessages(result.policy_messages ?? [])
       } catch {
         // Validation is best-effort — ignore lock conflicts and network errors
       }
@@ -1862,7 +1862,7 @@ export function UdmEntityEditor() {
       const updated = await udmPatchEntity(resolvedEntityId, dirty)
       setEntity(updated)
       setDirty({})
-      setPolicyMessages(updated.policy_messages)
+      setPolicyMessages(updated.policy_messages ?? [])
       setSuccess('Saved successfully.')
     } catch (e) {
       if (e instanceof UdmApiError) {
@@ -1895,7 +1895,7 @@ export function UdmEntityEditor() {
       const updated = await udmTransitionEntity(resolvedEntityId, fieldSlug, transitionName, dirty)
       setEntity(updated)
       setDirty({})
-      setPolicyMessages(updated.policy_messages)
+      setPolicyMessages(updated.policy_messages ?? [])
       const globalMsgs = (updated.policy_messages ?? []).filter((m: PolicyMessage) => !m.highlight_fields?.length)
       if (globalMsgs.length > 0) {
         setTransitionPopup(globalMsgs)

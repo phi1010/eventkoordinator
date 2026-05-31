@@ -71,6 +71,13 @@ def _http409_concurrent() -> JsonResponse:
     return JsonResponse({"error": "concurrent_edit", "retry_after_ms": 500}, status=409)
 
 
+def _set_lock_timeout_ms(ms: int) -> None:
+    """Set a per-transaction lock acquisition timeout (PostgreSQL only)."""
+    from django.db import connection
+    with connection.cursor() as cur:
+        cur.execute(f"SET LOCAL lock_timeout = '{ms}ms'")
+
+
 def _require_perms(request, *perms: str) -> JsonResponse | None:
     """Return a 403 response if the user lacks ALL the given Django model permissions.
 
@@ -1065,9 +1072,10 @@ def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn, validate
         result = {"valid": True, "policy_messages": [], "errors": {}}
         try:
             with transaction.atomic():
+                _set_lock_timeout_ms(50)
                 try:
                     entity = (UserDefinedModelEntity.objects
-                              .select_for_update(nowait=True, of=("self",))
+                              .select_for_update(nowait=False, of=("self",))
                               .select_related("config_version")
                               .get(id=entity_id))
                 except UserDefinedModelEntity.DoesNotExist:
@@ -1075,7 +1083,7 @@ def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn, validate
                 except OperationalError:
                     return _http409_concurrent()
                 try:
-                    _eg, messages = apply_patch(entity, payload.changed_fields, request.user)
+                    _eg, messages = apply_patch(entity, payload.changed_fields, request.user, validate_only=True)
                     result = {"valid": True, "policy_messages": messages, "errors": {}}
                 except PolicyError as e:
                     result = {"valid": False, "policy_messages": e.messages, "errors": {}}
@@ -1144,9 +1152,10 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
         result = {"valid": True, "policy_messages": [], "errors": {}}
         try:
             with transaction.atomic():
+                _set_lock_timeout_ms(50)
                 try:
                     entity = (UserDefinedModelEntity.objects
-                              .select_for_update(nowait=True, of=("self",))
+                              .select_for_update(nowait=False, of=("self",))
                               .select_related("config_version")
                               .get(id=entity_id))
                 except UserDefinedModelEntity.DoesNotExist:
