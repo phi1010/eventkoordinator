@@ -1141,6 +1141,11 @@ def execute_migration(request, entity_id: uuid.UUID, payload: MigrationExecuteIn
             entity.overflow_data = {**entity.overflow_data, **overflow}
         entity.config_version = tgt_version
         entity.user_defined_model_type = migration.target_user_defined_model_type
+        try:
+            entity.validate_for_save()
+        except ValidationError as exc:
+            errors = exc.message_dict if hasattr(exc, "message_dict") else {"__all__": exc.messages}
+            return JsonResponse({"errors": errors}, status=400)
         entity.save(update_fields=["config_version", "user_defined_model_type", "overflow_data"])
         migration.executed_at = now()
         migration.executed_by = request.user

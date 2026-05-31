@@ -306,6 +306,7 @@ interface FieldEditorProps {
 
 function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: FieldEditorProps) {
   const [expanded, setExpanded] = useState(false)
+  const [choicesText, setChoicesText] = useState<string | null>(null)
 
   const setF = (updates: Partial<FieldDefinitionIn>) => onChange({ ...field, ...updates })
   const setLabel = (lang: string, val: string) =>
@@ -407,13 +408,17 @@ function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: Field
               <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
                 <label className={styles.label}>Choices (one per line) *</label>
                 <textarea className={styles.textarea} rows={3}
-                  value={(tc['choices'] as string[] || []).join('\n')}
-                  onChange={e => setF({
-                    type_config: {
-                      ...tc,
-                      choices: e.target.value.split('\n').map(s => s.trim()).filter(Boolean),
-                    },
-                  })} />
+                  value={choicesText ?? (tc['choices'] as string[] || []).join('\n')}
+                  onChange={e => {
+                    setChoicesText(e.target.value)
+                    setF({
+                      type_config: {
+                        ...tc,
+                        choices: e.target.value.split('\n').map(s => s.trim()).filter(Boolean),
+                      },
+                    })
+                  }}
+                  onBlur={() => setChoicesText(null)} />
               </div>
             )}
 

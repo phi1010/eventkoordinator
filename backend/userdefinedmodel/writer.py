@@ -32,8 +32,13 @@ def serialize_node(node: "UserDefinedModelEntityNode") -> dict:
     from userdefinedmodel.models import UserDefinedModelEntity
 
     field_values = []
-    for fv in node.field_values.select_related("field").all():
-        val = fv.get_value()
+    for fv in node.field_values.select_related("field", "value_file").filter(field__version_id=node.config_version_id):
+        # For file/image fields use the already-loaded FileAttachment object so
+        # _serialize_value can include the URL without an extra query.
+        if fv.field.data_type in ("image", "file") and fv.value_file_id is not None:
+            val = fv.value_file
+        else:
+            val = fv.get_value()
         field_values.append({
             "field_slug": fv.field.slug,
             "data_type": fv.field.data_type,
@@ -85,7 +90,12 @@ def _serialize_value(val, field: "FieldDefinition") -> Any:
     if val is None:
         return None
     if isinstance(val, FileAttachment):
-        return {"id": str(val.id), "original_name": val.original_name, "mime_type": val.mime_type}
+        return {
+            "id": str(val.id),
+            "original_name": val.original_name,
+            "mime_type": val.mime_type,
+            "url": val.file.url,
+        }
     if isinstance(val, uuid.UUID):  # e.g. submodel_select FK target node id
         return str(val)
     # Defensive: if an ORM object slipped through, return its PK as string

@@ -37,7 +37,7 @@ def build_policy_input(node: "UserDefinedModelEntityNode", user: "OpenIDUser", a
         "username": user.username,
         "is_active": user.is_active,
         "is_staff": user.is_staff,
-        "groups": list(user.groups.values_list("id", flat=True)),
+        "groups": list(user.groups.values("id", "name")),
         "permissions": list(user.user_permissions.values_list("codename", flat=True)),
     }
 

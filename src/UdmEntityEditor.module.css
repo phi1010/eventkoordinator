@@ -331,6 +331,7 @@
 }
 
 .autocompleteItem:hover { background: #f0f4ff; }
+.autocompleteItemHighlighted { background: #e3f2fd; }
 
 .selectedTags {
   display: flex;
@@ -390,6 +391,18 @@
   font-size: 0.8rem;
   color: #888;
   margin-bottom: 1rem;
+}
+
+.lenHint {
+  font-size: 0.75rem;
+  color: #aaa;
+  text-align: right;
+  margin-top: 0.15rem;
+}
+
+.lenHintOver {
+  color: #dc2626;
+  font-weight: 500;
 }
 
 .markdownEditor {

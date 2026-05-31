@@ -96,10 +96,10 @@ class UserDefinedModelEntityNode(MetaBase):
         return node.userdefinedmodelentity
 
     def get_field_value(self, slug: str) -> "FieldValue | None":
-        try:
-            return self.field_values.select_related("field").get(field__slug=slug, language="")
-        except FieldValue.DoesNotExist:
-            return None
+        return (self.field_values
+                .select_related("field")
+                .filter(field__slug=slug, language="", field__version_id=self.config_version_id)
+                .first())
 
     def _evaluate_rules(self, single_rules, multi_rules) -> dict:
         errors = defaultdict(list)

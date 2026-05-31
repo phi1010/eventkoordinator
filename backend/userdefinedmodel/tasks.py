@@ -98,6 +98,11 @@ def execute_bulk_migration(self, plan_id: str):
                         entity.overflow_data = {**entity.overflow_data, **overflow}
 
                     entity.config_version = tgt_version
+                    # Validate on-save rules for the target version before committing.
+                    # Raises ValidationError (rolls back the atomic block) if the
+                    # migrated values don't satisfy the new version's constraints.
+                    entity.validate_for_save()
+
                     entity.save(update_fields=["config_version", "overflow_data"])
 
                     migration.executed_at = now()
@@ -107,7 +112,12 @@ def execute_bulk_migration(self, plan_id: str):
                     BulkMigrationPlan.objects.filter(id=plan_id).update(done_entities=__import__("django.db.models", fromlist=["F"]).F("done_entities") + 1)
 
             except Exception as exc:
-                logger.exception("Entity %s migration failed: %s", entity_id, exc)
+                from django.core.exceptions import ValidationError
+                if isinstance(exc, ValidationError):
+                    errs = exc.message_dict if hasattr(exc, "message_dict") else exc.messages
+                    logger.warning("Entity %s skipped: on-save validation failed after migration: %s", entity_id, errs)
+                else:
+                    logger.exception("Entity %s migration failed: %s", entity_id, exc)
                 _increment_failed(plan)
 
         # Final status
