@@ -114,6 +114,7 @@ interface FieldInputProps {
   entityChildren?: Record<string, unknown[]>
   subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
+  resetKey?: number
 }
 
 // ── Submodel editor ───────────────────────────────────────────────────────────
@@ -336,9 +337,10 @@ interface SubmodelEditorProps {
   onChange: (ops: SubmodelOp[] | { op: string; fields?: Record<string, unknown> } | null) => void
   subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
+  resetKey?: number
 }
 
-function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange, subFieldSeverities, subFieldMessages }: SubmodelEditorProps) {
+function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange, subFieldSeverities, subFieldMessages, resetKey }: SubmodelEditorProps) {
   const isList = fd.data_type === 'submodel_list'
   const subConfig = fd.submodel_config as ConfigVersionOut | null | undefined
   const subFields = subConfig?.fields ?? []
@@ -377,6 +379,7 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingChildren])
+
 
   // Helpers that mutate items AND immediately propagate ops — no useEffect lag
   function applyItemChange(newItems: LocalChild[]) {
@@ -431,6 +434,22 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
     }
     prevSelectNodeId.current = selectNodeId
   }, [selectNodeId, pendingNew])
+
+  // Reset local UI state when the parent discards all changes.
+  // We only reset local state here — the parent already cleared its own dirty map.
+  const prevResetKey = useRef(resetKey)
+  useEffect(() => {
+    if (resetKey === prevResetKey.current) return
+    prevResetKey.current = resetKey
+    if (isList) {
+      setItems(toItems(existingChildren as ChildNode[]))
+    } else {
+      setSelectDirty({})
+      setPendingNew(false)
+      setPendingRemoval(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey])
 
   // ── submodel_list UI ──
   if (isList) {
@@ -1139,7 +1158,7 @@ function MarkdownFieldInput({ value, onChange, disabled }: FieldInputProps) {
   return <div ref={containerRef} className={styles.markdownEditor} />
 }
 
-function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, subFieldSeverities, subFieldMessages }: FieldInputProps) {
+function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, subFieldSeverities, subFieldMessages, resetKey }: FieldInputProps) {
   const dt = fd.data_type
   const tc = fd.type_config as Record<string, unknown>
 
@@ -1319,6 +1338,7 @@ function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, 
         onChange={onChange as (ops: unknown) => void}
         subFieldSeverities={subFieldSeverities}
         subFieldMessages={subFieldMessages}
+        resetKey={resetKey}
       />
     )
   }
@@ -1429,9 +1449,10 @@ interface FieldRowProps {
   subFieldMessages?: Record<string, PolicyMessage[]>
   onTransition: (fieldSlug: string, transitionName: string) => Promise<void>
   transitioning: boolean
+  resetKey?: number
 }
 
-function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, severity, messages, subFieldSeverities, subFieldMessages, onTransition, transitioning }: FieldRowProps) {
+function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, severity, messages, subFieldSeverities, subFieldMessages, onTransition, transitioning, resetKey }: FieldRowProps) {
   const [activeLang, setActiveLang] = useState(languages[0] ?? '')
   const isDirty = fd.slug in dirty
   const isSubmodel = fd.data_type === 'submodel_list' || fd.data_type === 'submodel_select'
@@ -1525,6 +1546,7 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
           entityChildren={entity.children as Record<string, unknown[]>}
           subFieldSeverities={subFieldSeverities}
           subFieldMessages={subFieldMessages}
+          resetKey={resetKey}
         />
       ) : fd.is_localized ? (
         <FieldInput
@@ -1699,6 +1721,7 @@ export function UdmEntityEditor() {
   const [entity, setEntity] = useState<EntityOut | null>(null)
   const [config, setConfig] = useState<ConfigVersionOut | null>(null)
   const [dirty, setDirty] = useState<Record<string, unknown>>({})
+  const [discardCount, setDiscardCount] = useState(0)
   const [saving, setSaving] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
@@ -1988,6 +2011,7 @@ export function UdmEntityEditor() {
             subFieldMessages={subFieldMessages[fd.slug]}
             onTransition={handleTransition}
             transitioning={transitioning}
+            resetKey={discardCount}
           />
         ))}
       </div>
@@ -1999,7 +2023,7 @@ export function UdmEntityEditor() {
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {dirtyCount > 0 && (
             <button type="button" className={`${styles.btn} ${styles.btnSecondary}`}
-              onClick={() => setDirty({})}>
+              onClick={() => { setDirty({}); setDiscardCount(c => c + 1) }}>
               Discard All
             </button>
           )}

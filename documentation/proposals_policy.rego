@@ -691,11 +691,9 @@ _viewable_set contains f if {
 }
 
 # Moderators always see reviewer fields, even in draft or when also owner/editor.
-_viewable_set contains f if {
-	is_moderator
-	f in {"reviews", "requested-reviewer-groups", "requested-reviewer-users"}
-	input.entity.fields[f]
-}
+_viewable_set contains "reviews" if { is_moderator; input.entity.fields["reviews"] }
+_viewable_set contains "requested-reviewer-groups" if { is_moderator; input.entity.fields["requested-reviewer-groups"] }
+_viewable_set contains "requested-reviewer-users" if { is_moderator; input.entity.fields["requested-reviewer-users"] }
 
 _viewable_set contains f if {
 	is_reviewer
@@ -729,10 +727,8 @@ _editable_set contains f if {
 }
 
 # Moderators can manage the reviewer assignment fields.
-_editable_set contains f if {
-	is_moderator
-	f in {"requested-reviewer-groups", "requested-reviewer-users"}
-}
+_editable_set contains "requested-reviewer-groups" if { is_moderator }
+_editable_set contains "requested-reviewer-users" if { is_moderator }
 
 # Reviewers can add/update their own review submodel while the proposal is submitted.
 # The author field within a review is set automatically and blocked from editing above.
