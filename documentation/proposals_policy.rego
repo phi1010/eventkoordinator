@@ -449,6 +449,84 @@ success_messages contains msg if {
 	}
 }
 
+# ── View + Save: per-transition allow/deny (shown below the transition buttons) ─
+
+# owner/editor in draft: submit is available
+success_messages contains msg if {
+	input.action in {"view", "save"}
+	is_owner_or_editor
+	current_status == "draft"
+	msg := {
+		"level": "info",
+		"text": "↑ submit: you may submit this proposal for moderator review.",
+		"field_slug": "status",
+	}
+}
+
+# owner/editor in revise: resubmit is available
+success_messages contains msg if {
+	input.action in {"view", "save"}
+	is_owner_or_editor
+	current_status == "revise"
+	msg := {
+		"level": "info",
+		"text": "↑ resubmit: update the proposal and resubmit for review.",
+		"field_slug": "status",
+	}
+}
+
+# moderator, submitted, accept allowed
+success_messages contains msg if {
+	input.action in {"view", "save"}
+	is_moderator
+	current_status == "submitted"
+	all_reviews_accepted
+	msg := {
+		"level": "info",
+		"text": "↑ accept: all requested reviewers have voted accept.",
+		"field_slug": "status",
+	}
+}
+
+# moderator, submitted, accept blocked — show how many are missing per type
+success_messages contains msg if {
+	input.action in {"view", "save"}
+	is_moderator
+	current_status == "submitted"
+	not all_reviews_accepted
+	missing_users := count({u.id | some u in input.entity.fields["requested-reviewer-users"].value} - _accepting_user_ids)
+	missing_groups := count({g.id | some g in input.entity.fields["requested-reviewer-groups"].value} - _accepting_group_ids)
+	msg := {
+		"level": "warning",
+		"text": sprintf("↑ accept: blocked — %v direct reviewer(s) and %v group(s) have not yet accepted.", [missing_users, missing_groups]),
+		"field_slug": "status",
+	}
+}
+
+# moderator, submitted: reject and request-revision are always available
+success_messages contains msg if {
+	input.action in {"view", "save"}
+	is_moderator
+	current_status == "submitted"
+	msg := {
+		"level": "info",
+		"text": "↑ reject / request-revision: available.",
+		"field_slug": "status",
+	}
+}
+
+# moderator, rejected: allow-revision is available
+success_messages contains msg if {
+	input.action in {"view", "save"}
+	is_moderator
+	current_status == "rejected"
+	msg := {
+		"level": "info",
+		"text": "↑ allow-revision: return this proposal to the owner for changes.",
+		"field_slug": "status",
+	}
+}
+
 # ── Save: context messages ──
 success_messages contains msg if {
 	input.action == "save"

@@ -236,6 +236,10 @@ class Command(BaseCommand):
             if publish:
                 proposal_draft.publish()
 
+            # ── 3b. Bulk-migrate existing entities to the new published version ─
+            if publish:
+                _migrate_stale_entities(proposal_config, self.stdout)
+
             # ── 4. Rego policy (read from canonical .rego file) ───────────────
             policy_source = _render_policy(moderator_groups, sudo_active)
             policy, _ = Policy.objects.update_or_create(
@@ -263,6 +267,64 @@ class Command(BaseCommand):
                 f"and policy. Moderator groups: {moderator_groups}. {published_note}"
             )
         )
+
+
+def _migrate_stale_entities(proposal_config, stdout) -> None:
+    """Create and execute a BulkMigrationPlan for every archived proposal config
+    version that still has entities on it, migrating them to the current published
+    version. Runs synchronously (no Celery) so the seed command is self-contained."""
+    from userdefinedmodel.models import (
+        BulkMigrationPlan, BulkMigrationFieldMapping, ConfigVersion,
+        UserDefinedModelEntity,
+    )
+    from userdefinedmodel.tasks import run_bulk_migration
+
+    target = ConfigVersion.objects.filter(
+        config=proposal_config, status=ConfigVersion.Status.PUBLISHED
+    ).first()
+    if target is None:
+        return
+
+    target_slugs = {fd.slug: fd for fd in target.field_definitions.all()}
+
+    archived = ConfigVersion.objects.filter(
+        config=proposal_config, status=ConfigVersion.Status.ARCHIVED
+    ).exclude(pk=target.pk)
+
+    for src in archived:
+        stale_count = UserDefinedModelEntity.objects.filter(config_version=src).count()
+        if stale_count == 0:
+            continue
+
+        stdout.write(f"  Migrating {stale_count} entities from config version {src.pk} …")
+
+        plan = BulkMigrationPlan.objects.create(
+            source_version=src,
+            target_version=target,
+            status=BulkMigrationPlan.Status.DRAFT,
+        )
+
+        # Map every source field whose slug exists in the target; discard the rest.
+        for src_field in src.field_definitions.all():
+            tgt_field = target_slugs.get(src_field.slug)
+            if tgt_field:
+                BulkMigrationFieldMapping.objects.create(
+                    plan=plan,
+                    source_field=src_field,
+                    action="map",
+                    target_field=tgt_field,
+                )
+            else:
+                BulkMigrationFieldMapping.objects.create(
+                    plan=plan,
+                    source_field=src_field,
+                    action="overflow",
+                )
+
+        run_bulk_migration(str(plan.pk))
+
+        plan.refresh_from_db()
+        stdout.write(f"    Done: {plan.done_entities} ok, {plan.failed_entities} failed (status={plan.status}).")
 
 
 def _create_field(

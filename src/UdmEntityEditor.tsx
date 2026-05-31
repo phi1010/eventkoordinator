@@ -1339,9 +1339,10 @@ interface WorkflowFieldWidgetProps {
   uiLang: string
   onTransition: (fieldSlug: string, transitionName: string) => Promise<void>
   transitioning: boolean
+  messages?: PolicyMessage[]
 }
 
-function WorkflowFieldWidget({ fd, entity, uiLang, onTransition, transitioning }: WorkflowFieldWidgetProps) {
+function WorkflowFieldWidget({ fd, entity, uiLang, onTransition, transitioning, messages }: WorkflowFieldWidgetProps) {
   const wfDef = (fd as FieldDefinitionOut & { workflow_definition?: WorkflowDefinitionOut | null }).workflow_definition
   const fv = entity.field_values.find(v => v.field_slug === fd.slug)
   const currentStateName = (fv?.value as string | null) ?? null
@@ -1402,6 +1403,11 @@ function WorkflowFieldWidget({ fd, entity, uiLang, onTransition, transitioning }
           <span style={{ fontSize: '0.82rem', color: '#888', fontStyle: 'italic' }}>No transitions available</span>
         )}
       </div>
+      {messages && messages.length > 0 && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <PolicyMessageList messages={messages} />
+        </div>
+      )}
     </div>
   )
 }
@@ -1432,7 +1438,7 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
 
   // Workflow fields are fully managed by WorkflowFieldWidget — no dirty/value editing
   if (fd.data_type === 'workflow') {
-    return <WorkflowFieldWidget fd={fd} entity={entity} uiLang={uiLang} onTransition={onTransition} transitioning={transitioning} />
+    return <WorkflowFieldWidget fd={fd} entity={entity} uiLang={uiLang} onTransition={onTransition} transitioning={transitioning} messages={messages} />
   }
   const label = getLang(fd.label as Record<string, string>, uiLang) || fd.slug
   const helpText = getLang(fd.help_text as Record<string, string>, uiLang)

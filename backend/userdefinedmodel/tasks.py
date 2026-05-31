@@ -2,7 +2,6 @@
 Celery tasks for userdefinedmodel.
 """
 import logging
-import uuid
 
 from celery import shared_task
 from django.db import transaction
@@ -12,9 +11,16 @@ from django.utils.timezone import now
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, max_retries=0)
-def execute_bulk_migration(self, plan_id: str):
-    from userdefinedmodel.models import BulkMigrationPlan, UserDefinedModelEntity, UserDefinedModelEntityMigration, MigrationFieldMapping, FieldValue
+def run_bulk_migration(plan_id: str) -> None:
+    """Execute a BulkMigrationPlan synchronously.
+
+    Called by the Celery task wrapper below and directly by management commands
+    that need synchronous execution without going through a broker.
+    """
+    from userdefinedmodel.models import (
+        BulkMigrationPlan, UserDefinedModelEntity,
+        UserDefinedModelEntityMigration, MigrationFieldMapping, FieldValue,
+    )
 
     try:
         with transaction.atomic():
@@ -31,7 +37,6 @@ def execute_bulk_migration(self, plan_id: str):
                 logger.warning("BulkMigrationPlan %s already running", plan_id)
                 return
 
-            # Count affected entities
             qs = UserDefinedModelEntity.objects.filter(config_version=plan.source_version)
             if plan.user_defined_model_type_filter:
                 qs = qs.filter(user_defined_model_type=plan.user_defined_model_type_filter)
@@ -70,8 +75,6 @@ def execute_bulk_migration(self, plan_id: str):
                         executed_by=None,
                     )
 
-                    source_field_map = {f.slug: f for f in entity.config_version.field_definitions.all()}
-                    target_field_map = {f.slug: f for f in tgt_version.field_definitions.all()}
                     overflow = {}
 
                     for bm in mappings:
@@ -100,53 +103,42 @@ def execute_bulk_migration(self, plan_id: str):
                         entity.overflow_data = {**entity.overflow_data, **overflow}
 
                     entity.config_version = tgt_version
-                    # Validate on-save rules for the target version before committing.
-                    # Raises ValidationError (rolls back the atomic block) if the
-                    # migrated values don't satisfy the new version's constraints.
                     entity.validate_for_save()
-
                     entity.save(update_fields=["config_version", "overflow_data"])
-
-                    # Fill in defaults for fields new in the target version
-                    # (e.g. SLUG_ID auto-generation, static defaults).
-                    # materialize_defaults() is idempotent: it only writes values
-                    # for newly-created FieldValue rows.
                     entity.materialize_defaults()
 
                     migration.executed_at = now()
                     migration.save(update_fields=["executed_at"])
 
                 with transaction.atomic():
-                    BulkMigrationPlan.objects.filter(id=plan_id).update(done_entities=__import__("django.db.models", fromlist=["F"]).F("done_entities") + 1)
+                    from django.db.models import F
+                    BulkMigrationPlan.objects.filter(id=plan_id).update(done_entities=F("done_entities") + 1)
 
             except Exception as exc:
                 from django.core.exceptions import ValidationError
                 if isinstance(exc, ValidationError):
                     errs = exc.message_dict if hasattr(exc, "message_dict") else exc.messages
-                    logger.warning("Entity %s skipped: on-save validation failed after migration: %s", entity_id, errs)
+                    logger.warning("Entity %s skipped: validation failed after migration: %s", entity_id, errs)
                 else:
                     logger.exception("Entity %s migration failed: %s", entity_id, exc)
                 _increment_failed(plan)
 
-        # Final status
         plan.refresh_from_db()
         final_status = BulkMigrationPlan.Status.DONE if plan.failed_entities == 0 else BulkMigrationPlan.Status.PARTIAL
         BulkMigrationPlan.objects.filter(id=plan_id).update(status=final_status, executed_at=now())
 
     except Exception as exc:
-        logger.exception("execute_bulk_migration task failed: %s", exc)
+        logger.exception("run_bulk_migration failed: %s", exc)
         BulkMigrationPlan.objects.filter(id=plan_id).update(status=BulkMigrationPlan.Status.PARTIAL)
 
 
-def _resolve_migration_value(src_fv, tgt_field):
-    """Return a value suitable for set_value(val, field=tgt_field), or None to skip.
+@shared_task(bind=True, max_retries=0)
+def execute_bulk_migration(self, plan_id: str):
+    run_bulk_migration(plan_id)
 
-    Workflow fields store a state FK; get_value() returns the state name string.
-    Passing that string directly to set_value() would set value_workflow_state_id
-    to a non-UUID string and fail. Instead, look up the matching WorkflowState in
-    the target workflow by name. If not found, return None so materialize_defaults()
-    can set the initial state.
-    """
+
+def _resolve_migration_value(src_fv, tgt_field):
+    """Return a value suitable for set_value(val, field=tgt_field), or None to skip."""
     from userdefinedmodel.models.config import FieldDefinition
     val = src_fv.get_value()
     if val is None:
@@ -158,7 +150,7 @@ def _resolve_migration_value(src_fv, tgt_field):
         state = WorkflowState.objects.filter(
             workflow_id=tgt_field.workflow_definition_id, name=val
         ).first()
-        return state  # None if no matching state → caller skips
+        return state
     return val
 
 
