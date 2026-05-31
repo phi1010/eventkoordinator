@@ -86,11 +86,13 @@ def execute_bulk_migration(self, plan_id: str):
                         )
 
                         if bm.action == "map" and bm.target_field:
-                            new_fv, _ = FieldValue.objects.get_or_create(
-                                node=entity, field=bm.target_field, language=fv.language
-                            )
-                            new_fv.set_value(fv.get_value(), field=bm.target_field)
-                            new_fv.save()
+                            val = _resolve_migration_value(fv, bm.target_field)
+                            if val is not None:
+                                new_fv, _ = FieldValue.objects.get_or_create(
+                                    node=entity, field=bm.target_field, language=fv.language
+                                )
+                                new_fv.set_value(val, field=bm.target_field)
+                                new_fv.save()
                         elif bm.action == "overflow":
                             overflow[src_field.slug] = str(fv.get_value())
 
@@ -134,6 +136,30 @@ def execute_bulk_migration(self, plan_id: str):
     except Exception as exc:
         logger.exception("execute_bulk_migration task failed: %s", exc)
         BulkMigrationPlan.objects.filter(id=plan_id).update(status=BulkMigrationPlan.Status.PARTIAL)
+
+
+def _resolve_migration_value(src_fv, tgt_field):
+    """Return a value suitable for set_value(val, field=tgt_field), or None to skip.
+
+    Workflow fields store a state FK; get_value() returns the state name string.
+    Passing that string directly to set_value() would set value_workflow_state_id
+    to a non-UUID string and fail. Instead, look up the matching WorkflowState in
+    the target workflow by name. If not found, return None so materialize_defaults()
+    can set the initial state.
+    """
+    from userdefinedmodel.models.config import FieldDefinition
+    val = src_fv.get_value()
+    if val is None:
+        return None
+    if tgt_field.data_type == FieldDefinition.DataType.WORKFLOW:
+        if not tgt_field.workflow_definition_id or not isinstance(val, str):
+            return None
+        from userdefinedmodel.models import WorkflowState
+        state = WorkflowState.objects.filter(
+            workflow_id=tgt_field.workflow_definition_id, name=val
+        ).first()
+        return state  # None if no matching state → caller skips
+    return val
 
 
 def _increment_failed(plan):

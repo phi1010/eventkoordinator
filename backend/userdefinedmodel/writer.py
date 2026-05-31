@@ -215,20 +215,12 @@ def _evaluate_save_policy(node, user, changed_fields: dict) -> list:
         node.id, output["allow"], output["messages"],
     )
 
+    messages = output.get("messages") or []
+
     if not output["allow"]:
-        denial = [{"level": "critical", "text": "Save denied by policy."}]
-        raise PolicyError(denial)
+        raise PolicyError(messages or [{"level": "critical", "text": "Save denied by policy."}])
 
-    # critical messages block save
-    blocking = [
-        m for m in output["messages"]
-        if isinstance(m, dict) and m.get("level") == "critical"
-    ]
-    if blocking:
-        logger.debug("policy save blocked node=%s messages=%s", node.id, blocking)
-        raise PolicyError(blocking)
-
-    return output["messages"]
+    return messages
 
 
 def _apply_scalar_write(node, field, value, user, edit_group) -> None:

@@ -577,17 +577,20 @@ class PolicyEnforcementTests(BaseAPITest):
 package udm
 import rego.v1
 
-allow := true
-
-# Block submit on "status" unless "review" workflow is in "approved"
-messages contains msg if {
+_submit_blocked if {
     input.action == "transition"
     input.field == "status"
     input.transition == "submit"
     input.entity.fields.review.value != "approved"
+}
+
+allow if { not _submit_blocked }
+
+messages contains msg if {
+    _submit_blocked
     msg := {
         "level": "error",
-        "message": {"en": "Must be approved before submitting"},
+        "text": "Must be approved before submitting",
         "field_slug": "status",
     }
 }

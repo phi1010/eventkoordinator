@@ -1030,9 +1030,13 @@ def get_entity(request, entity_id: uuid.UUID):
     except UserDefinedModelEntity.DoesNotExist:
         return JsonResponse({"detail": "Not found"}, status=404)
     # Object-level view authorization: the policy "view" allow decision gates
-    # whether the entity is visible at all. 404 (not 403) avoids leaking existence.
+    # whether the entity is visible at all. 404 (not 403) avoids leaking existence
+    # unless the policy produced messages explaining the denial.
     policy = evaluate_policy(entity, request.user, "view")
     if not policy.get("allow", False):
+        msgs = policy.get("messages") or []
+        if msgs:
+            return JsonResponse({"detail": "Access denied", "policy_messages": msgs}, status=403)
         return JsonResponse({"detail": "Not found"}, status=404)
     return _entity_out_for_user(entity, request.user, view_policy=policy)
 
@@ -1492,6 +1496,27 @@ def migration_preview(
     )
 
 
+def _resolve_migration_value(src_fv, tgt_field):
+    """Return a value for set_value(val, field=tgt_field), or None to skip.
+
+    Workflow fields: get_value() returns the state name string, which cannot be
+    assigned directly as value_workflow_state_id. Resolve by name in the target
+    workflow; return None if not found so materialize_defaults() sets the initial state.
+    """
+    from userdefinedmodel.models.config import FieldDefinition
+    val = src_fv.get_value()
+    if val is None:
+        return None
+    if tgt_field.data_type == FieldDefinition.DataType.WORKFLOW:
+        if not tgt_field.workflow_definition_id or not isinstance(val, str):
+            return None
+        from userdefinedmodel.models import WorkflowState
+        return WorkflowState.objects.filter(
+            workflow_id=tgt_field.workflow_definition_id, name=val
+        ).first()
+    return val
+
+
 @api.post("/entities/{entity_id}/migrate/", response=EntityOut, auth=django_auth)
 def execute_migration(request, entity_id: uuid.UUID, payload: MigrationExecuteIn):
     from userdefinedmodel.models import (
@@ -1535,9 +1560,11 @@ def execute_migration(request, entity_id: uuid.UUID, payload: MigrationExecuteIn
             if action == "map" and mapping_in.target_field_slug:
                 tgt_field = target_field_map.get(mapping_in.target_field_slug)
                 if tgt_field:
-                    new_fv, _ = FieldValue.objects.get_or_create(node=entity, field=tgt_field, language=fv.language)
-                    new_fv.set_value(fv.get_value(), field=tgt_field)
-                    new_fv.save()
+                    val = _resolve_migration_value(fv, tgt_field)
+                    if val is not None:
+                        new_fv, _ = FieldValue.objects.get_or_create(node=entity, field=tgt_field, language=fv.language)
+                        new_fv.set_value(val, field=tgt_field)
+                        new_fv.save()
             elif action == "overflow":
                 overflow[src_field.slug] = str(fv.get_value())
             MigrationFieldMapping.objects.create(

@@ -407,16 +407,20 @@ REGO_BLOCK_SUBMIT_IF_TITLE_EMPTY = """
 package udm
 import rego.v1
 
-allow := true
-
-messages contains msg if {
+_submit_blocked if {
     input.action == "transition"
     input.transition == "submit"
     input.field == "status"
     not input.entity.fields.title.value
+}
+
+allow if { not _submit_blocked }
+
+messages contains msg if {
+    _submit_blocked
     msg := {
         "level": "error",
-        "message": {"en": "Title is required for submission"},
+        "text": "Title is required for submission",
         "field_slug": "title",
     }
 }

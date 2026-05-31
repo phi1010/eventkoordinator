@@ -118,6 +118,19 @@ def _expand_fields(fields_data: dict) -> None:
 
 # ─── Policy evaluation (§16) ──────────────────────────────────────────────────
 
+def _normalize_policy_messages(messages: list) -> list:
+    """Convert Rego field_slug shorthand to highlight_fields list expected by the frontend."""
+    result = []
+    for m in messages:
+        if not isinstance(m, dict) or 'field_slug' not in m:
+            result.append(m)
+            continue
+        m = dict(m)
+        m['highlight_fields'] = [m.pop('field_slug')]
+        result.append(m)
+    return result
+
+
 def build_policy_input(node: "UserDefinedModelEntityNode", user: "OpenIDUser", action: str, **kwargs) -> dict:
     """Build the input document passed to regorus for a given action.
 
@@ -215,7 +228,8 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
 
         # Deny by default: undefined allow rule = false (secure by default)
         allow = _eval_bool("data.udm.allow", default=False)
-        messages = _eval_list("data.udm.messages", default=[])
+        raw_messages = _eval_list("data.udm.messages", default=[])
+        messages = _normalize_policy_messages(raw_messages)
         viewable_fields = _eval_list("data.udm.viewable_fields", default=None)
         editable_fields = _eval_list("data.udm.editable_fields", default=[])
 
@@ -304,12 +318,14 @@ def execute_transition(node: "UserDefinedModelEntityNode", field_slug: str, name
     # Evaluate policy — pass field slug so Rego can see which workflow is transitioning
     output = evaluate_policy(node, user, "transition", transition=name, field=field_slug)
     if not output["allow"]:
+        msgs = output.get("messages") or []
+        if msgs:
+            raise TransitionError(
+                f"Policy denied transition '{name}'.",
+                http_status=422,
+                details={"policy_messages": msgs},
+            )
         raise TransitionError(f"Policy denied transition '{name}'.", http_status=403)
-
-    blocking_messages = [
-        m for m in output["messages"]
-        if isinstance(m, dict) and m.get("level") in ("critical", "error")
-    ]
 
     # Execute PRE-phase actions
     from userdefinedmodel.models.workflow import TransitionAction
@@ -319,14 +335,6 @@ def execute_transition(node: "UserDefinedModelEntityNode", field_slug: str, name
 
     # Subtree validation (save-rule floor)
     _validate_subtree(node)
-
-    # Check blocking policy messages after subtree validation
-    if blocking_messages:
-        raise TransitionError(
-            "Transition blocked by policy.",
-            http_status=422,
-            details={"messages": blocking_messages},
-        )
 
     # Apply state change to the workflow field value
     old_state_name = current_state.name if current_state else None

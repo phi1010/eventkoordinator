@@ -6,9 +6,12 @@ import rego.v1
 # Allowed when the user is active, the action is permitted, and no critical
 # messages were produced.
 allow if {
-    input.user.is_active
-    input.action in {"view", "save"}
-    no_critical_messages
+    input.action == "view"
+}
+
+allow if {
+    input.action == "transition"
+    input.user.is_staff
 }
 
 allow if {
@@ -30,6 +33,55 @@ messages contains msg if {
     msg := {
         "level": "info",
         "text": sprintf("User %v: email=%v, phone=%v", [u.username, u.email, u.phone_number]),
+        "field_slug": "groupselectmulti",
+    }
+}
+
+messages contains msg if {
+    input.action == "view"
+    not input.user.is_staff
+    msg := {
+        "level": "info",
+        "text": "You have limited access to this proposal.",
+    }
+}
+messages contains msg if {
+    input.action == "transition"
+    msg := {
+        "level": "info",
+        "text": "You might have transitioned this proposal.",
+    }
+}
+
+messages contains msg if {
+    input.action == "save"
+    not input.user.is_staff
+    msg := {
+        "level": "warning",
+        "text": "You cannot edit this proposal; your changes will not be saved.",
+    }
+}
+
+messages contains msg if {
+    smid := input.entity.fields.submodel.value
+    submodel := input.entity.children.submodel[_]
+    submodel.id == smid
+    submodel.fields.int.value > 100
+    msg := {
+        "level": "error",
+        "text": "Value in submodel is greater than 100.",
+        "field_slug": "submodel",
+    }
+}
+messages contains msg if {
+    smid := input.entity.fields.submodel.value
+    submodel := input.entity.children.submodel[_]
+    submodel.id == smid
+    submodel.fields.int.value > 1000
+    msg := {
+        "level": "critical",
+        "text": "Value in submodel is greater than 1000.",
+        "field_slug": "submodel",
     }
 }
 
@@ -44,21 +96,9 @@ viewable_fields := restricted_fields if {
     not input.user.is_staff
 }
 
-all_fields := [
-    "proposal_name2",
-    "submodel",
-    "submodel_list",
-    "markdown",
-    "date",
-    "datetime",
-    "time",
-    "singleselect",
-    "entity",
-    "groupselectmulti",
-    "image",
-    "file",
-    "shorttext",
-]
+all_fields contains field if {
+    input.entity.fields[field]
+}
 
 restricted_fields := [
     "proposal_name2",

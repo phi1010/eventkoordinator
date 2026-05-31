@@ -503,7 +503,7 @@ export async function udmGetEntity(entityId: string): Promise<EntityOut> {
   const { data, error, response } = await udmClient.GET('/api/udm/entities/{entity_id}/', {
     params: { path: { entity_id: entityId } },
   })
-  if (error || !response.ok || !data) throw new Error('Entity not found')
+  if (error || !response.ok || !data) throwApiError(error, 'Entity not found')
   return data as EntityOut
 }
 

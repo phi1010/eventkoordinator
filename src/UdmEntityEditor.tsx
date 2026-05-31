@@ -49,6 +49,35 @@ function getAllLangValues(entity: EntityOut, slug: string): Record<string, unkno
   return result
 }
 
+// ── Severity helpers ──────────────────────────────────────────────────────────
+
+const SEVERITY_ORDER = ['info', 'warning', 'error', 'critical']
+
+function maxSeverity(msgs: PolicyMessage[]): string | undefined {
+  let max: string | undefined
+  for (const m of msgs) {
+    if (!max || SEVERITY_ORDER.indexOf(m.level) > SEVERITY_ORDER.indexOf(max)) max = m.level
+  }
+  return max
+}
+
+/** Border color for a field card. Edited (orange) beats warning/info but not error/critical. */
+function highlightBorderColor(severity: string | undefined, isDirty: boolean): string | undefined {
+  if (!severity) return undefined
+  if (severity === 'critical' || severity === 'error') return '#dc2626'
+  if (isDirty) return '#f9a825'
+  if (severity === 'warning') return '#eab308'
+  return '#3b82f6'
+}
+
+/** Outline/label color for a single sub-field inside a submodel card. */
+function subFieldColor(severity: string | undefined): string {
+  if (severity === 'critical' || severity === 'error') return '#dc2626'
+  if (severity === 'warning') return '#d97706'
+  if (severity === 'info') return '#2563eb'
+  return '#444'
+}
+
 // ── Autocomplete hook ─────────────────────────────────────────────────────────
 
 function useAutocomplete<T>(
@@ -83,7 +112,7 @@ interface FieldInputProps {
   disabled: boolean
   lang?: string
   entityChildren?: Record<string, unknown[]>
-  highlightedSubFields?: Set<string>
+  subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
 }
 
@@ -176,12 +205,12 @@ interface SubmodelChildCardProps {
   disabled: boolean
   onChange: (dirty: Record<string, unknown>) => void
   onDelete: () => void
-  highlightedSubFields?: Set<string>
+  subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
 }
 
-function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, highlightedSubFields, subFieldMessages }: SubmodelChildCardProps) {
-  const hasHighlightedFields = (highlightedSubFields?.size ?? 0) > 0
+function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, subFieldSeverities, subFieldMessages }: SubmodelChildCardProps) {
+  const hasHighlightedFields = Object.keys(subFieldSeverities ?? {}).length > 0
   const [expanded, setExpanded] = useState(!item.id || hasHighlightedFields)
   const [activeLang, setActiveLang] = useState(subLanguages[0] ?? '')
   const fallbackLabel = item.id ? item.id.slice(0, 8) + '…' : 'New (unsaved)'
@@ -208,7 +237,11 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
 
   const hasChanges = Object.keys(item.dirty).length > 0
 
-  const cardBorderColor = item.deleted ? '#fca5a5' : hasHighlightedFields ? '#dc2626' : hasChanges ? '#f9a825' : '#e0e0e0'
+  const topSeverity = hasHighlightedFields ? maxSeverity(
+    Object.entries(subFieldSeverities ?? {}).flatMap(([, sev]) => [{ level: sev } as PolicyMessage])
+  ) : undefined
+  const cardBorderColor = item.deleted ? '#fca5a5'
+    : (highlightBorderColor(topSeverity, hasChanges) ?? (hasChanges ? '#f9a825' : '#e0e0e0'))
   return (
     <div style={{
       border: `1px solid ${cardBorderColor}`,
@@ -262,14 +295,15 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
           {subFields.map(subFd => {
             const subLabel = getLang(subFd.label as Record<string, string>, uiLang) || subFd.slug
             const langs = subFd.is_localized ? subLanguages.filter(Boolean) : ['']
-            const subHasError = highlightedSubFields?.has(subFd.slug) ?? false
+            const sev = subFieldSeverities?.[subFd.slug]
+            const subColor = subFieldColor(sev)
             const subMsgs = subFieldMessages?.[subFd.slug] ?? []
             return (
               <div key={subFd.slug} style={{
                 marginBottom: '0.6rem',
-                ...(subHasError ? { outline: '2px solid #dc2626', borderRadius: '4px', padding: '0.25rem' } : {}),
+                ...(sev ? { outline: `2px solid ${subColor}`, borderRadius: '4px', padding: '0.25rem' } : {}),
               }}>
-                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: subHasError ? '#dc2626' : '#444', marginBottom: '0.2rem' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: sev ? subColor : '#444', marginBottom: '0.2rem' }}>
                   {subLabel} <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#999' }}>({subFd.data_type})</span>
                 </div>
                 {langs.map(lang => (
@@ -300,11 +334,11 @@ interface SubmodelEditorProps {
   disabled: boolean
   uiLang: string
   onChange: (ops: SubmodelOp[] | { op: string; fields?: Record<string, unknown> } | null) => void
-  highlightedSubFields?: Set<string>
+  subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
 }
 
-function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange, highlightedSubFields, subFieldMessages }: SubmodelEditorProps) {
+function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange, subFieldSeverities, subFieldMessages }: SubmodelEditorProps) {
   const isList = fd.data_type === 'submodel_list'
   const subConfig = fd.submodel_config as ConfigVersionOut | null | undefined
   const subFields = subConfig?.fields ?? []
@@ -417,7 +451,7 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
             disabled={disabled}
             onChange={dirty => updateItem(item.key, dirty)}
             onDelete={() => deleteItem(item.key)}
-            highlightedSubFields={highlightedSubFields}
+            subFieldSeverities={subFieldSeverities}
             subFieldMessages={subFieldMessages}
           />
         ))}
@@ -570,14 +604,15 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
               {subFields.map(subFd => {
                 const subLabel = getLang(subFd.label as Record<string, string>, uiLang) || subFd.slug
                 const langs = subFd.is_localized ? subLanguages.filter(Boolean) : ['']
-                const subHasError = highlightedSubFields?.has(subFd.slug) ?? false
+                const sev = subFieldSeverities?.[subFd.slug]
+                const subColor = subFieldColor(sev)
                 const subMsgs = subFieldMessages?.[subFd.slug] ?? []
                 return (
                   <div key={subFd.slug} style={{
                     marginBottom: '0.6rem',
-                    ...(subHasError ? { outline: '2px solid #dc2626', borderRadius: '4px', padding: '0.25rem' } : {}),
+                    ...(sev ? { outline: `2px solid ${subColor}`, borderRadius: '4px', padding: '0.25rem' } : {}),
                   }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: subHasError ? '#dc2626' : '#444', marginBottom: '0.2rem' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: sev ? subColor : '#444', marginBottom: '0.2rem' }}>
                       {subLabel} <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#999' }}>({subFd.data_type})</span>
                     </div>
                     {langs.map(lang => (
@@ -1088,7 +1123,7 @@ function MarkdownFieldInput({ value, onChange, disabled }: FieldInputProps) {
   return <div ref={containerRef} className={styles.markdownEditor} />
 }
 
-function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, highlightedSubFields, subFieldMessages }: FieldInputProps) {
+function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, subFieldSeverities, subFieldMessages }: FieldInputProps) {
   const dt = fd.data_type
   const tc = fd.type_config as Record<string, unknown>
 
@@ -1266,7 +1301,7 @@ function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, 
         disabled={disabled}
         uiLang={lang || 'en'}
         onChange={onChange as (ops: unknown) => void}
-        highlightedSubFields={highlightedSubFields}
+        subFieldSeverities={subFieldSeverities}
         subFieldMessages={subFieldMessages}
       />
     )
@@ -1366,15 +1401,15 @@ interface FieldRowProps {
   editable: boolean
   languages: string[]
   uiLang: string
-  hasError?: boolean
+  severity?: string
   messages?: PolicyMessage[]
-  highlightedSubFields?: Set<string>
+  subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
   onTransition: (fieldSlug: string, transitionName: string) => Promise<void>
   transitioning: boolean
 }
 
-function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, hasError, messages, highlightedSubFields, subFieldMessages, onTransition, transitioning }: FieldRowProps) {
+function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, severity, messages, subFieldSeverities, subFieldMessages, onTransition, transitioning }: FieldRowProps) {
   const [activeLang, setActiveLang] = useState(languages[0] ?? '')
   const isDirty = fd.slug in dirty
   const isSubmodel = fd.data_type === 'submodel_list' || fd.data_type === 'submodel_select'
@@ -1420,9 +1455,16 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
     return v !== null && v !== undefined
   })()
 
-  const errorClass = hasError ? ` ${styles.fieldGroupError}` : ''
+  const fieldIsDirty = (isDirty && !isSubmodel) || submodelHasChanges
+  const highlightClass = (() => {
+    if (!severity) return fieldIsDirty ? styles.fieldGroupDirty : ''
+    if (severity === 'error' || severity === 'critical') return styles.fieldGroupError
+    if (fieldIsDirty) return styles.fieldGroupDirty
+    if (severity === 'warning') return styles.fieldGroupWarning
+    return styles.fieldGroupInfo
+  })()
   return (
-    <div className={`${styles.fieldGroup} ${(isDirty && !isSubmodel) || submodelHasChanges ? styles.fieldGroupDirty : ''}${errorClass}`}>
+    <div className={`${styles.fieldGroup} ${highlightClass}`}>
       <div className={styles.fieldHeader}>
         <div>
           <div className={styles.fieldLabel}>{label}</div>
@@ -1459,7 +1501,7 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
           disabled={!editable}
           lang={uiLang}
           entityChildren={entity.children as Record<string, unknown[]>}
-          highlightedSubFields={highlightedSubFields}
+          subFieldSeverities={subFieldSeverities}
           subFieldMessages={subFieldMessages}
         />
       ) : fd.is_localized ? (
@@ -1571,22 +1613,30 @@ export function UdmEntityEditor() {
   const [showHistory, setShowHistory] = useState(false)
   const [policyMessages, setPolicyMessages] = useState<PolicyMessage[]>([])
 
-  const fieldHighlights = useMemo(() => {
-    const s = new Set<string>()
-    for (const m of policyMessages)
-      for (const p of m.highlight_fields ?? []) s.add(p.split('.')[0])
-    return s
+  const fieldSeverities = useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const m of policyMessages) {
+      for (const p of m.highlight_fields ?? []) {
+        const slug = p.split('.')[0]
+        if (!out[slug] || SEVERITY_ORDER.indexOf(m.level) > SEVERITY_ORDER.indexOf(out[slug]))
+          out[slug] = m.level
+      }
+    }
+    return out
   }, [policyMessages])
 
-  const subFieldHighlights = useMemo(() => {
-    const out: Record<string, Set<string>> = {}
-    for (const m of policyMessages)
+  const subFieldSeverities = useMemo(() => {
+    const out: Record<string, Record<string, string>> = {}
+    for (const m of policyMessages) {
       for (const p of m.highlight_fields ?? []) {
         const dot = p.indexOf('.')
         if (dot === -1) continue
         const parent = p.slice(0, dot); const child = p.slice(dot + 1)
-        ;(out[parent] ??= new Set()).add(child)
+        const parentMap = (out[parent] ??= {})
+        if (!parentMap[child] || SEVERITY_ORDER.indexOf(m.level) > SEVERITY_ORDER.indexOf(parentMap[child]))
+          parentMap[child] = m.level
       }
+    }
     return out
   }, [policyMessages])
 
@@ -1600,6 +1650,12 @@ export function UdmEntityEditor() {
       }
     return out
   }, [policyMessages])
+
+  // Messages with no field assignment — shown near the save button
+  const globalPolicyMessages = useMemo(
+    () => policyMessages.filter(m => !m.highlight_fields?.length),
+    [policyMessages],
+  )
 
   // Messages keyed by parent slug → child slug (for rendering below sub-fields)
   const subFieldMessages = useMemo(() => {
@@ -1633,6 +1689,9 @@ export function UdmEntityEditor() {
         setPolicyMessages(validation.policy_messages)
       } catch { /* validation is best-effort */ }
     } catch (err) {
+      if (err instanceof UdmApiError && err.policyMessages.length > 0) {
+        setPolicyMessages(err.policyMessages)
+      }
       setErrors([err instanceof Error ? err.message : 'Failed to load entity'])
     }
   }, [entityId])
@@ -1665,6 +1724,11 @@ export function UdmEntityEditor() {
         {errors.length > 0
           ? <div className={styles.error}>{errors.map((m, i) => <div key={i}>{m}</div>)}</div>
           : <div>Loading…</div>}
+        {policyMessages.length > 0 && (
+          <div style={{ marginTop: '1rem' }}>
+            <PolicyMessageList messages={policyMessages} />
+          </div>
+        )}
       </div>
     )
   }
@@ -1713,9 +1777,23 @@ export function UdmEntityEditor() {
       setPolicyMessages(updated.policy_messages)
       setSuccess('Saved successfully.')
     } catch (e) {
-      setErrors(e instanceof UdmApiError ? e.allMessages : [e instanceof Error ? e.message : 'Save failed'])
-      if (e instanceof UdmApiError)
+      if (e instanceof UdmApiError) {
+        const plainErrors: string[] = [
+          ...e.pydanticErrors.map(err => {
+            const loc = err.loc.filter(s => s !== 'body' && s !== 'payload').join(' → ')
+            return loc ? `${loc}: ${err.msg}` : err.msg
+          }),
+          ...Object.entries(e.fieldErrors).flatMap(([field, errs]) =>
+            errs.map(err => (field === '__all__' ? err : `${field}: ${err}`)),
+          ),
+        ]
+        // Fall back to the raw message only when there is no structured data at all
+        if (plainErrors.length === 0 && e.policyMessages.length === 0) plainErrors.push(e.message)
+        setErrors(plainErrors)
         setPolicyMessages(e.policyMessages)
+      } else {
+        setErrors([e instanceof Error ? e.message : 'Save failed'])
+      }
     } finally {
       setSaving(false)
     }
@@ -1787,9 +1865,9 @@ export function UdmEntityEditor() {
             editable={editable}
             languages={fd.is_localized ? languages.filter(Boolean) : ['']}
             uiLang={uiLang}
-            hasError={fieldHighlights.has(fd.slug)}
+            severity={fieldSeverities[fd.slug]}
             messages={fieldMessages[fd.slug]}
-            highlightedSubFields={subFieldHighlights[fd.slug]}
+            subFieldSeverities={subFieldSeverities[fd.slug]}
             subFieldMessages={subFieldMessages[fd.slug]}
             onTransition={handleTransition}
             transitioning={transitioning}
@@ -1822,6 +1900,11 @@ export function UdmEntityEditor() {
       {errors.length > 0 && (
         <div className={styles.error} style={{ marginTop: '0.5rem' }}>
           {errors.map((msg, i) => <div key={i}>{msg}</div>)}
+        </div>
+      )}
+      {globalPolicyMessages.length > 0 && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <PolicyMessageList messages={globalPolicyMessages} />
         </div>
       )}
       {success && <div className={styles.success} style={{ marginTop: '0.5rem' }}>{success}</div>}
