@@ -183,6 +183,7 @@ class ConfigVersion(MetaBase):
                 data_type=old_field.data_type,
                 sort_order=old_field.sort_order,
                 is_localized=old_field.is_localized,
+                is_preview=old_field.is_preview,
                 submodel_config=old_field.submodel_config,
                 type_config=old_field.type_config,
             )
@@ -233,6 +234,22 @@ class ConfigVersion(MetaBase):
         return new_draft
 
 
+class SlugIdSequence(MetaBase):
+    """Global counter per SLUG_ID prefix. Survives config version copies."""
+    prefix = models.CharField(max_length=200, unique=True)
+    next_value = models.PositiveIntegerField(default=1)
+    owner_config = models.ForeignKey(
+        FieldConfig,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="slug_sequences",
+    )
+
+    def __str__(self):
+        return f"{self.prefix} (next={self.next_value})"
+
+
 class FieldDefinition(MetaBase):
     class DataType(models.TextChoices):
         TEXT_SHORT = "text_short"
@@ -257,12 +274,14 @@ class FieldDefinition(MetaBase):
         SUBMODEL_LIST = "submodel_list"
         ENTITY_SELECT = "entity_select"
         ENTITY_SELECT_MULTI = "entity_select_multi"
+        SLUG_ID = "slug_id"
 
     version = models.ForeignKey(ConfigVersion, on_delete=models.CASCADE, related_name="field_definitions")
     slug = models.SlugField(max_length=80)
     data_type = models.CharField(max_length=30, choices=DataType)
     sort_order = models.PositiveSmallIntegerField(default=0)
     is_localized = models.BooleanField(default=False)
+    is_preview = models.BooleanField(default=False)
     submodel_config = models.ForeignKey(
         ConfigVersion,
         on_delete=models.PROTECT,
@@ -349,6 +368,7 @@ class TypedValue(models.Model):
         FieldDefinition.DataType.SELECT_SINGLE: "value_text",
         FieldDefinition.DataType.INTEGER: "value_decimal",
         FieldDefinition.DataType.FLOAT: "value_decimal",
+        FieldDefinition.DataType.SLUG_ID: "value_decimal",
         FieldDefinition.DataType.BOOLEAN: "value_bool",
         FieldDefinition.DataType.DATE: "value_date",
         FieldDefinition.DataType.TIME: "value_time",
@@ -379,8 +399,8 @@ class TypedValue(models.Model):
         if col in ("value_user", "value_group", "value_node", "value_file"):
             return getattr(self, col + "_id")
         val = getattr(self, col)
-        # For INTEGER fields stored as Decimal, return int
-        if field.data_type == FieldDefinition.DataType.INTEGER and val is not None:
+        # For INTEGER and SLUG_ID fields stored as Decimal, return int
+        if field.data_type in (FieldDefinition.DataType.INTEGER, FieldDefinition.DataType.SLUG_ID) and val is not None:
             return int(val)
         return val
 
@@ -444,9 +464,11 @@ class TypedValue(models.Model):
         if val is None:
             return  # null is always OK at this layer (required validation is in rules)
 
-        if dt == FieldDefinition.DataType.INTEGER:
+        if dt in (FieldDefinition.DataType.INTEGER, FieldDefinition.DataType.SLUG_ID):
             if not isinstance(val, (int, decimal.Decimal)) or (isinstance(val, decimal.Decimal) and val != val.to_integral_value()):
                 raise ValidationError({field.slug: "Value must be an integer"})
+            if dt == FieldDefinition.DataType.SLUG_ID and int(val) < 1:
+                raise ValidationError({field.slug: "Slug ID value must be a positive integer"})
         elif dt == FieldDefinition.DataType.SELECT_SINGLE:
             choices = (field.type_config or {}).get("choices", [])
             if choices and val not in choices:
@@ -476,7 +498,7 @@ class FieldDefaultValue(TypedValue, MetaBase):
             )
         ]
 
-    # Types that cannot have defaults (per §2.8)
+    # Types that cannot have defaults (per §2.8); SLUG_ID uses auto-generated sequence
     _NO_DEFAULT_TYPES = frozenset([
         FieldDefinition.DataType.IMAGE,
         FieldDefinition.DataType.FILE,
@@ -484,6 +506,7 @@ class FieldDefaultValue(TypedValue, MetaBase):
         FieldDefinition.DataType.ENTITY_SELECT_MULTI,
         FieldDefinition.DataType.SUBMODEL_SELECT,
         FieldDefinition.DataType.SUBMODEL_LIST,
+        FieldDefinition.DataType.SLUG_ID,
     ])
 
     def clean(self):

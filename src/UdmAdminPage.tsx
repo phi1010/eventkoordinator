@@ -48,6 +48,7 @@ const DATA_TYPES: DataType[] = [
   'select_single', 'select_multi', 'image', 'file',
   'user_select', 'user_select_multi', 'group_select', 'group_select_multi',
   'submodel_select', 'submodel_list', 'entity_select', 'entity_select_multi',
+  'slug_id',
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -304,6 +305,143 @@ interface FieldEditorProps {
   allConfigs: FieldConfigOut[]
 }
 
+// Types that cannot have manual defaults (mirrors backend _NO_DEFAULT_TYPES + slug_id is auto)
+const NO_DEFAULT_TYPES = new Set<DataType>([
+  'image', 'file', 'entity_select', 'entity_select_multi',
+  'submodel_select', 'submodel_list',
+])
+
+// FK-based types where defaults require a live lookup — deferred to a future picker
+const FK_DEFAULT_TYPES = new Set<DataType>([
+  'user_select', 'user_select_multi', 'group_select', 'group_select_multi',
+])
+
+interface DefaultValueEditorProps {
+  dt: DataType
+  tc: Record<string, unknown>
+  value: unknown
+  isLocalized: boolean
+  languages: string[]
+  onChange: (v: unknown) => void
+}
+
+function DefaultValueEditor({ dt, tc, value, isLocalized, languages, onChange }: DefaultValueEditorProps) {
+  if (dt === 'slug_id') {
+    return (
+      <div style={{ fontSize: '0.85rem', color: '#666', fontStyle: 'italic' }}>
+        Auto-generated sequential ID (no manual default)
+      </div>
+    )
+  }
+  if (NO_DEFAULT_TYPES.has(dt)) return null
+  if (FK_DEFAULT_TYPES.has(dt)) {
+    return (
+      <div style={{ fontSize: '0.85rem', color: '#999', fontStyle: 'italic' }}>
+        Defaults for this type require a live lookup — set via entity creation instead.
+      </div>
+    )
+  }
+
+  const renderInput = (val: unknown, onChangeVal: (v: unknown) => void, key?: string) => {
+    const strVal = val != null ? String(val) : ''
+    if (dt === 'boolean') {
+      return (
+        <label className={styles.checkbox} key={key}>
+          <input type="checkbox" checked={!!val}
+            onChange={e => onChangeVal(e.target.checked)} />
+          Yes
+        </label>
+      )
+    }
+    if (dt === 'integer') {
+      return (
+        <input key={key} className={styles.input} type="number" step="1" value={strVal}
+          onChange={e => onChangeVal(e.target.value !== '' ? parseInt(e.target.value) : null)} />
+      )
+    }
+    if (dt === 'float') {
+      return (
+        <input key={key} className={styles.input} type="number" step="any" value={strVal}
+          onChange={e => onChangeVal(e.target.value !== '' ? parseFloat(e.target.value) : null)} />
+      )
+    }
+    if (dt === 'date') {
+      return (
+        <input key={key} className={styles.input} type="date" value={strVal}
+          onChange={e => onChangeVal(e.target.value || null)} />
+      )
+    }
+    if (dt === 'time') {
+      return (
+        <input key={key} className={styles.input} type="time" value={strVal}
+          onChange={e => onChangeVal(e.target.value || null)} />
+      )
+    }
+    if (dt === 'datetime') {
+      return (
+        <input key={key} className={styles.input} type="datetime-local" value={strVal}
+          onChange={e => onChangeVal(e.target.value || null)} />
+      )
+    }
+    if (dt === 'select_single') {
+      const choices = (tc['choices'] as string[] | undefined) ?? []
+      return (
+        <select key={key} className={styles.select} value={strVal}
+          onChange={e => onChangeVal(e.target.value || null)}>
+          <option value="">— no default —</option>
+          {choices.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      )
+    }
+    if (dt === 'select_multi') {
+      const choices = (tc['choices'] as string[] | undefined) ?? []
+      const selected = Array.isArray(val) ? (val as string[]) : []
+      return (
+        <div key={key} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+          {choices.map(c => (
+            <label key={c} className={styles.checkbox}>
+              <input type="checkbox" checked={selected.includes(c)}
+                onChange={e => {
+                  const next = e.target.checked
+                    ? [...selected, c]
+                    : selected.filter(x => x !== c)
+                  onChangeVal(next.length ? next : null)
+                }} />
+              {c}
+            </label>
+          ))}
+        </div>
+      )
+    }
+    // text_short, text_long, text_markdown, text_richtext
+    return (
+      <input key={key} className={styles.input} type="text" value={strVal}
+        onChange={e => onChangeVal(e.target.value || null)} />
+    )
+  }
+
+  if (isLocalized) {
+    const locVal = (typeof value === 'object' && value !== null && !Array.isArray(value))
+      ? value as Record<string, unknown>
+      : {}
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+        {languages.map(lang => (
+          <div key={lang} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ minWidth: '3rem', fontSize: '0.8rem', color: '#666' }}>[{lang}]</span>
+            {renderInput(locVal[lang] ?? null, v => {
+              const next = { ...locVal, [lang]: v }
+              onChange(Object.values(next).some(x => x != null) ? next : null)
+            }, lang)}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return renderInput(value, onChange)
+}
+
 function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: FieldEditorProps) {
   const [expanded, setExpanded] = useState(false)
   const [choicesText, setChoicesText] = useState<string | null>(null)
@@ -387,6 +525,11 @@ function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: Field
                 <input type="checkbox" checked={field.is_localized}
                   onChange={e => setF({ is_localized: e.target.checked })} />
                 Localized
+              </label>
+              <label className={styles.checkbox}>
+                <input type="checkbox" checked={field.is_preview ?? false}
+                  onChange={e => setF({ is_preview: e.target.checked })} />
+                Preview (shown in collapsed submodel cards and entity dropdowns)
               </label>
             </div>
 
@@ -495,6 +638,20 @@ function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: Field
               </div>
             )}
 
+            {/* Type config: prefix for slug_id */}
+            {field.data_type === 'slug_id' && (
+              <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
+                <label className={styles.label}>Prefix * (uppercase letters/digits/underscores, globally unique)</label>
+                <input className={styles.input}
+                  value={(tc['prefix'] as string) ?? ''}
+                  onChange={e => setF({ type_config: { ...tc, prefix: e.target.value.toUpperCase() } })}
+                  placeholder="TRIMESTERCALL1" />
+                <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.25rem' }}>
+                  Values will display as <code>{(tc['prefix'] as string) || 'PREFIX'}-1234</code>. Auto-generated on entity creation; read-only.
+                </div>
+              </div>
+            )}
+
             {/* Submodel config version — required for submodel_select / submodel_list */}
             {(field.data_type === 'submodel_select' || field.data_type === 'submodel_list') && (
               <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
@@ -506,6 +663,23 @@ function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: Field
               </div>
             )}
           </div>
+
+          {/* Default value */}
+          {!NO_DEFAULT_TYPES.has(field.data_type) && (
+            <div className={styles.subsection}>
+              <span className={styles.subsectionTitle}>Default Value</span>
+              <div style={{ marginTop: '0.4rem' }}>
+                <DefaultValueEditor
+                  dt={field.data_type}
+                  tc={tc}
+                  value={field.default ?? null}
+                  isLocalized={field.is_localized}
+                  languages={languages}
+                  onChange={v => setF({ default: v })}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Rules */}
           <div className={styles.subsection}>
@@ -567,9 +741,11 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
       data_type: fd.data_type as DataType,
       sort_order: fd.sort_order,
       is_localized: fd.is_localized,
+      is_preview: fd.is_preview,
       labels: fd.label as Record<string, string>,
       help_texts: fd.help_text as Record<string, string>,
       type_config: fd.type_config as Record<string, unknown>,
+      default: fd.default ?? null,
       submodel_config_version_id: fd.submodel_config?.version_id ?? null,
       rules: [],
     }
@@ -583,8 +759,10 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
       data_type: 'text_short',
       sort_order: prev.length,
       is_localized: false,
+      is_preview: false,
       labels,
       type_config: {},
+      default: null,
       rules: [],
     }])
   }

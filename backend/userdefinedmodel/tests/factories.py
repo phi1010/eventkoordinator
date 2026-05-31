@@ -383,7 +383,7 @@ import rego.v1
 
 allow := true
 
-deny contains msg if {
+messages contains msg if {
     input.action == "transition"
     input.transition == "submit"
     not input.entity.fields.title.value

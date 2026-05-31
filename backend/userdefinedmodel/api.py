@@ -117,6 +117,7 @@ def _serialize_config_version(version) -> ConfigVersionOut:
             data_type=fd.data_type,
             sort_order=fd.sort_order,
             is_localized=fd.is_localized,
+            is_preview=fd.is_preview,
             label=label_dict,
             help_text=help_dict,
             type_config=fd.type_config or {},
@@ -376,6 +377,21 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
         draft.save()
         draft.field_definitions.all().delete()
 
+        # Validate SLUG_ID prefix uniqueness before creating field definitions
+        from userdefinedmodel.schemas import DataType as SchemaDataType
+        from userdefinedmodel.models.config import SlugIdSequence
+        slug_id_prefixes: dict[str, str] = {}  # slug → prefix
+        for fd_in in payload.fields:
+            if fd_in.data_type == SchemaDataType.SLUG_ID:
+                prefix = (fd_in.type_config or {}).get("prefix", "")
+                if prefix in slug_id_prefixes.values():
+                    return JsonResponse({"detail": f"Duplicate SLUG_ID prefix '{prefix}' in this version"}, status=400)
+                slug_id_prefixes[fd_in.slug] = prefix
+        for slug, prefix in slug_id_prefixes.items():
+            conflict = SlugIdSequence.objects.filter(prefix=prefix).exclude(owner_config=cfg).exclude(owner_config__isnull=True).first()
+            if conflict:
+                return JsonResponse({"detail": f"Prefix '{prefix}' is already claimed by another config"}, status=400)
+
         field_map = {}
         for fd_in in payload.fields:
             submodel_config = None
@@ -391,6 +407,7 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
                 data_type=fd_in.data_type.value,
                 sort_order=fd_in.sort_order,
                 is_localized=fd_in.is_localized,
+                is_preview=fd_in.is_preview,
                 submodel_config=submodel_config,
                 type_config=fd_in.type_config,
             )
@@ -404,10 +421,55 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
             for rule_in in fd_in.rules:
                 _create_single_field_rule(fd, rule_in)
 
+            if fd_in.default is not None:
+                err = _create_field_default(fd, fd_in.default, fd_in.is_localized)
+                if err:
+                    return JsonResponse({"errors": {fd_in.slug: [err]}}, status=400)
+
         for mfr_in in payload.multi_field_rules:
             _create_multi_field_rule(draft, field_map, mfr_in)
 
+        # Claim or re-confirm SLUG_ID sequence ownership for this config
+        for slug, prefix in slug_id_prefixes.items():
+            seq, _ = SlugIdSequence.objects.get_or_create(prefix=prefix, defaults={"owner_config": cfg})
+            if seq.owner_config_id is None:
+                seq.owner_config = cfg
+                seq.save(update_fields=["owner_config"])
+
     return _serialize_config_version(draft)
+
+
+def _create_field_default(field, default_value, is_localized: bool) -> str | None:
+    """Create FieldDefaultValue record(s) for a field definition.
+
+    Returns an error string on failure, or None on success.
+    """
+    from userdefinedmodel.models.config import FieldDefaultValue
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    if field.data_type in FieldDefaultValue._NO_DEFAULT_TYPES:
+        return f"Defaults are not supported for data_type '{field.data_type}'"
+
+    try:
+        if is_localized and isinstance(default_value, dict):
+            for lang, val in default_value.items():
+                dfv = FieldDefaultValue(field=field, language=lang)
+                dfv.set_value(val, field=field)
+                dfv.clean()
+                dfv.save()
+        else:
+            dfv = FieldDefaultValue(field=field, language="")
+            dfv.set_value(default_value, field=field)
+            dfv.clean()
+            dfv.save()
+    except (DjangoValidationError, Exception) as exc:
+        msg = str(exc)
+        if hasattr(exc, "message_dict"):
+            msg = "; ".join(f"{k}: {v}" for k, vs in exc.message_dict.items() for v in vs)
+        elif hasattr(exc, "messages"):
+            msg = "; ".join(exc.messages)
+        return msg
+    return None
 
 
 def _create_single_field_rule(field, rule_in):
@@ -1067,15 +1129,75 @@ def search_groups(request, q: str = "", ids: str = ""):
 @api.get("/entity-search/", response=list[EntityAutocompleteItem], auth=django_auth)
 def search_entities(request, q: str = "", type_ids: str = "", ids: str = ""):
     from userdefinedmodel.models import UserDefinedModelEntity
-    qs = UserDefinedModelEntity.objects.select_related("config_version", "user_defined_model_type")
+    _entity_prefetch = [
+        "field_values__field",
+        "config_version__field_definitions",
+        "config_version__config__languages",
+    ]
+    qs = UserDefinedModelEntity.objects.select_related(
+        "config_version__config", "user_defined_model_type"
+    ).prefetch_related(*_entity_prefetch)
     if type_ids:
         tid_list = [x.strip() for x in type_ids.split(",") if x.strip()]
         qs = qs.filter(user_defined_model_type_id__in=tid_list)
     if ids:
         id_list = [x.strip() for x in ids.split(",") if x.strip()]
-        qs = UserDefinedModelEntity.objects.filter(id__in=id_list)
-    return [EntityAutocompleteItem(id=entity.id, display=str(entity.id), type_id=entity.user_defined_model_type_id)
-            for entity in qs[:50]]
+        qs = UserDefinedModelEntity.objects.select_related(
+            "config_version__config", "user_defined_model_type"
+        ).filter(id__in=id_list).prefetch_related(*_entity_prefetch)
+    results = []
+    for entity in qs[:50]:
+        display = _entity_preview_display(entity)
+        results.append(EntityAutocompleteItem(
+            id=entity.id,
+            display=display,
+            type_id=entity.user_defined_model_type_id,
+        ))
+    return results
+
+
+def _entity_preview_display(entity) -> str:
+    """Build a human-readable display string from is_preview fields, falling back to the UUID."""
+    config_version = entity.config_version
+    if config_version is None:
+        return str(entity.id)
+
+    # Determine default language code for localized fields
+    default_lang = ""
+    for lang in config_version.config.languages.all():
+        if lang.is_default:
+            default_lang = lang.code
+            break
+
+    preview_fields = [fd for fd in config_version.field_definitions.all() if fd.is_preview]
+    if not preview_fields:
+        return str(entity.id)
+
+    # Build slug → field_values map from the prefetched relation
+    fv_map: dict[tuple, object] = {}
+    for fv in entity.field_values.all():
+        fv_map[(fv.field_id, fv.language)] = fv
+
+    parts = []
+    for fd in preview_fields:
+        if fd.is_localized:
+            fv = fv_map.get((fd.id, default_lang)) or next(
+                (fv_map[k] for k in fv_map if k[0] == fd.id), None
+            )
+        else:
+            fv = fv_map.get((fd.id, ""))
+
+        if fv is None:
+            continue
+        val = fv.get_value(field=fd)
+        if val is not None and val != "":
+            if fd.data_type == "slug_id":
+                prefix = (fd.type_config or {}).get("prefix", "")
+                parts.append(f"{prefix}-{int(val)}" if prefix else str(val))
+            else:
+                parts.append(str(val))
+
+    return " · ".join(parts) if parts else str(entity.id)
 
 
 # ─── Migration ────────────────────────────────────────────────────────────────
@@ -1220,6 +1342,7 @@ def execute_migration(request, entity_id: uuid.UUID, payload: MigrationExecuteIn
             errors = exc.message_dict if hasattr(exc, "message_dict") else {"__all__": exc.messages}
             return JsonResponse({"errors": errors}, status=400)
         entity.save(update_fields=["config_version", "user_defined_model_type", "overflow_data"])
+        entity.materialize_defaults()
         migration.executed_at = now()
         migration.executed_by = request.user
         migration.save(update_fields=["executed_at", "executed_by"])

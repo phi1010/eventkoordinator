@@ -5,6 +5,7 @@ from userdefinedmodel.models.config import (
     FieldDefinition,
     FieldDefinitionTranslation,
     FieldDefaultValue,
+    SlugIdSequence,
 )
 from userdefinedmodel.models.workflow import (
     WorkflowDefinition,
@@ -62,6 +63,7 @@ __all__ = [
     "FieldDefinition",
     "FieldDefinitionTranslation",
     "FieldDefaultValue",
+    "SlugIdSequence",
     "WorkflowDefinition",
     "WorkflowState",
     "WorkflowStateTranslation",

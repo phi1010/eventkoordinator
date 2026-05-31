@@ -105,6 +105,12 @@ def execute_bulk_migration(self, plan_id: str):
 
                     entity.save(update_fields=["config_version", "overflow_data"])
 
+                    # Fill in defaults for fields new in the target version
+                    # (e.g. SLUG_ID auto-generation, static defaults).
+                    # materialize_defaults() is idempotent: it only writes values
+                    # for newly-created FieldValue rows.
+                    entity.materialize_defaults()
+
                     migration.executed_at = now()
                     migration.save(update_fields=["executed_at"])
 

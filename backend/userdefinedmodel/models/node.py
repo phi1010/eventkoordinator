@@ -228,7 +228,7 @@ class UserDefinedModelEntityNode(MetaBase):
         return doc
 
     def materialize_defaults(self):
-        from userdefinedmodel.models.config import FieldDefaultValue
+        from userdefinedmodel.models.config import FieldDefaultValue, FieldDefinition, SlugIdSequence
         for default in FieldDefaultValue.objects.filter(field__version=self.config_version):
             field = default.field
             lang = default.language
@@ -237,6 +237,26 @@ class UserDefinedModelEntityNode(MetaBase):
             )
             if created:
                 fv.set_value(default.get_value(field=field), field=field)
+                fv.save()
+
+        # SLUG_ID: auto-generate from the global sequence (never reuses after deletion)
+        for field in self.config_version.field_definitions.filter(data_type=FieldDefinition.DataType.SLUG_ID):
+            prefix = (field.type_config or {}).get("prefix", "")
+            if not prefix:
+                continue
+            fv, created = FieldValue.objects.get_or_create(node=self, field=field, language="")
+            if created:
+                # Lock the sequence row, then atomically claim the next value.
+                # Must run inside an existing transaction.atomic() (guaranteed by all callers).
+                try:
+                    seq = SlugIdSequence.objects.select_for_update().get(prefix=prefix)
+                except SlugIdSequence.DoesNotExist:
+                    SlugIdSequence.objects.get_or_create(prefix=prefix)
+                    seq = SlugIdSequence.objects.select_for_update().get(prefix=prefix)
+                next_id = seq.next_value
+                seq.next_value = next_id + 1
+                seq.save(update_fields=["next_value"])
+                fv.set_value(next_id, field=field)
                 fv.save()
 
     def __str__(self):

@@ -67,6 +67,7 @@ class DataType(str, Enum):
     GROUP_SELECT = "group_select"; GROUP_SELECT_MULTI = "group_select_multi"
     SUBMODEL_SELECT = "submodel_select"; SUBMODEL_LIST = "submodel_list"
     ENTITY_SELECT = "entity_select"; ENTITY_SELECT_MULTI = "entity_select_multi"
+    SLUG_ID = "slug_id"
 
 
 class ConfigVersionStatus(str, Enum):
@@ -119,6 +120,13 @@ class SubmodelTypeConfig(Schema):
     model_config = {"extra": "forbid"}
 
 
+_MAX_SLUG_ID_PREFIX_LEN = 200
+
+class SlugIdTypeConfig(Schema):
+    prefix: Annotated[str, Field(min_length=1, max_length=_MAX_SLUG_ID_PREFIX_LEN, pattern=r"^[A-Z][A-Z0-9_]*$")]
+    model_config = {"extra": "forbid"}
+
+
 _TYPE_CONFIG_CLS: dict[DataType, type[Schema] | None] = {
     DataType.TEXT_SHORT: TextTypeConfig, DataType.TEXT_LONG: TextTypeConfig,
     DataType.TEXT_MARKDOWN: TextTypeConfig, DataType.TEXT_RICHTEXT: TextTypeConfig,
@@ -131,6 +139,7 @@ _TYPE_CONFIG_CLS: dict[DataType, type[Schema] | None] = {
     DataType.GROUP_SELECT: UserGroupTypeConfig, DataType.GROUP_SELECT_MULTI: UserGroupTypeConfig,
     DataType.SUBMODEL_SELECT: SubmodelTypeConfig, DataType.SUBMODEL_LIST: SubmodelTypeConfig,
     DataType.ENTITY_SELECT: EntitySelectTypeConfig, DataType.ENTITY_SELECT_MULTI: EntitySelectTypeConfig,
+    DataType.SLUG_ID: SlugIdTypeConfig,
 }
 
 # ─── Single-field rule schemas ────────────────────────────────────────────────
@@ -254,9 +263,11 @@ class FieldDefinitionIn(Schema):
     data_type: DataType
     sort_order: int = Field(0, ge=0, le=_MAX_SORT_ORDER)
     is_localized: bool = False
+    is_preview: bool = False
     labels: LocalizedLabel
     help_texts: LocalizedHelpText = Field(default_factory=dict)
     type_config: dict[str, Any] = Field(default_factory=dict)
+    default: Optional[Any] = None
     submodel_config_version_id: Optional[uuid.UUID] = None
     rules: list[SingleFieldRuleIn] = Field(default_factory=list, max_length=_MAX_RULES)
     model_config = {"extra": "forbid"}
@@ -283,6 +294,7 @@ class FieldDefinitionOut(Schema):
     data_type: str
     sort_order: int
     is_localized: bool
+    is_preview: bool
     label: dict[str, str]
     help_text: dict[str, str]
     type_config: dict[str, Any]

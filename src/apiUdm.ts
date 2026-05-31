@@ -648,9 +648,9 @@ export async function udmSearchGroups(q = ''): Promise<GroupAutocompleteItem[]> 
   return (data as GroupAutocompleteItem[]) || []
 }
 
-export async function udmSearchEntities(q = '', typeIds?: string): Promise<EntityAutocompleteItem[]> {
+export async function udmSearchEntities(q = '', typeIds?: string, ids?: string): Promise<EntityAutocompleteItem[]> {
   const { data, response } = await udmClient.GET('/api/udm/entity-search/', {
-    params: { query: { q, type_ids: typeIds } },
+    params: { query: { q, type_ids: typeIds, ids } },
   })
   if (!response.ok) return []
   return (data as EntityAutocompleteItem[]) || []

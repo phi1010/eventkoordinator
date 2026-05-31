@@ -690,7 +690,7 @@ export interface components {
          * DataType
          * @enum {string}
          */
-        DataType: "text_short" | "text_long" | "text_markdown" | "text_richtext" | "integer" | "float" | "boolean" | "date" | "time" | "datetime" | "select_single" | "select_multi" | "image" | "file" | "user_select" | "user_select_multi" | "group_select" | "group_select_multi" | "submodel_select" | "submodel_list" | "entity_select" | "entity_select_multi";
+        DataType: "text_short" | "text_long" | "text_markdown" | "text_richtext" | "integer" | "float" | "boolean" | "date" | "time" | "datetime" | "select_single" | "select_multi" | "image" | "file" | "user_select" | "user_select_multi" | "group_select" | "group_select_multi" | "submodel_select" | "submodel_list" | "entity_select" | "entity_select_multi" | "slug_id";
         /** EditGroupOut */
         EditGroupOut: {
             /** Edits */
@@ -755,6 +755,11 @@ export interface components {
             created_at: string;
             /** Current State */
             current_state: string | null;
+            /**
+             * Editable Fields
+             * @default []
+             */
+            editable_fields: string[];
             /** Editors */
             editors: components["schemas"]["UserRefOut"][];
             /** Field Values */
@@ -769,16 +774,17 @@ export interface components {
                 [key: string]: unknown;
             };
             owner: components["schemas"]["UserRefOut"] | null;
+            /**
+             * Policy Messages
+             * @default []
+             */
+            policy_messages: unknown[];
             /** Updated At */
             updated_at: string;
             /** User Defined Model Type Id */
             user_defined_model_type_id: string | null;
-            /** Viewable Fields — null means no restriction (no policy) */
-            viewable_fields: string[] | null;
-            /** Editable Fields */
-            editable_fields: string[];
-            /** Policy messages from the last save (warnings survive a successful save) */
-            policy_messages: import('./apiUdm').PolicyMessage[];
+            /** Viewable Fields */
+            viewable_fields?: string[] | null;
         };
         /** EntityPatchIn */
         EntityPatchIn: {
@@ -836,6 +842,11 @@ export interface components {
              * @default false
              */
             is_localized: boolean;
+            /**
+             * Is Preview
+             * @default false
+             */
+            is_preview: boolean;
             /** Labels */
             labels: {
                 [key: string]: string;
@@ -849,6 +860,8 @@ export interface components {
              * @default 0
              */
             sort_order: number;
+            /** Default */
+            default?: unknown | null;
             /** Submodel Config Version Id */
             submodel_config_version_id?: string | null;
             /** Type Config */
@@ -873,6 +886,8 @@ export interface components {
             id: string;
             /** Is Localized */
             is_localized: boolean;
+            /** Is Preview */
+            is_preview: boolean;
             /** Label */
             label: {
                 [key: string]: string;
@@ -1822,7 +1837,9 @@ export interface operations {
     };
     userdefinedmodel_api_patch_entity: {
         parameters: {
-            query?: never;
+            query?: {
+                validate_only?: boolean;
+            };
             header?: never;
             path: {
                 entity_id: string;
@@ -1944,7 +1961,9 @@ export interface operations {
     };
     userdefinedmodel_api_transition_entity: {
         parameters: {
-            query?: never;
+            query?: {
+                validate_only?: boolean;
+            };
             header?: never;
             path: {
                 entity_id: string;
