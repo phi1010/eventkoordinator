@@ -34,8 +34,8 @@ interface WfStateData {
   label: string
   name: string
   isInitial: boolean
-  allowsEdit: boolean
   usageCount?: number
+  isRetiring?: boolean
   [key: string]: unknown
 }
 
@@ -61,7 +61,6 @@ interface WorkflowStateOut {
   name: string
   label: Record<string, string>
   is_initial: boolean
-  allows_edit: boolean
   position_x: number
   position_y: number
 }
@@ -150,7 +149,6 @@ function wfToReactFlow(wf: WorkflowDefinitionOut): { nodes: AnyWfNode[]; edges: 
       label: s.label['en'] ?? Object.values(s.label)[0] ?? s.name,
       name: s.name,
       isInitial: s.is_initial,
-      allowsEdit: s.allows_edit,
     } as Record<string, unknown>,
   }))
 
@@ -214,8 +212,13 @@ function reactFlowToWf(
   const stateNodes = nodes.filter((n) => n.type === 'workflowState')
   const validStateIds = new Set(stateNodes.map((n) => n.id))
 
+  // Migration edges are ephemeral editor instructions — not saved as transitions.
+  const migrations = edges
+    .filter((e) => e.data?.isMigration && validStateIds.has(e.source) && validStateIds.has(e.target))
+    .map((e) => ({ from_state: e.source, to_state: e.target }))
+
   const transitions = edges
-    .filter((e) => e.source && e.target)
+    .filter((e) => e.source && e.target && !e.data?.isMigration)
     .map((e) => {
       const srcType = nodes.find((n) => n.id === e.source)?.type
       const tgtType = nodes.find((n) => n.id === e.target)?.type
@@ -262,12 +265,12 @@ function reactFlowToWf(
         name: d.name,
         label: { en: d.label },
         is_initial: d.isInitial,
-        allows_edit: d.allowsEdit,
         position_x: n.position.x,
         position_y: n.position.y,
       }
     }),
     transitions,
+    migrations,
   }
 }
 
@@ -288,11 +291,11 @@ const mkEdge = (id: string, src: string, tgt: string, sh: string, th: string, lb
 
 const PROPOSAL_EXAMPLE: { nodes: AnyWfNode[]; edges: WfEdge[] } = {
   nodes: [
-    { id: 'draft',     type: 'workflowState', position: { x: 60,  y: 220 }, data: { label: 'Draft',     name: 'draft',     isInitial: true,  allowsEdit: true  } },
-    { id: 'submitted', type: 'workflowState', position: { x: 380, y: 100 }, data: { label: 'Submitted', name: 'submitted', isInitial: false, allowsEdit: false } },
-    { id: 'revise',    type: 'workflowState', position: { x: 380, y: 340 }, data: { label: 'Revise',    name: 'revise',    isInitial: false, allowsEdit: true  } },
-    { id: 'accepted',  type: 'workflowState', position: { x: 700, y: 20  }, data: { label: 'Accepted',  name: 'accepted',  isInitial: false, allowsEdit: false } },
-    { id: 'rejected',  type: 'workflowState', position: { x: 700, y: 220 }, data: { label: 'Rejected',  name: 'rejected',  isInitial: false, allowsEdit: false } },
+    { id: 'draft',     type: 'workflowState', position: { x: 60,  y: 220 }, data: { label: 'Draft',     name: 'draft',     isInitial: true  } },
+    { id: 'submitted', type: 'workflowState', position: { x: 380, y: 100 }, data: { label: 'Submitted', name: 'submitted', isInitial: false } },
+    { id: 'revise',    type: 'workflowState', position: { x: 380, y: 340 }, data: { label: 'Revise',    name: 'revise',    isInitial: false } },
+    { id: 'accepted',  type: 'workflowState', position: { x: 700, y: 20  }, data: { label: 'Accepted',  name: 'accepted',  isInitial: false } },
+    { id: 'rejected',  type: 'workflowState', position: { x: 700, y: 220 }, data: { label: 'Rejected',  name: 'rejected',  isInitial: false } },
   ],
   edges: [
     mkEdge('submit',           'draft',     'submitted', 'right-top',    'left-top',     'Submit'),
@@ -328,6 +331,7 @@ function WorkflowStateNode({ data, selected }: NodeProps) {
         <span className={styles.wfNodeLabel}>{d.label}</span>
         <span className={styles.wfNodeSlug}>{d.name}</span>
       </div>
+      {d.isRetiring && <span className={styles.retiringBadge}>RETIRING</span>}
       {d.usageCount !== undefined && (
         <span className={`${styles.countBadge} ${d.usageCount > 0 ? styles.countBadgeActive : styles.countBadgeMuted}`}>
           {d.usageCount}
@@ -424,8 +428,9 @@ const SPECIAL_DESCRIPTIONS: Record<string, string> = {
 
 function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNodeChange, onEdgeChange, onDeleteSelected, orphanedStates, stateCounts, onReadd }: PropsPanelProps) {
   const selNodes = nodes.filter((n) => selectedNodeIds.includes(n.id))
-  const selEdges = edges.filter((e) => selectedEdgeIds.includes(e.id))
-  const total = selNodes.length + selEdges.length
+  const selEdges = edges.filter((e) => selectedEdgeIds.includes(e.id) && !e.data?.isMigration)
+  const selMigrationEdges = edges.filter((e) => selectedEdgeIds.includes(e.id) && e.data?.isMigration)
+  const total = selNodes.length + selEdges.length + selMigrationEdges.length
 
   const orphanedSection = orphanedStates.length > 0 && (
     <div className={styles.orphanedSection}>
@@ -491,13 +496,18 @@ function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNod
               <input type="checkbox" checked={d.isInitial} onChange={(e) => onNodeChange(n.id, { isInitial: e.target.checked })} />
               Initial state
             </label>
-            <label className={styles.propsCheckbox}>
-              <input type="checkbox" checked={d.allowsEdit} onChange={(e) => onNodeChange(n.id, { allowsEdit: e.target.checked })} />
-              Allows editing
-            </label>
           </div>
         )
       })}
+
+      {selMigrationEdges.map((e) => (
+        <div key={e.id} className={styles.propsSection}>
+          <div className={styles.propsSectionTitle}>Migration: {e.source} → {e.target}</div>
+          <p className={styles.specialDesc}>
+            On save, all entities in state <strong>{e.source}</strong> will be moved to <strong>{e.target}</strong>, then <strong>{e.source}</strong> will be deleted.
+          </p>
+        </div>
+      ))}
 
       {selEdges.map((e) => (
         <div key={e.id} className={styles.propsSection}>
@@ -539,6 +549,7 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [migrationMode, setMigrationMode] = useState(false)
   const { fitView } = useReactFlow()
 
   useEffect(() => {
@@ -561,6 +572,33 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialStateCounts])
 
+  // Track which state nodes are sources of migration edges (retiring).
+  // String key ensures the effect only fires when the actual set changes.
+  const migrationSourcesKey = edges
+    .filter((e) => e.data?.isMigration)
+    .map((e) => e.source)
+    .sort()
+    .join(',')
+
+  useEffect(() => {
+    const retiringSrc = new Set(migrationSourcesKey.split(',').filter(Boolean))
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.type === 'workflowState'
+          ? { ...n, data: { ...n.data, isRetiring: retiringSrc.has(n.id) } }
+          : n,
+      ),
+    )
+    setEdges((eds) =>
+      eds.map((e) => {
+        if (e.data?.isMigration) return e
+        const dimmed = retiringSrc.has(e.target)
+        return { ...e, style: { ...e.style, opacity: dimmed ? 0.35 : 1 } }
+      }),
+    )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [migrationSourcesKey])
+
   const selectedNodeIds = nodes.filter((n) => n.selected).map((n) => n.id)
   const selectedEdgeIds = edges.filter((e) => e.selected).map((e) => e.id)
 
@@ -569,17 +607,43 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
       const src = nodes.find((n) => n.id === connection.source)
       const tgt = nodes.find((n) => n.id === connection.target)
       if (!src || !tgt) return false
+      if (migrationMode) {
+        // Migration edges only valid between regular state nodes
+        return src.type === 'workflowState' && tgt.type === 'workflowState'
+      }
       // fromAny / fromUndefined are source-only; reject any incoming edge
       if (tgt.type === 'fromAny' || tgt.type === 'fromUndefined') return false
       // keepState is target-only; reject any outgoing edge
       if (src.type === 'keepState') return false
       return true
     },
-    [nodes],
+    [nodes, migrationMode],
   )
 
   const onConnect = useCallback(
     (connection: Connection) => {
+      if (migrationMode) {
+        // Create a migration edge; replace any existing migration edge from this source.
+        const src = connection.source ?? ''
+        setEdges((eds) => {
+          const without = eds.filter((e) => !(e.data?.isMigration && e.source === src))
+          const migEdge: WfEdge = {
+            id: `migrate_${src}`,
+            source: src,
+            target: connection.target ?? '',
+            sourceHandle: connection.sourceHandle ?? null,
+            targetHandle: connection.targetHandle ?? null,
+            type: 'smoothstep',
+            data: { isMigration: true, label: '↦ migrate' },
+            label: '↦ migrate',
+            style: { stroke: '#f97316', strokeWidth: 3, strokeDasharray: '6 4' },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#f97316' },
+            reconnectable: true,
+          }
+          return [...without, migEdge]
+        })
+        return
+      }
       const existingNames = new Set(edges.map((e) => e.id))
       const srcNode = nodes.find((n) => n.id === connection.source)
       // Special nodes don't have a meaningful label; fall back to a generic prefix
@@ -594,7 +658,7 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
         addEdge({ ...connection, id: slug, data: { label: '' }, label: '', markerEnd: { type: MarkerType.ArrowClosed }, type: 'smoothstep', reconnectable: true }, eds),
       )
     },
-    [edges, nodes, setEdges],
+    [edges, nodes, setEdges, migrationMode],
   )
 
   const onNodesChange = useCallback(
@@ -623,7 +687,7 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
         id: slug,
         type: 'workflowState',
         position: { x: 80 + nds.filter((n) => n.type === 'workflowState').length * 40, y: 80 },
-        data: { label: 'New State', name: slug, isInitial: !hasInitial, allowsEdit: true },
+        data: { label: 'New State', name: slug, isInitial: !hasInitial },
       },
     ])
   }
@@ -693,7 +757,6 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
           label,
           name: state.name,
           isInitial: state.is_initial && !hasInitial,
-          allowsEdit: state.allows_edit,
           usageCount: initialStateCounts[state.name] ?? 0,
         },
       },
@@ -701,6 +764,34 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
   }
 
   async function handleSave() {
+    // Pre-flight: states being deleted with live entities must have a migration edge.
+    if (workflowId) {
+      const migrationTargetMap = new Map(
+        edges.filter((e) => e.data?.isMigration).map((e) => [e.source, e.target]),
+      )
+      const currentStateIds = new Set(
+        nodes.filter((n) => n.type === 'workflowState').map((n) => n.id),
+      )
+      for (const s of savedStates) {
+        if (currentStateIds.has(s.name)) continue
+        const count = initialStateCounts[s.name] ?? 0
+        if (count === 0) continue
+        const migrateTarget = migrationTargetMap.get(s.name)
+        if (!migrateTarget) {
+          const label = s.label['en'] ?? Object.values(s.label)[0] ?? s.name
+          setSaveError(
+            `"${label}" has ${count} ${count === 1 ? 'entity' : 'entities'}. Draw a migration edge to move them, or re-add the state.`,
+          )
+          return
+        }
+        if (!currentStateIds.has(migrateTarget)) {
+          const label = s.label['en'] ?? Object.values(s.label)[0] ?? s.name
+          setSaveError(`Migration target for "${label}" is not on the canvas.`)
+          return
+        }
+      }
+    }
+
     setSaving(true)
     setSaveError(null)
     setSaveSuccess(false)
@@ -733,6 +824,13 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
         <button className={`${styles.toolbarBtn} ${styles.fromAnyBtn}`}  onClick={() => addSpecialNode('fromAny')}  disabled={hasFromAny}  title="Add a 'From Any' virtual source node">+ From Any</button>
         <button className={`${styles.toolbarBtn} ${styles.fromUndefBtn}`} onClick={() => addSpecialNode('fromUndefined')} disabled={hasFromUndefined} title="Add a 'From Undefined' virtual source node">+ From Undefined</button>
         <button className={`${styles.toolbarBtn} ${styles.keepStateBtn}`} onClick={() => addSpecialNode('keepState')} disabled={hasKeepState} title="Add a 'Keep State' virtual target node">+ Keep State</button>
+        <button
+          className={`${styles.toolbarBtn} ${styles.migrateBtn} ${migrationMode ? styles.migrateBtnActive : ''}`}
+          onClick={() => setMigrationMode((m) => !m)}
+          title="Draw a migration edge to move entities from a retiring state to another on save"
+        >
+          ↦ Migrate{migrationMode ? ' (on)' : ''}
+        </button>
         <span className={styles.toolbarSep} />
         <button className={`${styles.toolbarBtn} ${styles.saveBtn}`} onClick={handleSave} disabled={saving || !name.trim()}>
           {saving ? 'Saving…' : workflowId ? 'Save' : 'Save (create)'}

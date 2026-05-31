@@ -360,6 +360,23 @@
   font-family: monospace;
 }
 
+/* ── Retiring badge on state nodes ──────────────────────────────────────── */
+.retiringBadge {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #fed7aa;
+  color: #c2410c;
+  border: 1px solid #f97316;
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
 /* ── Usage count badge on state nodes ───────────────────────────────────── */
 .countBadge {
   position: absolute;
@@ -543,6 +560,16 @@
   opacity: 0.4;
   cursor: default;
 }
+
+.migrateBtn { border-color: #f97316; color: #f97316; }
+.migrateBtn:hover { background: #fff7ed; }
+
+.migrateBtnActive {
+  background: #f97316;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.3);
+}
+.migrateBtnActive:hover { background: #ea580c; }
 
 /* ── Properties panel special node description ───────────────────────────── */
 .specialDesc {

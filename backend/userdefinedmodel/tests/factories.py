@@ -84,7 +84,6 @@ class WorkflowStateFactory(DjangoModelFactory):
     workflow = factory.SubFactory(WorkflowDefinitionFactory)
     name = factory.Sequence(lambda n: f"state{n}")
     is_initial = False
-    allows_edit = True
 
 
 class WorkflowTransitionFactory(DjangoModelFactory):
@@ -311,9 +310,9 @@ def make_full_workflow():
     )
 
     wf = WorkflowDefinition.objects.create(name="Test Workflow")
-    draft = WorkflowState.objects.create(workflow=wf, name="draft", is_initial=True, allows_edit=True)
+    draft = WorkflowState.objects.create(workflow=wf, name="draft", is_initial=True)
     WorkflowStateTranslation.objects.create(state=draft, language="en", label="Draft")
-    submitted = WorkflowState.objects.create(workflow=wf, name="submitted", is_initial=False, allows_edit=False)
+    submitted = WorkflowState.objects.create(workflow=wf, name="submitted", is_initial=False)
     WorkflowStateTranslation.objects.create(state=submitted, language="en", label="Submitted")
 
     trans = WorkflowTransition.objects.create(

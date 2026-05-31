@@ -269,28 +269,12 @@ export type UserAutocompleteItem = components['schemas']['UserAutocompleteItem']
 export type GroupAutocompleteItem = components['schemas']['GroupAutocompleteItem']
 export type EntityAutocompleteItem = components['schemas']['EntityAutocompleteItem']
 export type StagingFileOut = components['schemas']['StagingFileOut']
-export type MultiFieldRuleIn = components['schemas']['MultiFieldRuleIn']
 export type MigrationPreviewOut = components['schemas']['MigrationPreviewOut']
 export type MigrationPreviewFieldOut = components['schemas']['MigrationPreviewFieldOut']
 export type MigrationFieldMappingIn = components['schemas']['MigrationFieldMappingIn']
 export type MigrationExecuteIn = components['schemas']['MigrationExecuteIn']
 export type MigrationAction = components['schemas']['MigrationAction']
 export type BulkMigrationCreateIn = components['schemas']['BulkMigrationCreateIn']
-export type RequiredRuleIn = components['schemas']['RequiredRuleIn']
-export type MinLengthRuleIn = components['schemas']['MinLengthRuleIn']
-export type MaxLengthRuleIn = components['schemas']['MaxLengthRuleIn']
-export type RegexRuleIn = components['schemas']['RegexRuleIn']
-export type MinValueRuleIn = components['schemas']['MinValueRuleIn']
-export type MaxValueRuleIn = components['schemas']['MaxValueRuleIn']
-export type MinItemsRuleIn = components['schemas']['MinItemsRuleIn']
-export type MaxItemsRuleIn = components['schemas']['MaxItemsRuleIn']
-export type MaxFileSizeRuleIn = components['schemas']['MaxFileSizeRuleIn']
-export type AllowedMimeTypesRuleIn = components['schemas']['AllowedMimeTypesRuleIn']
-export type RequiredInLanguageRuleIn = components['schemas']['RequiredInLanguageRuleIn']
-export type AnyRuleIn =
-  | RequiredRuleIn | MinLengthRuleIn | MaxLengthRuleIn | RegexRuleIn
-  | MinValueRuleIn | MaxValueRuleIn | MinItemsRuleIn | MaxItemsRuleIn
-  | MaxFileSizeRuleIn | AllowedMimeTypesRuleIn | RequiredInLanguageRuleIn
 export type BulkMigrationOut = components['schemas']['BulkMigrationOut']
 export type PolicyEvalOut = components['schemas']['PolicyEvalOut']
 

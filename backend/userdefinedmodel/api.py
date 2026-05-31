@@ -18,6 +18,7 @@ from django.db.utils import OperationalError
 from django.http import JsonResponse
 from django.utils.timezone import now
 from ninja import NinjaAPI, File, UploadedFile
+from ninja.errors import HttpError
 from ninja.security import django_auth
 
 from userdefinedmodel.schemas import (
@@ -116,7 +117,7 @@ def _serialize_workflow(wf) -> WorkflowDefinitionOut:
         label_dict = {t.language: t.label for t in state.translations.all()}
         states.append(WorkflowStateOut(
             name=state.name, label=label_dict,
-            is_initial=state.is_initial, allows_edit=state.allows_edit,
+            is_initial=state.is_initial,
             position_x=state.position_x, position_y=state.position_y,
         ))
     transitions = []
@@ -144,7 +145,7 @@ def _serialize_workflow(wf) -> WorkflowDefinitionOut:
 def _serialize_config_version(version) -> ConfigVersionOut:
     fields_out = []
     for fd in version.field_definitions.prefetch_related(
-        "translations", "defaults", "single_field_rules",
+        "translations", "defaults",
         "workflow_definition__states__translations",
         "workflow_definition__transitions__translations",
         "workflow_definition__transitions__from_state",
@@ -152,12 +153,6 @@ def _serialize_config_version(version) -> ConfigVersionOut:
     ).all():
         label_dict = {t.language: t.label for t in fd.translations.all()}
         help_dict = {t.language: t.help_text for t in fd.translations.all()}
-
-        save_rules = {}
-        for rule in fd.single_field_rules.filter(applies_to_save=True):
-            real = rule.get_real_instance()
-            rule_type = real.__class__.__name__
-            save_rules[rule_type] = {"id": str(rule.id), "admin_label": rule.admin_label}
 
         defaults_qs = list(fd.defaults.all())
         default_val = None
@@ -180,7 +175,6 @@ def _serialize_config_version(version) -> ConfigVersionOut:
             help_text=help_dict,
             type_config=fd.type_config or {},
             default=default_val,
-            save_rules=save_rules,
             submodel_config=_serialize_config_version(fd.submodel_config) if fd.submodel_config else None,
             workflow_definition=workflow_def_out,
         ))
@@ -434,16 +428,11 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
                 FieldDefinitionTranslation.objects.create(
                     field=fd, language=lang, label=label, help_text=help_text
                 )
-            for rule_in in fd_in.rules:
-                _create_single_field_rule(fd, rule_in)
 
             if fd_in.default is not None:
                 err = _create_field_default(fd, fd_in.default, fd_in.is_localized)
                 if err:
                     return JsonResponse({"errors": {fd_in.slug: [err]}}, status=400)
-
-        for mfr_in in payload.multi_field_rules:
-            _create_multi_field_rule(draft, field_map, mfr_in)
 
         # Claim or re-confirm SLUG_ID sequence ownership for this config
         for slug, prefix in slug_id_prefixes.items():
@@ -486,62 +475,6 @@ def _create_field_default(field, default_value, is_localized: bool) -> str | Non
             msg = "; ".join(exc.messages)
         return msg
     return None
-
-
-def _create_single_field_rule(field, rule_in):
-    from userdefinedmodel.models.rules import (
-        RequiredRule, MinLengthRule, MaxLengthRule, RegexRule,
-        MinValueRule, MaxValueRule, MinItemsRule, MaxItemsRule,
-        MaxFileSizeRule, AllowedMimeTypesRule, AllowedMimeTypeEntry,
-        RequiredInLanguageRule,
-    )
-    common = {"field": field, "applies_to_save": rule_in.applies_to_save, "admin_label": rule_in.admin_label}
-    t = rule_in.type
-    if t == "required":
-        RequiredRule.objects.create(**common)
-    elif t == "min_length":
-        MinLengthRule.objects.create(**common, min_length=rule_in.min_length)
-    elif t == "max_length":
-        MaxLengthRule.objects.create(**common, max_length=rule_in.max_length)
-    elif t == "regex":
-        RegexRule.objects.create(**common, pattern=rule_in.pattern, failure_message=rule_in.failure_message)
-    elif t == "min_value":
-        MinValueRule.objects.create(**common, min_value=rule_in.min_value)
-    elif t == "max_value":
-        MaxValueRule.objects.create(**common, max_value=rule_in.max_value)
-    elif t == "min_items":
-        MinItemsRule.objects.create(**common, min_items=rule_in.min_items)
-    elif t == "max_items":
-        MaxItemsRule.objects.create(**common, max_items=rule_in.max_items)
-    elif t == "max_file_size":
-        MaxFileSizeRule.objects.create(**common, max_bytes=rule_in.max_bytes)
-    elif t == "allowed_mime_types":
-        rule = AllowedMimeTypesRule.objects.create(**common)
-        for mime in rule_in.mime_types:
-            AllowedMimeTypeEntry.objects.create(rule=rule, mime_type=mime)
-    elif t == "required_in_language":
-        RequiredInLanguageRule.objects.create(**common, language=rule_in.language)
-
-
-def _create_multi_field_rule(version, field_map, mfr_in):
-    from userdefinedmodel.models.rules import (
-        AtLeastOneRequiredRule, ExactlyOneRequiredRule, MutualExclusionRule,
-        MultiFieldRuleAssociation,
-    )
-    common = {"config_version": version, "applies_to_save": mfr_in.applies_to_save, "admin_label": mfr_in.admin_label}
-    kind = mfr_in.kind.value
-    if kind == "at_least_one_required":
-        rule = AtLeastOneRequiredRule.objects.create(**common)
-    elif kind == "exactly_one_required":
-        rule = ExactlyOneRequiredRule.objects.create(**common)
-    elif kind == "mutual_exclusion":
-        rule = MutualExclusionRule.objects.create(**common)
-    else:
-        return
-    for slug in mfr_in.field_slugs:
-        field = field_map.get(slug)
-        if field:
-            MultiFieldRuleAssociation.objects.create(rule=rule, field=field)
 
 
 @api.post("/configs/{config_id}/versions/draft/publish/", response=ConfigVersionOut, auth=django_auth)
@@ -767,7 +700,7 @@ def create_workflow(request, payload: WorkflowCreateIn):
         for state_in in payload.states:
             state = WorkflowState.objects.create(
                 workflow=wf, name=state_in.name,
-                is_initial=state_in.is_initial, allows_edit=state_in.allows_edit,
+                is_initial=state_in.is_initial,
                 position_x=state_in.position_x, position_y=state_in.position_y,
             )
             state_map[state_in.name] = state
@@ -822,27 +755,25 @@ def update_workflow(request, workflow_id: uuid.UUID, payload: WorkflowUpdateIn):
             wf.description = payload.description
         wf.save()
         if payload.states is not None:
+            from userdefinedmodel.models.node import FieldValue
+
             if sum(1 for s in payload.states if s.is_initial) != 1:
                 return JsonResponse({"detail": "exactly one state must have is_initial=True"}, status=400)
 
             incoming_names = {s.name for s in payload.states}
             existing_states = {s.name: s for s in wf.states.all()}
+            states_to_delete = {n: s for n, s in existing_states.items() if n not in incoming_names}
 
-            # Delete removed states — SET_NULL fires on FieldValues referencing them
-            for name, state in existing_states.items():
-                if name not in incoming_names:
-                    state.delete()
-
-            # Clear is_initial on surviving states before the upsert loop to avoid
-            # the partial-unique constraint firing if the initial state changes.
+            # 1. Clear is_initial on surviving states before the upsert loop to avoid
+            #    the partial-unique constraint firing if the initial state changes.
             wf.states.filter(name__in=incoming_names).update(is_initial=False)
 
+            # 2. Upsert surviving and new states, building state_map by name.
             state_map = {}
             for state_in in payload.states:
                 if state_in.name in existing_states:
                     state = existing_states[state_in.name]
                     state.is_initial = state_in.is_initial
-                    state.allows_edit = state_in.allows_edit
                     state.position_x = state_in.position_x
                     state.position_y = state_in.position_y
                     state.save()
@@ -850,12 +781,40 @@ def update_workflow(request, workflow_id: uuid.UUID, payload: WorkflowUpdateIn):
                 else:
                     state = WorkflowState.objects.create(
                         workflow=wf, name=state_in.name,
-                        is_initial=state_in.is_initial, allows_edit=state_in.allows_edit,
+                        is_initial=state_in.is_initial,
                         position_x=state_in.position_x, position_y=state_in.position_y,
                     )
                 for lang, label in state_in.label.items():
                     WorkflowStateTranslation.objects.create(state=state, language=lang, label=label)
                 state_map[state_in.name] = state
+
+            # 3. Run bulk migrations before deletion so entities land in a valid state.
+            for migration in payload.migrations:
+                from_state_obj = existing_states.get(migration.from_state)
+                to_state_obj = state_map.get(migration.to_state)
+                if from_state_obj and to_state_obj:
+                    FieldValue.objects.filter(
+                        field__workflow_definition_id=wf.id,
+                        value_workflow_state=from_state_obj,
+                    ).update(value_workflow_state=to_state_obj)
+
+            # 4. Gate: refuse to delete states that still have entities.
+            for del_name, del_state in states_to_delete.items():
+                count = FieldValue.objects.filter(
+                    field__workflow_definition_id=wf.id,
+                    value_workflow_state=del_state,
+                ).count()
+                if count > 0:
+                    raise HttpError(
+                        400,
+                        f"State '{del_name}' still has {count} "
+                        f"{'entity' if count == 1 else 'entities'}. "
+                        "Add a migration edge to move them first, or re-add the state.",
+                    )
+
+            # 5. Delete removed states (safe — entities migrated or confirmed at 0).
+            for del_state in states_to_delete.values():
+                del_state.delete()
 
             if payload.transitions is not None:
                 wf.transitions.all().delete()

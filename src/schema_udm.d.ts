@@ -592,30 +592,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/udm/workflows/{workflow_id}/state-counts/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Workflow State Counts
+         * @description Return a dict of state_name → entity count for fields using this workflow.
+         */
+        get: operations["userdefinedmodel_api_workflow_state_counts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** AllowedMimeTypesRuleIn */
-        AllowedMimeTypesRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /** Mime Types */
-            mime_types: string[];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "allowed_mime_types";
-        };
         /** BulkMigrationCreateIn */
         BulkMigrationCreateIn: {
             /** Field Mappings */
@@ -671,8 +671,6 @@ export interface components {
         ConfigDraftIn: {
             /** Fields */
             fields: components["schemas"]["FieldDefinitionIn"][];
-            /** Multi Field Rules */
-            multi_field_rules?: components["schemas"]["MultiFieldRuleIn"][];
             /**
              * Notes
              * @default
@@ -890,8 +888,6 @@ export interface components {
             labels: {
                 [key: string]: string;
             };
-            /** Rules */
-            rules?: (components["schemas"]["RequiredRuleIn"] | components["schemas"]["MinLengthRuleIn"] | components["schemas"]["MaxLengthRuleIn"] | components["schemas"]["RegexRuleIn"] | components["schemas"]["MinValueRuleIn"] | components["schemas"]["MaxValueRuleIn"] | components["schemas"]["MinItemsRuleIn"] | components["schemas"]["MaxItemsRuleIn"] | components["schemas"]["MaxFileSizeRuleIn"] | components["schemas"]["AllowedMimeTypesRuleIn"] | components["schemas"]["RequiredInLanguageRuleIn"])[];
             /** Slug */
             slug: string;
             /**
@@ -930,10 +926,6 @@ export interface components {
             /** Label */
             label: {
                 [key: string]: string;
-            };
-            /** Save Rules */
-            save_rules: {
-                [key: string]: unknown;
             };
             /** Slug */
             slug: string;
@@ -989,86 +981,6 @@ export interface components {
             id: number;
             /** Name */
             name: string;
-        };
-        /** MaxFileSizeRuleIn */
-        MaxFileSizeRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /** Max Bytes */
-            max_bytes: number;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "max_file_size";
-        };
-        /** MaxItemsRuleIn */
-        MaxItemsRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /** Max Items */
-            max_items: number;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "max_items";
-        };
-        /** MaxLengthRuleIn */
-        MaxLengthRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /** Max Length */
-            max_length: number;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "max_length";
-        };
-        /** MaxValueRuleIn */
-        MaxValueRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /** Max Value */
-            max_value: number | string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "max_value";
         };
         /**
          * MigrationAction
@@ -1130,87 +1042,6 @@ export interface components {
              */
             target_version_id: string;
         };
-        /** MinItemsRuleIn */
-        MinItemsRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /** Min Items */
-            min_items: number;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "min_items";
-        };
-        /** MinLengthRuleIn */
-        MinLengthRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /** Min Length */
-            min_length: number;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "min_length";
-        };
-        /** MinValueRuleIn */
-        MinValueRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /** Min Value */
-            min_value: number | string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "min_value";
-        };
-        /** MultiFieldRuleIn */
-        MultiFieldRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /** Field Slugs */
-            field_slugs: string[];
-            kind: components["schemas"]["MultiFieldRuleKind"];
-        };
-        /**
-         * MultiFieldRuleKind
-         * @enum {string}
-         */
-        MultiFieldRuleKind: "at_least_one_required" | "exactly_one_required" | "mutual_exclusion";
         /** PolicyAssignIn */
         PolicyAssignIn: {
             /** Policy Slug */
@@ -1257,69 +1088,6 @@ export interface components {
             /** Source */
             source: string;
         };
-        /** RegexRuleIn */
-        RegexRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /**
-             * Failure Message
-             * @default
-             */
-            failure_message: string;
-            /** Pattern */
-            pattern: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "regex";
-        };
-        /** RequiredInLanguageRuleIn */
-        RequiredInLanguageRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /** Language */
-            language: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "required_in_language";
-        };
-        /** RequiredRuleIn */
-        RequiredRuleIn: {
-            /**
-             * Admin Label
-             * @default
-             */
-            admin_label: string;
-            /**
-             * Applies To Save
-             * @default false
-             */
-            applies_to_save: boolean;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "required";
-        };
         /** StagingFileOut */
         StagingFileOut: {
             /** Expires At */
@@ -1335,6 +1103,13 @@ export interface components {
              * Format: uuid
              */
             staging_id: string;
+        };
+        /** StateMigrationIn */
+        StateMigrationIn: {
+            /** From State */
+            from_state: string;
+            /** To State */
+            to_state: string;
         };
         /** TransitionIn */
         TransitionIn: {
@@ -1422,11 +1197,6 @@ export interface components {
         /** WorkflowStateIn */
         WorkflowStateIn: {
             /**
-             * Allows Edit
-             * @default true
-             */
-            allows_edit: boolean;
-            /**
              * Is Initial
              * @default false
              */
@@ -1450,8 +1220,6 @@ export interface components {
         };
         /** WorkflowStateOut */
         WorkflowStateOut: {
-            /** Allows Edit */
-            allows_edit: boolean;
             /** Is Initial */
             is_initial: boolean;
             /** Label */
@@ -1516,6 +1284,8 @@ export interface components {
         WorkflowUpdateIn: {
             /** Description */
             description?: string | null;
+            /** Migrations */
+            migrations?: components["schemas"]["StateMigrationIn"][];
             /** Name */
             name?: string | null;
             /** States */
@@ -2620,6 +2390,26 @@ export interface operations {
         };
     };
     userdefinedmodel_api_delete_workflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    userdefinedmodel_api_workflow_state_counts: {
         parameters: {
             query?: never;
             header?: never;

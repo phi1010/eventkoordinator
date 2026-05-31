@@ -31,7 +31,6 @@ import {
   type PolicyOut,
   type UDMTypeOut,
   type DataType,
-  type AnyRuleIn,
   type PolicyEvalOut,
   type EntityAutocompleteItem,
   type UserAutocompleteItem,
@@ -60,171 +59,6 @@ function statusBadge(status: string) {
     : status === 'published' ? styles.badgePublished
     : styles.badgeArchived
   return <span className={`${styles.badge} ${cls}`}>{status}</span>
-}
-
-// ── Rule editor ───────────────────────────────────────────────────────────────
-
-type RuleType = AnyRuleIn['type']
-
-const RULE_TYPES: RuleType[] = [
-  'required', 'min_length', 'max_length', 'regex',
-  'min_value', 'max_value', 'min_items', 'max_items',
-  'max_file_size', 'allowed_mime_types', 'required_in_language',
-]
-
-function makeDefaultRule(type: RuleType): AnyRuleIn {
-  const common = { admin_label: '', applies_to_save: false }
-  switch (type) {
-    case 'required': return { ...common, type: 'required' }
-    case 'min_length': return { ...common, type: 'min_length', min_length: 1 }
-    case 'max_length': return { ...common, type: 'max_length', max_length: 100 }
-    case 'regex': return { ...common, type: 'regex', pattern: '', failure_message: '' }
-    case 'min_value': return { ...common, type: 'min_value', min_value: 0 }
-    case 'max_value': return { ...common, type: 'max_value', max_value: 100 }
-    case 'min_items': return { ...common, type: 'min_items', min_items: 1 }
-    case 'max_items': return { ...common, type: 'max_items', max_items: 10 }
-    case 'max_file_size': return { ...common, type: 'max_file_size', max_bytes: 10485760 }
-    case 'allowed_mime_types': return { ...common, type: 'allowed_mime_types', mime_types: [] }
-    case 'required_in_language': return { ...common, type: 'required_in_language', language: 'en' }
-    default: return { ...common, type: 'required' }
-  }
-}
-
-interface RuleEditorProps {
-  rule: AnyRuleIn
-  onChange: (r: AnyRuleIn) => void
-  onRemove: () => void
-}
-
-function RuleEditor({ rule, onChange, onRemove }: RuleEditorProps) {
-  const setR = (updates: Partial<AnyRuleIn>) => onChange({ ...rule, ...updates } as AnyRuleIn)
-
-  function renderExtra() {
-    switch (rule.type) {
-      case 'min_length':
-        return (
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Min Length</label>
-            <input className={styles.input} type="number" value={rule.min_length}
-              onChange={e => setR({ min_length: parseInt(e.target.value) || 0 } as Partial<AnyRuleIn>)} />
-          </div>
-        )
-      case 'max_length':
-        return (
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Max Length</label>
-            <input className={styles.input} type="number" value={rule.max_length}
-              onChange={e => setR({ max_length: parseInt(e.target.value) || 0 } as Partial<AnyRuleIn>)} />
-          </div>
-        )
-      case 'regex':
-        return (
-          <>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Pattern</label>
-              <input className={styles.input} value={rule.pattern}
-                onChange={e => setR({ pattern: e.target.value } as Partial<AnyRuleIn>)} placeholder="^[A-Z]" />
-            </div>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Failure Message</label>
-              <input className={styles.input} value={rule.failure_message}
-                onChange={e => setR({ failure_message: e.target.value } as Partial<AnyRuleIn>)} />
-            </div>
-          </>
-        )
-      case 'min_value':
-        return (
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Min Value</label>
-            <input className={styles.input} type="number" value={rule.min_value}
-              onChange={e => setR({ min_value: parseFloat(e.target.value) || 0 } as Partial<AnyRuleIn>)} />
-          </div>
-        )
-      case 'max_value':
-        return (
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Max Value</label>
-            <input className={styles.input} type="number" value={rule.max_value}
-              onChange={e => setR({ max_value: parseFloat(e.target.value) || 0 } as Partial<AnyRuleIn>)} />
-          </div>
-        )
-      case 'min_items':
-        return (
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Min Items</label>
-            <input className={styles.input} type="number" value={rule.min_items}
-              onChange={e => setR({ min_items: parseInt(e.target.value) || 0 } as Partial<AnyRuleIn>)} />
-          </div>
-        )
-      case 'max_items':
-        return (
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Max Items</label>
-            <input className={styles.input} type="number" value={rule.max_items}
-              onChange={e => setR({ max_items: parseInt(e.target.value) || 0 } as Partial<AnyRuleIn>)} />
-          </div>
-        )
-      case 'max_file_size':
-        return (
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Max Bytes</label>
-            <input className={styles.input} type="number" value={rule.max_bytes}
-              onChange={e => setR({ max_bytes: parseInt(e.target.value) || 0 } as Partial<AnyRuleIn>)} />
-          </div>
-        )
-      case 'allowed_mime_types':
-        return (
-          <div className={styles.formGroup}>
-            <label className={styles.label}>MIME Types (one per line)</label>
-            <textarea className={styles.textarea} rows={3}
-              value={rule.mime_types.join('\n')}
-              onChange={e => setR({ mime_types: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) } as Partial<AnyRuleIn>)} />
-          </div>
-        )
-      case 'required_in_language':
-        return (
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Language Code</label>
-            <input className={styles.input} value={rule.language}
-              onChange={e => setR({ language: e.target.value } as Partial<AnyRuleIn>)} placeholder="en" />
-          </div>
-        )
-      default:
-        return null
-    }
-  }
-
-  return (
-    <div style={{ background: '#f8f8f8', border: '1px solid #e8e8e8', borderRadius: '4px', padding: '0.6rem 0.75rem', marginBottom: '0.4rem' }}>
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div className={styles.formGroup} style={{ minWidth: '130px', flex: 'none' }}>
-          <label className={styles.label}>Rule Type</label>
-          <select className={styles.select} value={rule.type}
-            onChange={e => onChange(makeDefaultRule(e.target.value as RuleType))}>
-            {RULE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div className={styles.formGroup} style={{ minWidth: '150px' }}>
-          <label className={styles.label}>Admin Label</label>
-          <input className={styles.input} value={rule.admin_label}
-            onChange={e => setR({ admin_label: e.target.value } as Partial<AnyRuleIn>)} placeholder="optional" />
-        </div>
-        <div className={styles.formGroup} style={{ flex: 'none' }}>
-          <label className={styles.label}>On Save</label>
-          <label className={styles.checkbox} style={{ padding: '0.45rem 0' }}>
-            <input type="checkbox" checked={rule.applies_to_save}
-              onChange={e => setR({ applies_to_save: e.target.checked } as Partial<AnyRuleIn>)} />
-            applies_to_save
-          </label>
-        </div>
-        {renderExtra()}
-        <button type="button" className={`${styles.btn} ${styles.btnDanger}`}
-          onClick={onRemove} style={{ alignSelf: 'flex-end' }}>
-          ×
-        </button>
-      </div>
-    </div>
-  )
 }
 
 // ── Field Definition Editor ───────────────────────────────────────────────────
@@ -489,20 +323,6 @@ function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: Field
   const setHelpText = (lang: string, val: string) =>
     setF({ help_texts: { ...(field.help_texts ?? {}), [lang]: val } })
 
-  const rules = (field.rules ?? []) as AnyRuleIn[]
-
-  function addRule() {
-    setF({ rules: [...rules, makeDefaultRule('required')] })
-  }
-
-  function updateRule(i: number, r: AnyRuleIn) {
-    setF({ rules: rules.map((x, j) => j === i ? r : x) })
-  }
-
-  function removeRule(i: number) {
-    setF({ rules: rules.filter((_, j) => j !== i) })
-  }
-
   const tc = field.type_config ?? {}
 
   return (
@@ -514,9 +334,6 @@ function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: Field
           <span className={styles.badge} style={{ background: '#eee', color: '#555', fontSize: '0.75rem' }}>
             {field.data_type}
           </span>
-          {rules.length > 0 && (
-            <span className={styles.ruleTag}>{rules.length} rule{rules.length > 1 ? 's' : ''}</span>
-          )}
         </span>
         <div className={styles.tableActions}>
           <button type="button" className={`${styles.btn} ${styles.btnSecondary}`}
@@ -603,42 +420,14 @@ function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: Field
               </div>
             )}
 
-            {/* Type config: max_length for text_short */}
-            {field.data_type === 'text_short' && (
+            {/* Type config: decimal places for float */}
+            {field.data_type === 'float' && (
               <div className={styles.formGroup}>
-                <label className={styles.label}>Max Length (type_config)</label>
+                <label className={styles.label}>Decimal Places</label>
                 <input className={styles.input} type="number"
-                  value={(tc['max_length'] as number) ?? ''}
-                  onChange={e => setF({
-                    type_config: { ...tc, max_length: parseInt(e.target.value) || undefined },
-                  })} />
+                  value={(tc['decimal_places'] as number) ?? ''}
+                  onChange={e => setF({ type_config: { ...tc, decimal_places: parseInt(e.target.value) || undefined } })} />
               </div>
-            )}
-
-            {/* Type config: number bounds for integer/float */}
-            {(field.data_type === 'integer' || field.data_type === 'float') && (
-              <>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Min (type_config)</label>
-                  <input className={styles.input} type="number"
-                    value={(tc['min'] as number) ?? ''}
-                    onChange={e => setF({ type_config: { ...tc, min: e.target.value ? parseFloat(e.target.value) : undefined } })} />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Max (type_config)</label>
-                  <input className={styles.input} type="number"
-                    value={(tc['max'] as number) ?? ''}
-                    onChange={e => setF({ type_config: { ...tc, max: e.target.value ? parseFloat(e.target.value) : undefined } })} />
-                </div>
-                {field.data_type === 'float' && (
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Decimal Places</label>
-                    <input className={styles.input} type="number"
-                      value={(tc['decimal_places'] as number) ?? ''}
-                      onChange={e => setF({ type_config: { ...tc, decimal_places: parseInt(e.target.value) || undefined } })} />
-                  </div>
-                )}
-              </>
             )}
 
             {/* Type config: group/user restrictions */}
@@ -727,22 +516,6 @@ function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: Field
             </div>
           )}
 
-          {/* Rules */}
-          <div className={styles.subsection}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <span className={styles.subsectionTitle}>Validation Rules ({rules.length})</span>
-              <button type="button" className={`${styles.btn} ${styles.btnSecondary}`}
-                onClick={addRule} style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem' }}>
-                + Add Rule
-              </button>
-            </div>
-            {rules.length === 0 && (
-              <div style={{ fontSize: '0.85rem', color: '#999', fontStyle: 'italic' }}>No rules. Add rules to validate field values on save or transition.</div>
-            )}
-            {rules.map((r, i) => (
-              <RuleEditor key={i} rule={r} onChange={updated => updateRule(i, updated)} onRemove={() => removeRule(i)} />
-            ))}
-          </div>
         </>
       )}
     </div>
@@ -794,7 +567,6 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
       default: fd.default ?? null,
       submodel_config_version_id: fd.submodel_config?.version_id ?? null,
       workflow_definition_id: (fd as FieldDefinitionOut & { workflow_definition?: { id?: string } }).workflow_definition?.id ?? null,
-      rules: [],
     }
   }
 
@@ -810,7 +582,6 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
       labels,
       type_config: {},
       default: null,
-      rules: [],
     }])
   }
 
@@ -819,7 +590,7 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
     setErrors([])
     setSuccess(null)
     try {
-      const v = await udmReplaceDraft(configId, { notes, fields, multi_field_rules: [] })
+      const v = await udmReplaceDraft(configId, { notes, fields })
       setDraft(v)
       setSuccess('Draft saved.')
       onSaved(v)

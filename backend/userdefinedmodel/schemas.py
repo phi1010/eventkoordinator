@@ -4,7 +4,6 @@ Pydantic/Django-Ninja schemas for the userdefinedmodel API (/api/udm/).
 from __future__ import annotations
 
 import uuid
-from decimal import Decimal
 from enum import Enum
 from typing import Annotated, Any, Literal, Optional
 
@@ -33,16 +32,9 @@ _MAX_CHOICES = 500
 _MAX_CHOICE_LEN = 200
 _MAX_STATES = 100
 _MAX_TRANSITIONS = 200
-_MAX_RULES = 50
-_MAX_MULTI_RULES = 50
-_MAX_MIME_ENTRIES = 50
 _MAX_GROUP_IDS = 100
 _MAX_CHANGED_FIELDS = 200
 _MAX_MAPPING_ENTRIES = 300
-
-_MAX_TEXT_LENGTH = 50_000
-_MAX_FILE_BYTES = 500_000_000
-_MAX_ITEMS_RULE = 10_000
 
 # ─── Reusable annotated types ─────────────────────────────────────────────────
 
@@ -86,14 +78,11 @@ class BulkMigrationStatus(str, Enum):
 # ─── TypeConfig models ────────────────────────────────────────────────────────
 
 class TextTypeConfig(Schema):
-    max_length: Optional[int] = Field(None, ge=1, le=_MAX_TEXT_LENGTH)
     renderer: Optional[Literal["markdown_wysiwyg", "markdown_preview", "plaintext"]] = None
     model_config = {"extra": "forbid"}
 
 
 class NumberTypeConfig(Schema):
-    min: Optional[Decimal] = Field(None, ge=Decimal("-1e15"), le=Decimal("1e15"))
-    max: Optional[Decimal] = Field(None, ge=Decimal("-1e15"), le=Decimal("1e15"))
     decimal_places: Optional[int] = Field(None, ge=0, le=10)
     model_config = {"extra": "forbid"}
 
@@ -148,120 +137,6 @@ _TYPE_CONFIG_CLS: dict[DataType, type[Schema] | None] = {
     DataType.WORKFLOW: WorkflowTypeConfig,
 }
 
-# ─── Single-field rule schemas ────────────────────────────────────────────────
-
-class RequiredRuleIn(Schema):
-    type: Literal["required"]
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
-
-class MinLengthRuleIn(Schema):
-    type: Literal["min_length"]
-    min_length: int = Field(..., ge=0, le=_MAX_TEXT_LENGTH)
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
-
-class MaxLengthRuleIn(Schema):
-    type: Literal["max_length"]
-    max_length: int = Field(..., ge=1, le=_MAX_TEXT_LENGTH)
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
-
-class RegexRuleIn(Schema):
-    type: Literal["regex"]
-    pattern: Annotated[str, Field(min_length=1, max_length=_MAX_REGEX_LEN)]
-    failure_message: Annotated[str, Field(max_length=_MAX_FAIL_MSG_LEN)] = ""
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
-
-class MinValueRuleIn(Schema):
-    type: Literal["min_value"]
-    min_value: Decimal = Field(..., ge=Decimal("-1e15"), le=Decimal("1e15"))
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
-
-class MaxValueRuleIn(Schema):
-    type: Literal["max_value"]
-    max_value: Decimal = Field(..., ge=Decimal("-1e15"), le=Decimal("1e15"))
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
-
-class MinItemsRuleIn(Schema):
-    type: Literal["min_items"]
-    min_items: int = Field(..., ge=0, le=_MAX_ITEMS_RULE)
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
-
-class MaxItemsRuleIn(Schema):
-    type: Literal["max_items"]
-    max_items: int = Field(..., ge=0, le=_MAX_ITEMS_RULE)
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
-
-class MaxFileSizeRuleIn(Schema):
-    type: Literal["max_file_size"]
-    max_bytes: int = Field(..., ge=1, le=_MAX_FILE_BYTES)
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
-
-class AllowedMimeTypesRuleIn(Schema):
-    type: Literal["allowed_mime_types"]
-    mime_types: list[Annotated[str, Field(min_length=1, max_length=_MAX_MIME_LEN)]] = Field(
-        ..., min_length=1, max_length=_MAX_MIME_ENTRIES
-    )
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
-
-class RequiredInLanguageRuleIn(Schema):
-    type: Literal["required_in_language"]
-    language: LangCode
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
-
-SingleFieldRuleIn = Annotated[
-    RequiredRuleIn | MinLengthRuleIn | MaxLengthRuleIn | RegexRuleIn
-    | MinValueRuleIn | MaxValueRuleIn | MinItemsRuleIn | MaxItemsRuleIn
-    | MaxFileSizeRuleIn | AllowedMimeTypesRuleIn | RequiredInLanguageRuleIn,
-    Field(discriminator="type"),
-]
-
-# ─── Multi-field rule schemas ─────────────────────────────────────────────────
-
-class MultiFieldRuleKind(str, Enum):
-    AT_LEAST_ONE = "at_least_one_required"
-    EXACTLY_ONE = "exactly_one_required"
-    MUTUAL_EXCL = "mutual_exclusion"
-
-
-class MultiFieldRuleIn(Schema):
-    kind: MultiFieldRuleKind
-    field_slugs: list[Slug] = Field(..., min_length=2, max_length=_MAX_FIELDS)
-    applies_to_save: bool = False
-    admin_label: Annotated[str, Field(max_length=_MAX_ADMIN_LABEL_LEN)] = ""
-    model_config = {"extra": "forbid"}
-
 # ─── FieldDefinition schemas ──────────────────────────────────────────────────
 
 class FieldDefinitionIn(Schema):
@@ -276,7 +151,6 @@ class FieldDefinitionIn(Schema):
     default: Optional[Any] = None
     submodel_config_version_id: Optional[uuid.UUID] = None
     workflow_definition_id: Optional[uuid.UUID] = None
-    rules: list[SingleFieldRuleIn] = Field(default_factory=list, max_length=_MAX_RULES)
     model_config = {"extra": "forbid"}
 
     @model_validator(mode="after")
@@ -312,7 +186,6 @@ class FieldDefinitionOut(Schema):
     submodel_config: Optional["ConfigVersionOut"] = None
     workflow_definition: Optional["WorkflowDefinitionOut"] = None
     default: Optional[Any] = None
-    save_rules: dict[str, Any]
 
 # ─── Languages and FieldConfig schemas ───────────────────────────────────────
 
@@ -360,7 +233,6 @@ class WorkflowStateIn(Schema):
     name: Annotated[str, Field(min_length=1, max_length=_MAX_STATE_NAME_LEN, pattern=r"^[a-z][a-z0-9_-]*$")]
     label: LocalizedLabel
     is_initial: bool = False
-    allows_edit: bool = True
     position_x: float = 0.0
     position_y: float = 0.0
     model_config = {"extra": "forbid"}
@@ -401,7 +273,7 @@ class WorkflowDefinitionIn(Schema):
 
 
 class WorkflowStateOut(Schema):
-    name: str; label: dict[str, str]; is_initial: bool; allows_edit: bool
+    name: str; label: dict[str, str]; is_initial: bool
     position_x: float; position_y: float
 
 
@@ -441,11 +313,18 @@ class WorkflowCreateIn(Schema):
         return states
 
 
+class StateMigrationIn(Schema):
+    from_state: Annotated[str, Field(min_length=1, max_length=_MAX_STATE_NAME_LEN)]
+    to_state: Annotated[str, Field(min_length=1, max_length=_MAX_STATE_NAME_LEN)]
+    model_config = {"extra": "forbid"}
+
+
 class WorkflowUpdateIn(Schema):
     name: Optional[Annotated[str, Field(min_length=1, max_length=_MAX_LABEL_LEN)]] = None
     description: Optional[Annotated[str, Field(max_length=_MAX_DESCRIPTION_LEN)]] = None
     states: Optional[list[WorkflowStateIn]] = Field(None, max_length=_MAX_STATES)
     transitions: Optional[list[WorkflowTransitionIn]] = Field(None, max_length=_MAX_TRANSITIONS)
+    migrations: list[StateMigrationIn] = Field(default_factory=list)
     model_config = {"extra": "forbid"}
 
 # ─── ConfigVersion schemas ────────────────────────────────────────────────────
@@ -453,7 +332,6 @@ class WorkflowUpdateIn(Schema):
 class ConfigDraftIn(Schema):
     notes: Annotated[str, Field(max_length=_MAX_NOTES_LEN)] = ""
     fields: list[FieldDefinitionIn] = Field(..., min_length=0, max_length=_MAX_FIELDS)
-    multi_field_rules: list[MultiFieldRuleIn] = Field(default_factory=list, max_length=_MAX_MULTI_RULES)
     model_config = {"extra": "forbid"}
 
     @field_validator("fields")

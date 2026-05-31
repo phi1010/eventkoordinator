@@ -161,10 +161,8 @@ class ConfigVersionTests(BaseAPITest):
                     "labels": {"en": "Title"},
                     "help_texts": {"en": "Enter a title"},
                     "type_config": {},
-                    "rules": [{"type": "required", "applies_to_save": True, "admin_label": ""}],
                 }
             ],
-            "multi_field_rules": [],
         })
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -179,10 +177,9 @@ class ConfigVersionTests(BaseAPITest):
         resp = self.put(f"/configs/{config.id}/versions/draft/", {
             "notes": "",
             "fields": [
-                {"slug": "dup", "data_type": "text_short", "sort_order": 0, "labels": {"en": "Dup"}, "rules": []},
-                {"slug": "dup", "data_type": "text_short", "sort_order": 1, "labels": {"en": "Dup2"}, "rules": []},
+                {"slug": "dup", "data_type": "text_short", "sort_order": 0, "labels": {"en": "Dup"}},
+                {"slug": "dup", "data_type": "text_short", "sort_order": 1, "labels": {"en": "Dup2"}},
             ],
-            "multi_field_rules": [],
         })
         self.assertEqual(resp.status_code, 422)
 
@@ -483,12 +480,6 @@ class WorkflowTransitionTests(BaseAPITest):
         resp = self.post(f"/entities/{self.entity.id}/transition/", {"field": "nonexistent", "transition": "submit"})
         self.assertEqual(resp.status_code, 404)
 
-    def test_allows_edit_false_blocks_patch(self):
-        # Advance to submitted (allows_edit=False)
-        self.post(f"/entities/{self.entity.id}/transition/", {"field": "status", "transition": "submit"})
-        resp = self.patch(f"/entities/{self.entity.id}/", {"changed_fields": {"content": "new value"}})
-        self.assertEqual(resp.status_code, 409)
-
     def test_transition_creates_history_entry(self):
         self.post(f"/entities/{self.entity.id}/transition/", {"field": "status", "transition": "submit"})
         from userdefinedmodel.models.history import EditGroup, FieldEdit
@@ -513,7 +504,7 @@ class WorkflowTransitionTests(BaseAPITest):
         from userdefinedmodel.models import WorkflowTransition
         # Add a transition that only fires from undefined state
         from userdefinedmodel.models import WorkflowState
-        init = WorkflowState.objects.create(workflow=self.wf, name="init", is_initial=False, allows_edit=True)
+        init = WorkflowState.objects.create(workflow=self.wf, name="init", is_initial=False)
         WorkflowTransition.objects.create(
             workflow=self.wf, name="initialize", from_state=None,
             from_undefined_only=True, to_state=init,
@@ -534,8 +525,8 @@ class WorkflowTransitionTests(BaseAPITest):
             FieldDefinition, FieldDefinitionTranslation, FieldValue,
         )
         wf2 = WorkflowDefinition.objects.create(name="Review Workflow")
-        pending = WorkflowState.objects.create(workflow=wf2, name="pending", is_initial=True, allows_edit=True)
-        approved = WorkflowState.objects.create(workflow=wf2, name="approved", is_initial=False, allows_edit=True)
+        pending = WorkflowState.objects.create(workflow=wf2, name="pending", is_initial=True)
+        approved = WorkflowState.objects.create(workflow=wf2, name="approved", is_initial=False)
         WorkflowTransition.objects.create(workflow=wf2, name="approve", from_state=pending, to_state=approved)
 
         review_field = add_workflow_field(self.version, wf2, slug="review")
@@ -552,20 +543,6 @@ class WorkflowTransitionTests(BaseAPITest):
         self.assertEqual(resp.status_code, 200)
         review_fv.refresh_from_db()
         self.assertEqual(review_fv.value_workflow_state.name, "approved")
-
-    def test_any_workflow_allows_edit_false_blocks_patch(self):
-        """Patch is blocked when ANY workflow field has allows_edit=False."""
-        from userdefinedmodel.models import (
-            WorkflowDefinition, WorkflowState, FieldValue,
-        )
-        wf2 = WorkflowDefinition.objects.create(name="Blocking Workflow")
-        locked = WorkflowState.objects.create(workflow=wf2, name="locked", is_initial=True, allows_edit=False)
-        review_field = add_workflow_field(self.version, wf2, slug="review2")
-        FieldValue.objects.create(node=self.entity, field=review_field, language="", value_workflow_state=locked)
-
-        # status is in "draft" (allows_edit=True) but review2 is "locked" (allows_edit=False)
-        resp = self.patch(f"/entities/{self.entity.id}/", {"changed_fields": {"content": "x"}})
-        self.assertEqual(resp.status_code, 409)
 
 
 # ─── Workflow with Rego policy tests ─────────────────────────────────────────
@@ -637,8 +614,8 @@ messages contains msg if {
 
         # Workflow B: review (pending → approved)
         wf_b = WorkflowDefinition.objects.create(name="Review")
-        b_pending = WorkflowState.objects.create(workflow=wf_b, name="pending", is_initial=True, allows_edit=True)
-        b_approved = WorkflowState.objects.create(workflow=wf_b, name="approved", is_initial=False, allows_edit=True)
+        b_pending = WorkflowState.objects.create(workflow=wf_b, name="pending", is_initial=True)
+        b_approved = WorkflowState.objects.create(workflow=wf_b, name="approved", is_initial=False)
         WorkflowTransition.objects.create(workflow=wf_b, name="approve", from_state=b_pending, to_state=b_approved)
         add_workflow_field(version, wf_b, slug="review")
 

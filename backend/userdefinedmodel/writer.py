@@ -117,27 +117,6 @@ def apply_patch(
     from userdefinedmodel.models.history import EditGroup, FieldEdit
     from userdefinedmodel.models.node import StagingFile, FileAttachment
 
-    # 1. Check allows_edit — blocked if any active workflow state disallows editing
-    from userdefinedmodel.models.config import FieldDefinition
-    blocking_wf = (
-        node.field_values
-        .filter(field__data_type=FieldDefinition.DataType.WORKFLOW)
-        .select_related("value_workflow_state")
-        .filter(value_workflow_state__allows_edit=False)
-        .select_related("field")
-        .first()
-    )
-    if blocking_wf:
-        from userdefinedmodel.engine import TransitionError
-        raise TransitionError(
-            "editing_not_allowed_in_state",
-            http_status=409,
-            details={
-                "workflow_field": blocking_wf.field.slug,
-                "current_state": blocking_wf.value_workflow_state.name,
-            },
-        )
-
     # Build field map for this version
     field_map = {
         f.slug: f

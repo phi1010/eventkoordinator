@@ -16,7 +16,6 @@ class WorkflowState(MetaBase):
     workflow = models.ForeignKey(WorkflowDefinition, on_delete=models.CASCADE, related_name="states")
     name = models.CharField(max_length=100)
     is_initial = models.BooleanField(default=False)
-    allows_edit = models.BooleanField(default=True)
     position_x = models.FloatField(default=0.0)
     position_y = models.FloatField(default=0.0)
 
