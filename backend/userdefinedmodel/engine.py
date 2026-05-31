@@ -268,7 +268,7 @@ class TransitionError(Exception):
         self.details = details or {}
 
 
-def execute_transition(node: "UserDefinedModelEntityNode", field_slug: str, name: str, user: "OpenIDUser") -> list:
+def execute_transition(node: "UserDefinedModelEntityNode", field_slug: str, name: str, user: "OpenIDUser", edit_group=None) -> list:
     """
     Execute a named workflow transition on the specified workflow field of `node`.
     Must be called inside an existing transaction.atomic() with the root lock held.
@@ -343,19 +343,19 @@ def execute_transition(node: "UserDefinedModelEntityNode", field_slug: str, name
     fv.value_workflow_state = transition.to_state
     fv.save(update_fields=["value_workflow_state"])
 
-    # Record transition in history
-    root_entity = None
-    try:
-        root_entity = node.userdefinedmodelentity
-    except Exception:
-        root = node.get_root()
-        root_entity = root
-
-    edit_group = EditGroup.objects.create(
-        node=node,
-        root_entity=root_entity,
-        saved_by=user,
-    )
+    # Record transition in history (reuse a caller-supplied group or create one)
+    if edit_group is None:
+        root_entity = None
+        try:
+            root_entity = node.userdefinedmodelentity
+        except Exception:
+            root = node.get_root()
+            root_entity = root
+        edit_group = EditGroup.objects.create(
+            node=node,
+            root_entity=root_entity,
+            saved_by=user,
+        )
     FieldEdit.objects.create(
         group=edit_group,
         change_kind=FieldEdit.ChangeKind.NODE_TRANSITION,

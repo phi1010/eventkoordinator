@@ -1627,7 +1627,28 @@ function HistoryPanel({ entityId }: { entityId: string }) {
               {edit.change_kind === 'field_value' ? (
                 <span>
                   <strong>{edit.field_label ?? edit.field_slug}</strong>:{' '}
-                  {JSON.stringify(edit.old_value)} → {JSON.stringify(edit.new_value)}
+                  {edit.old_file_name
+                    ? <>{edit.old_file_name} → {edit.new_file_name ?? '—'}</>
+                    : <>{JSON.stringify(edit.old_value)} → {JSON.stringify(edit.new_value)}</>
+                  }
+                </span>
+              ) : edit.change_kind === 'node_transition' ? (
+                <span>
+                  <strong>{edit.field_label ?? edit.field_slug}</strong>:{' '}
+                  {(edit.old_value as Record<string, unknown> | null)?.state as string ?? '—'}
+                  {' → '}
+                  {(edit.new_value as Record<string, unknown> | null)?.state as string ?? '—'}
+                </span>
+              ) : edit.change_kind === 'node_added' ? (
+                <span>+ <strong>{edit.field_label ?? edit.field_slug}</strong> item added</span>
+              ) : edit.change_kind === 'node_removed' ? (
+                <span>− <strong>{edit.field_label ?? edit.field_slug}</strong> item removed</span>
+              ) : edit.change_kind === 'node_reordered' ? (
+                <span>
+                  <strong>{edit.field_label ?? edit.field_slug}</strong> reordered:{' '}
+                  {(edit.old_value as Record<string, unknown> | null)?.sort_order as number}
+                  {' → '}
+                  {(edit.new_value as Record<string, unknown> | null)?.sort_order as number}
                 </span>
               ) : (
                 <span>{edit.change_kind}</span>

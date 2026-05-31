@@ -1140,9 +1140,10 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
                 except OperationalError:
                     return _http409_concurrent()
                 try:
+                    patch_eg = None
                     if payload.changed_fields:
-                        apply_patch(entity, payload.changed_fields, request.user)
-                    msgs = execute_transition(entity, payload.field, payload.transition, request.user)
+                        patch_eg, _ = apply_patch(entity, payload.changed_fields, request.user)
+                    msgs = execute_transition(entity, payload.field, payload.transition, request.user, edit_group=patch_eg)
                     result = {"valid": True, "policy_messages": msgs, "errors": {}}
                 except PolicyError as e:
                     result = {"valid": False, "policy_messages": e.messages, "errors": {}}
@@ -1170,9 +1171,10 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
                 return JsonResponse({"detail": "Not found"}, status=404)
             except OperationalError:
                 return _http409_concurrent()
+            patch_eg = None
             if payload.changed_fields:
-                apply_patch(entity, payload.changed_fields, request.user)
-            transition_messages = execute_transition(entity, payload.field, payload.transition, request.user)
+                patch_eg, _ = apply_patch(entity, payload.changed_fields, request.user)
+            transition_messages = execute_transition(entity, payload.field, payload.transition, request.user, edit_group=patch_eg)
     except PolicyError as e:
         return JsonResponse({"policy_messages": e.messages}, status=422)
     except TransitionError as e:
