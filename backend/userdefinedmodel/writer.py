@@ -185,13 +185,17 @@ def apply_patch(
     # Evaluate policy for SAVE. At this point writes are already flushed to the
     # transaction so input.entity.fields reflects the new state; changed_fields
     # tells the policy which slugs were explicitly submitted in this request.
-    _evaluate_save_policy(node, user, changed_fields)
+    messages = _evaluate_save_policy(node, user, changed_fields)
 
-    return edit_group
+    return edit_group, messages
 
 
-def _evaluate_save_policy(node, user, changed_fields: dict) -> None:
-    """Evaluate Rego policy for SAVE action. Raises ValidationError on blocking messages."""
+def _evaluate_save_policy(node, user, changed_fields: dict) -> list:
+    """Evaluate Rego policy for SAVE action.
+
+    Returns the full message list (including warnings).
+    Raises PolicyError if allow=False or any critical message is present.
+    """
     import decimal
     import datetime as dt
     from userdefinedmodel.engine import evaluate_policy, get_udm_type_for_node, PolicyError
@@ -201,7 +205,7 @@ def _evaluate_save_policy(node, user, changed_fields: dict) -> None:
         logger.debug(
             "policy save skip node=%s: no udm_type or no policies", node.id
         )
-        return
+        return []
 
     def _safe(v):
         if isinstance(v, decimal.Decimal):
@@ -243,6 +247,8 @@ def _evaluate_save_policy(node, user, changed_fields: dict) -> None:
     if blocking:
         logger.debug("policy save blocked node=%s messages=%s", node.id, blocking)
         raise PolicyError(blocking)
+
+    return output["messages"]
 
 
 def _apply_scalar_write(node, field, value, user, edit_group) -> None:
@@ -291,7 +297,7 @@ def _write_field_value(node, field, value, language, user, edit_group) -> None:
             # Apply caller-supplied field values before setting the initial state
             op_fields = value.get("fields") or {}
             if op_fields:
-                apply_patch(child, op_fields, user, edit_group)
+                _, _msgs = apply_patch(child, op_fields, user, edit_group)
             # Assign initial workflow state after initial field values are written
             if field.submodel_config and field.submodel_config.workflow_id:
                 initial = field.submodel_config.workflow.states.filter(is_initial=True).first()
@@ -310,7 +316,7 @@ def _write_field_value(node, field, value, language, user, edit_group) -> None:
                     child = None
                 op_fields = value.get("fields") or {}
                 if child and op_fields:
-                    apply_patch(child, op_fields, user, edit_group)
+                    _, _msgs = apply_patch(child, op_fields, user, edit_group)
             return
         elif op == "delete":
             if fv and fv.value_node_id:
@@ -442,7 +448,7 @@ def _apply_submodel_ops(parent_node, field, ops, user, edit_group) -> None:
             # (so the allows_edit check in apply_patch never blocks initial values).
             # The initial workflow state is assigned afterwards.
             if op_fields:
-                apply_patch(child, op_fields, user, edit_group=edit_group)
+                _, _msgs = apply_patch(child, op_fields, user, edit_group=edit_group)
 
             # Assign initial workflow state after initial field values are written
             if field.submodel_config and field.submodel_config.workflow_id:
@@ -478,7 +484,7 @@ def _apply_submodel_ops(parent_node, field, ops, user, edit_group) -> None:
                 )
 
             if op_fields:
-                apply_patch(child, op_fields, user, edit_group=edit_group)
+                _, _msgs = apply_patch(child, op_fields, user, edit_group=edit_group)
 
         elif op == "delete":
             try:

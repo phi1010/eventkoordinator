@@ -155,6 +155,80 @@ function throwApiError(errorBody: unknown, fallback: string): never {
   throw new UdmApiError(message, pydanticErrors, fieldErrors, policyMessages)
 }
 
+// ── Validation result (validate_only endpoints) ───────────────────────────────
+
+export interface ValidationResult {
+  valid: boolean
+  policy_messages: PolicyMessage[]
+  errors: Record<string, string[]>
+}
+
+/** Extract top-level slugs to highlight from a ValidationResult. */
+export function highlightedSlugsFromResult(result: ValidationResult): Set<string> {
+  const slugs = new Set<string>()
+  for (const msg of result.policy_messages) {
+    for (const path of msg.highlight_fields ?? []) {
+      slugs.add(path.split('.')[0])
+    }
+  }
+  for (const field of Object.keys(result.errors)) {
+    if (field !== '__all__') slugs.add(field)
+  }
+  return slugs
+}
+
+/** Extract per-parent sub-field highlight sets from a ValidationResult. */
+export function highlightedSubFieldsFromResult(result: ValidationResult): Record<string, Set<string>> {
+  const out: Record<string, Set<string>> = {}
+  for (const msg of result.policy_messages) {
+    for (const path of msg.highlight_fields ?? []) {
+      const dot = path.indexOf('.')
+      if (dot === -1) continue
+      const parent = path.slice(0, dot)
+      const child = path.slice(dot + 1)
+      if (!out[parent]) out[parent] = new Set()
+      out[parent].add(child)
+    }
+  }
+  return out
+}
+
+export async function udmValidateEntity(
+  entityId: string,
+  changedFields: Record<string, unknown>,
+): Promise<ValidationResult> {
+  const token = await getCsrfToken()
+  const resp = await fetch(`/api/udm/entities/${entityId}/?validate_only=true`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'X-CSRFToken': token } : {}),
+    },
+    body: JSON.stringify({ changed_fields: changedFields }),
+    credentials: 'include',
+  })
+  if (resp.status === 404) throw new Error('Entity not found')
+  return resp.json() as Promise<ValidationResult>
+}
+
+export async function udmValidateTransition(
+  entityId: string,
+  transition: string,
+): Promise<ValidationResult> {
+  const token = await getCsrfToken()
+  const resp = await fetch(`/api/udm/entities/${entityId}/transition/?validate_only=true`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'X-CSRFToken': token } : {}),
+    },
+    body: JSON.stringify({ transition }),
+    credentials: 'include',
+  })
+  if (resp.status === 404) throw new Error('Entity not found')
+  return resp.json() as Promise<ValidationResult>
+}
+
 /** For raw fetch() calls: read the body, then throw. */
 async function throwRawFetchError(response: Response, fallback: string): Promise<never> {
   let body: unknown = null

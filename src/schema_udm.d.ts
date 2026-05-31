@@ -777,6 +777,8 @@ export interface components {
             viewable_fields: string[] | null;
             /** Editable Fields */
             editable_fields: string[];
+            /** Policy messages from the last save (warnings survive a successful save) */
+            policy_messages: import('./apiUdm').PolicyMessage[];
         };
         /** EntityPatchIn */
         EntityPatchIn: {

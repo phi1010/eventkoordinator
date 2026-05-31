@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useId } from 'react'
+import { useState, useEffect, useCallback, useRef, useId, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { StacksEditor, EditorType } from '@stackoverflow/stacks-editor'
@@ -7,6 +7,7 @@ import './stacks-scoped.css'
 import {
   udmGetEntity,
   udmGetConfigVersion,
+  udmValidateEntity,
   udmPatchEntity,
   udmTransitionEntity,
   udmEntityHistory,
@@ -24,6 +25,7 @@ import {
   type UserAutocompleteItem,
   type GroupAutocompleteItem,
   type EntityAutocompleteItem,
+  type PolicyMessage,
 } from './apiUdm'
 import { MigrationAssistant } from './UdmMigration'
 import styles from './UdmEntityEditor.module.css'
@@ -82,6 +84,7 @@ interface FieldInputProps {
   lang?: string
   entityChildren?: Record<string, unknown[]>
   highlightedSubFields?: Set<string>
+  subFieldMessages?: Record<string, PolicyMessage[]>
 }
 
 // ── Submodel editor ───────────────────────────────────────────────────────────
@@ -143,9 +146,10 @@ interface SubmodelChildCardProps {
   onChange: (dirty: Record<string, unknown>) => void
   onDelete: () => void
   highlightedSubFields?: Set<string>
+  subFieldMessages?: Record<string, PolicyMessage[]>
 }
 
-function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, highlightedSubFields }: SubmodelChildCardProps) {
+function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, highlightedSubFields, subFieldMessages }: SubmodelChildCardProps) {
   const hasHighlightedFields = (highlightedSubFields?.size ?? 0) > 0
   const [expanded, setExpanded] = useState(!item.id || hasHighlightedFields)
   const [activeLang, setActiveLang] = useState(subLanguages[0] ?? '')
@@ -225,6 +229,7 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
             const subLabel = getLang(subFd.label as Record<string, string>, uiLang) || subFd.slug
             const langs = subFd.is_localized ? subLanguages.filter(Boolean) : ['']
             const subHasError = highlightedSubFields?.has(subFd.slug) ?? false
+            const subMsgs = subFieldMessages?.[subFd.slug] ?? []
             return (
               <div key={subFd.slug} style={{
                 marginBottom: '0.6rem',
@@ -244,6 +249,7 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
                     entityChildren={item.saved?.children}
                   />
                 ))}
+                {subMsgs.length > 0 && <PolicyMessageList messages={subMsgs} />}
               </div>
             )
           })}
@@ -261,9 +267,10 @@ interface SubmodelEditorProps {
   uiLang: string
   onChange: (ops: SubmodelOp[] | { op: string; fields?: Record<string, unknown> } | null) => void
   highlightedSubFields?: Set<string>
+  subFieldMessages?: Record<string, PolicyMessage[]>
 }
 
-function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange, highlightedSubFields }: SubmodelEditorProps) {
+function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange, highlightedSubFields, subFieldMessages }: SubmodelEditorProps) {
   const isList = fd.data_type === 'submodel_list'
   const subConfig = fd.submodel_config as ConfigVersionOut | null | undefined
   const subFields = subConfig?.fields ?? []
@@ -377,6 +384,7 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
             onChange={dirty => updateItem(item.key, dirty)}
             onDelete={() => deleteItem(item.key)}
             highlightedSubFields={highlightedSubFields}
+            subFieldMessages={subFieldMessages}
           />
         ))}
         {!disabled && (
@@ -523,6 +531,7 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
                 const subLabel = getLang(subFd.label as Record<string, string>, uiLang) || subFd.slug
                 const langs = subFd.is_localized ? subLanguages.filter(Boolean) : ['']
                 const subHasError = highlightedSubFields?.has(subFd.slug) ?? false
+                const subMsgs = subFieldMessages?.[subFd.slug] ?? []
                 return (
                   <div key={subFd.slug} style={{
                     marginBottom: '0.6rem',
@@ -548,6 +557,7 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
                         entityChildren={ownedChild?.children}
                       />
                     ))}
+                    {subMsgs.length > 0 && <PolicyMessageList messages={subMsgs} />}
                   </div>
                 )
               })}
@@ -969,7 +979,7 @@ function MarkdownFieldInput({ value, onChange, disabled }: FieldInputProps) {
   return <div ref={containerRef} className={styles.markdownEditor} />
 }
 
-function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, highlightedSubFields }: FieldInputProps) {
+function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, highlightedSubFields, subFieldMessages }: FieldInputProps) {
   const dt = fd.data_type
   const tc = fd.type_config as Record<string, unknown>
 
@@ -1139,6 +1149,7 @@ function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, 
         uiLang={lang || 'en'}
         onChange={onChange as (ops: unknown) => void}
         highlightedSubFields={highlightedSubFields}
+        subFieldMessages={subFieldMessages}
       />
     )
   }
@@ -1163,10 +1174,12 @@ interface FieldRowProps {
   languages: string[]
   uiLang: string
   hasError?: boolean
+  messages?: PolicyMessage[]
   highlightedSubFields?: Set<string>
+  subFieldMessages?: Record<string, PolicyMessage[]>
 }
 
-function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, hasError, highlightedSubFields }: FieldRowProps) {
+function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, hasError, messages, highlightedSubFields, subFieldMessages }: FieldRowProps) {
   const [activeLang, setActiveLang] = useState(languages[0] ?? '')
   const isDirty = fd.slug in dirty
   const isSubmodel = fd.data_type === 'submodel_list' || fd.data_type === 'submodel_select'
@@ -1247,6 +1260,7 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
           lang={uiLang}
           entityChildren={entity.children as Record<string, unknown[]>}
           highlightedSubFields={highlightedSubFields}
+          subFieldMessages={subFieldMessages}
         />
       ) : fd.is_localized ? (
         <FieldInput
@@ -1264,7 +1278,35 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
           disabled={!editable}
         />
       )}
+      {messages && messages.length > 0 && <PolicyMessageList messages={messages} />}
     </div>
+  )
+}
+
+// ── Policy message rendering ───────────────────────────────────────────────────
+
+const MSG_COLORS: Record<string, { text: string; bg: string }> = {
+  critical: { text: '#991b1b', bg: '#fef2f2' },
+  error:    { text: '#991b1b', bg: '#fef2f2' },
+  warning:  { text: '#92400e', bg: '#fffbeb' },
+  info:     { text: '#1e40af', bg: '#eff6ff' },
+}
+
+function PolicyMessageList({ messages }: { messages: PolicyMessage[] }) {
+  return (
+    <ul style={{ margin: '0.4rem 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+      {messages.map((m, i) => {
+        const color = MSG_COLORS[m.level] ?? MSG_COLORS.info
+        return (
+          <li key={i} style={{
+            fontSize: '0.8rem', padding: '0.2rem 0.5rem',
+            borderRadius: '4px', color: color.text, background: color.bg,
+          }}>
+            {m.text}
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -1327,8 +1369,50 @@ export function UdmEntityEditor() {
   const [errors, setErrors] = useState<string[]>([])
   const [success, setSuccess] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
-  const [fieldHighlights, setFieldHighlights] = useState<Set<string>>(new Set())
-  const [subFieldHighlights, setSubFieldHighlights] = useState<Record<string, Set<string>>>({})
+  const [policyMessages, setPolicyMessages] = useState<PolicyMessage[]>([])
+
+  const fieldHighlights = useMemo(() => {
+    const s = new Set<string>()
+    for (const m of policyMessages)
+      for (const p of m.highlight_fields ?? []) s.add(p.split('.')[0])
+    return s
+  }, [policyMessages])
+
+  const subFieldHighlights = useMemo(() => {
+    const out: Record<string, Set<string>> = {}
+    for (const m of policyMessages)
+      for (const p of m.highlight_fields ?? []) {
+        const dot = p.indexOf('.')
+        if (dot === -1) continue
+        const parent = p.slice(0, dot); const child = p.slice(dot + 1)
+        ;(out[parent] ??= new Set()).add(child)
+      }
+    return out
+  }, [policyMessages])
+
+  // Messages keyed by top-level slug (for rendering below each FieldRow)
+  const fieldMessages = useMemo(() => {
+    const out: Record<string, PolicyMessage[]> = {}
+    for (const m of policyMessages)
+      for (const p of m.highlight_fields ?? []) {
+        const slug = p.split('.')[0]
+        ;(out[slug] ??= []).includes(m) || out[slug].push(m)
+      }
+    return out
+  }, [policyMessages])
+
+  // Messages keyed by parent slug → child slug (for rendering below sub-fields)
+  const subFieldMessages = useMemo(() => {
+    const out: Record<string, Record<string, PolicyMessage[]>> = {}
+    for (const m of policyMessages)
+      for (const p of m.highlight_fields ?? []) {
+        const dot = p.indexOf('.')
+        if (dot === -1) continue
+        const parent = p.slice(0, dot); const child = p.slice(dot + 1)
+        ;((out[parent] ??= {})[child] ??= []).push(m)
+      }
+    return out
+  }, [policyMessages])
 
   const uiLang = i18n.language.split('-')[0]
 
@@ -1342,12 +1426,38 @@ export function UdmEntityEditor() {
       // when the entity is stuck on an archived version awaiting migration.
       const cfg = await udmGetConfigVersion(e.config_version_id)
       setConfig(cfg)
+      // Run save policy with no pending changes to surface ambient warnings
+      // (rules that inspect input.entity.fields rather than input.changed_fields).
+      try {
+        const validation = await udmValidateEntity(entityId, {})
+        setPolicyMessages(validation.policy_messages)
+      } catch { /* validation is best-effort */ }
     } catch (err) {
       setErrors([err instanceof Error ? err.message : 'Failed to load entity'])
     }
   }, [entityId])
 
   useEffect(() => { void load() }, [load])
+
+  const pendingValidation = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!entityId || Object.keys(dirty).length === 0) {
+      setPolicyMessages([])
+      return
+    }
+    if (pendingValidation.current) clearTimeout(pendingValidation.current)
+    pendingValidation.current = setTimeout(async () => {
+      try {
+        const result = await udmValidateEntity(entityId, dirty)
+        setPolicyMessages(result.policy_messages)
+      } catch {
+        // Validation is best-effort — ignore lock conflicts and network errors
+      }
+    }, 600)
+    return () => {
+      if (pendingValidation.current) clearTimeout(pendingValidation.current)
+    }
+  }, [dirty, entityId])
 
   if (!entity || !entityId) {
     return (
@@ -1403,6 +1513,7 @@ export function UdmEntityEditor() {
 
   async function handleSave() {
     if (Object.keys(dirty).length === 0) return
+    if (pendingValidation.current) clearTimeout(pendingValidation.current)
     setSaving(true)
     setErrors([])
     setSuccess(null)
@@ -1410,15 +1521,12 @@ export function UdmEntityEditor() {
       const updated = await udmPatchEntity(resolvedEntityId, dirty)
       setEntity(updated)
       setDirty({})
-      setFieldHighlights(new Set())
-      setSubFieldHighlights({})
+      setPolicyMessages(updated.policy_messages)
       setSuccess('Saved successfully.')
     } catch (e) {
       setErrors(e instanceof UdmApiError ? e.allMessages : [e instanceof Error ? e.message : 'Save failed'])
-      if (e instanceof UdmApiError && e.policyMessages.length > 0) {
-        setFieldHighlights(e.highlightedSlugs)
-        setSubFieldHighlights(e.highlightedSubFields)
-      }
+      if (e instanceof UdmApiError)
+        setPolicyMessages(e.policyMessages)
     } finally {
       setSaving(false)
     }
@@ -1529,7 +1637,9 @@ export function UdmEntityEditor() {
             languages={fd.is_localized ? languages.filter(Boolean) : ['']}
             uiLang={uiLang}
             hasError={fieldHighlights.has(fd.slug)}
+            messages={fieldMessages[fd.slug]}
             highlightedSubFields={subFieldHighlights[fd.slug]}
+            subFieldMessages={subFieldMessages[fd.slug]}
           />
         ))}
       </div>

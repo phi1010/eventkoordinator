@@ -480,6 +480,7 @@ class EntityOut(Schema):
     created_at: str; updated_at: str
     viewable_fields: Optional[list[str]] = None
     editable_fields: list[str] = []
+    policy_messages: list[Any] = []
 
 # ─── Edit history schemas ─────────────────────────────────────────────────────
 

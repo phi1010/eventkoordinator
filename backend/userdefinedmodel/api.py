@@ -74,7 +74,7 @@ def _entity_out(entity) -> EntityOut:
     return EntityOut(**data)
 
 
-def _entity_out_for_user(entity, user) -> EntityOut:
+def _entity_out_for_user(entity, user, policy_messages: list | None = None) -> EntityOut:
     from userdefinedmodel.writer import serialize_node
     from userdefinedmodel.engine import evaluate_policy
     data = serialize_node(entity)
@@ -87,6 +87,7 @@ def _entity_out_for_user(entity, user) -> EntityOut:
         data["children"] = {k: v for k, v in data["children"].items() if k in allowed}
     data["viewable_fields"] = viewable
     data["editable_fields"] = editable
+    data["policy_messages"] = policy_messages or []
     return EntityOut(**data)
 
 
@@ -796,10 +797,41 @@ def get_entity(request, entity_id: uuid.UUID):
 
 
 @api.patch("/entities/{entity_id}/", response=EntityOut, auth=django_auth)
-def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn):
+def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn, validate_only: bool = False):
     from userdefinedmodel.models import UserDefinedModelEntity
     from userdefinedmodel.writer import apply_patch
     from userdefinedmodel.engine import TransitionError, PolicyError
+
+    if validate_only:
+        result = {"valid": True, "policy_messages": [], "errors": {}}
+        try:
+            with transaction.atomic():
+                try:
+                    entity = (UserDefinedModelEntity.objects
+                              .select_for_update(nowait=True, of=("self",))
+                              .select_related("config_version", "current_state")
+                              .get(id=entity_id))
+                except UserDefinedModelEntity.DoesNotExist:
+                    return JsonResponse({"detail": "Not found"}, status=404)
+                except OperationalError:
+                    return _http409_concurrent()
+                try:
+                    _eg, messages = apply_patch(entity, payload.changed_fields, request.user)
+                    result = {"valid": True, "policy_messages": messages, "errors": {}}
+                except PolicyError as e:
+                    result = {"valid": False, "policy_messages": e.messages, "errors": {}}
+                except ValidationError as exc:
+                    errors = exc.message_dict if hasattr(exc, "message_dict") else {"__all__": [str(exc)]}
+                    result = {"valid": False, "policy_messages": [], "errors": errors}
+                except TransitionError as e:
+                    result = {"valid": False, "policy_messages": [],
+                              "errors": {"__all__": [str(e)]}}
+                finally:
+                    transaction.set_rollback(True)
+        except OperationalError:
+            return _http409_concurrent()
+        return JsonResponse(result)
+
     try:
         with transaction.atomic():
             try:
@@ -811,10 +843,7 @@ def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn):
                 return JsonResponse({"detail": "Not found"}, status=404)
             except OperationalError:
                 return _http409_concurrent()
-            # Let TransitionError and ValidationError propagate out of the
-            # atomic block so Django rolls back all writes and history entries
-            # before we convert them to HTTP responses below.
-            apply_patch(entity, payload.changed_fields, request.user)
+            _eg, save_messages = apply_patch(entity, payload.changed_fields, request.user)
     except PolicyError as e:
         return JsonResponse({"policy_messages": e.messages}, status=422)
     except TransitionError as e:
@@ -826,7 +855,7 @@ def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn):
         return JsonResponse({"errors": errors}, status=400)
     except OperationalError:
         return _http409_concurrent()
-    return _entity_out_for_user(entity, request.user)
+    return _entity_out_for_user(entity, request.user, policy_messages=save_messages)
 
 
 @api.delete("/entities/{entity_id}/", auth=django_auth)
@@ -843,9 +872,34 @@ def delete_entity(request, entity_id: uuid.UUID):
 
 
 @api.post("/entities/{entity_id}/transition/", response=EntityOut, auth=django_auth)
-def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn):
+def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, validate_only: bool = False):
     from userdefinedmodel.models import UserDefinedModelEntity
     from userdefinedmodel.engine import execute_transition, TransitionError
+
+    if validate_only:
+        result = {"valid": True, "policy_messages": [], "errors": {}}
+        try:
+            with transaction.atomic():
+                try:
+                    entity = (UserDefinedModelEntity.objects
+                              .select_for_update(nowait=True, of=("self",))
+                              .select_related("config_version__workflow", "current_state")
+                              .get(id=entity_id))
+                except UserDefinedModelEntity.DoesNotExist:
+                    return JsonResponse({"detail": "Not found"}, status=404)
+                except OperationalError:
+                    return _http409_concurrent()
+                try:
+                    execute_transition(entity, payload.transition, request.user)
+                except TransitionError as e:
+                    result = {"valid": False, "policy_messages": e.details.get("messages", []),
+                              "errors": {"__all__": [str(e)]}}
+                finally:
+                    transaction.set_rollback(True)
+        except OperationalError:
+            return _http409_concurrent()
+        return JsonResponse(result)
+
     try:
         with transaction.atomic():
             try:
