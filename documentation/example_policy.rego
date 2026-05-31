@@ -28,7 +28,10 @@ messages contains msg if {
     input.action == "save"
     not input.user.is_staff
     not _in_group("editors")
-    msg := {"level": "critical", "text": "Only staff or editors may save this record."}
+    msg := {
+        "level": "critical",
+        "text": "Only staff or editors may save this record.",
+    }
 }
 
 messages contains msg if {
@@ -40,8 +43,8 @@ messages contains msg if {
     count(name) < 3
     msg := {
         "level": "error",
-        "field": "proposal_name2",
         "text": "Proposal name must be at least 3 characters.",
+        "highlight_fields": ["proposal_name2"],
     }
 }
 
@@ -54,8 +57,8 @@ messages contains msg if {
     not input.user.is_staff
     msg := {
         "level": "warning",
-        "field": "singleselect",
         "text": "Option 'singleselect2' is reserved for staff. Your selection has been noted.",
+        "highlight_fields": ["singleselect"],
     }
 }
 
@@ -69,8 +72,8 @@ messages contains msg if {
     dt < "2024-01-01"
     msg := {
         "level": "error",
-        "field": "date",
         "text": "Date must not be before 2024.",
+        "highlight_fields": ["date"],
     }
 }
 
@@ -83,8 +86,27 @@ messages contains msg if {
     count(groups) > 3
     msg := {
         "level": "warning",
-        "field": "groupselectmulti",
         "text": "More than 3 groups selected — please confirm this is intentional.",
+        "highlight_fields": ["groupselectmulti"],
+    }
+}
+
+# Cross-field example: highlight both the date and a submodel sub-field.
+# "submodel.int" highlights the "int" field inside the submodel_select child.
+messages contains msg if {
+    input.action == "save"
+    dt := object.get(input.entity.fields, ["date", "value"], null)
+    si := object.get(input.entity.fields, ["submodel", "value"], null)
+    dt != null
+    si != null
+    # find the selected child and compare
+    some child in input.entity.children.submodel
+    child.id == si
+    child.fields.int.value > 100
+    msg := {
+        "level": "error",
+        "text": "Submodel int must not exceed 100 when a date is set.",
+        "highlight_fields": ["date", "submodel.int"],
     }
 }
 

@@ -799,7 +799,7 @@ def get_entity(request, entity_id: uuid.UUID):
 def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn):
     from userdefinedmodel.models import UserDefinedModelEntity
     from userdefinedmodel.writer import apply_patch
-    from userdefinedmodel.engine import TransitionError
+    from userdefinedmodel.engine import TransitionError, PolicyError
     try:
         with transaction.atomic():
             try:
@@ -815,6 +815,8 @@ def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn):
             # atomic block so Django rolls back all writes and history entries
             # before we convert them to HTTP responses below.
             apply_patch(entity, payload.changed_fields, request.user)
+    except PolicyError as e:
+        return JsonResponse({"policy_messages": e.messages}, status=422)
     except TransitionError as e:
         if e.http_status == 409:
             return JsonResponse({"error": e.args[0], **e.details}, status=409)

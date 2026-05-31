@@ -133,7 +133,15 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
         return {"allow": False, "messages": [], "viewable_fields": [], "editable_fields": []}
 
 
-# ─── Transition engine (§15) ──────────────────────────────────────────────────
+# ─── Policy / transition exceptions ──────────────────────────────────────────
+
+class PolicyError(Exception):
+    """Raised when policy blocks a save. Carries the full messages list so the
+    API can return structured highlight information to the frontend."""
+    def __init__(self, messages: list):
+        super().__init__("Save blocked by policy")
+        self.messages = messages
+
 
 class TransitionError(Exception):
     """Raised when a workflow transition cannot proceed."""

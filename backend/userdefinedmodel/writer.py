@@ -194,8 +194,7 @@ def _evaluate_save_policy(node, user, changed_fields: dict) -> None:
     """Evaluate Rego policy for SAVE action. Raises ValidationError on blocking messages."""
     import decimal
     import datetime as dt
-    from userdefinedmodel.engine import evaluate_policy, get_udm_type_for_node
-    from django.core.exceptions import ValidationError
+    from userdefinedmodel.engine import evaluate_policy, get_udm_type_for_node, PolicyError
 
     udm_type = get_udm_type_for_node(node)
     if udm_type is None or not udm_type.type_policies.exists():
@@ -233,7 +232,8 @@ def _evaluate_save_policy(node, user, changed_fields: dict) -> None:
     )
 
     if not output["allow"]:
-        raise ValidationError({"policy": ["Save denied by policy."]})
+        denial = [{"level": "critical", "text": "Save denied by policy."}]
+        raise PolicyError(denial)
 
     # critical messages block save
     blocking = [
@@ -242,12 +242,7 @@ def _evaluate_save_policy(node, user, changed_fields: dict) -> None:
     ]
     if blocking:
         logger.debug("policy save blocked node=%s messages=%s", node.id, blocking)
-        errors = {}
-        for msg in blocking:
-            field_key = msg.get("field") or "__all__"
-            text = msg.get("text", "Policy error")
-            errors.setdefault(field_key, []).append(text)
-        raise ValidationError(errors)
+        raise PolicyError(blocking)
 
 
 def _apply_scalar_write(node, field, value, user, edit_group) -> None:

@@ -25,22 +25,36 @@ export interface PydanticErrorItem {
   type: string
 }
 
+/** A message returned by the Rego policy on save. */
+export interface PolicyMessage {
+  level: string
+  text: string
+  field?: string
+  /** Dot-separated field paths to highlight in the UI.
+   *  Top-level: "slug". Sub-field: "parent_slug.child_slug". */
+  highlight_fields?: string[]
+}
+
 /** Thrown by write operations when the server returns a structured error body. */
 export class UdmApiError extends Error {
   /** Pydantic validation errors from `{"detail": [...]}` */
   readonly pydanticErrors: PydanticErrorItem[]
   /** Django-style field errors from `{"errors": {...}}` */
   readonly fieldErrors: Record<string, string[]>
+  /** Policy messages from `{"policy_messages": [...]}` */
+  readonly policyMessages: PolicyMessage[]
 
   constructor(
     message: string,
     pydanticErrors: PydanticErrorItem[] = [],
     fieldErrors: Record<string, string[]> = {},
+    policyMessages: PolicyMessage[] = [],
   ) {
     super(message)
     this.name = 'UdmApiError'
     this.pydanticErrors = pydanticErrors
     this.fieldErrors = fieldErrors
+    this.policyMessages = policyMessages
   }
 
   /** All human-readable error strings. Falls back to the raw message when
@@ -58,12 +72,40 @@ export class UdmApiError extends Error {
         msgs.push(field === '__all__' ? err : `${field}: ${err}`)
       }
     }
-    // Ensure there is always at least the top-level message so callers never
-    // get an empty array (which would silently swallow errors).
+    for (const msg of this.policyMessages) {
+      msgs.push(msg.text)
+    }
     if (msgs.length === 0 && this.message) {
       msgs.push(this.message)
     }
     return msgs
+  }
+
+  /** Top-level field slugs (first path segment) that should be highlighted. */
+  get highlightedSlugs(): Set<string> {
+    const slugs = new Set<string>()
+    for (const msg of this.policyMessages) {
+      for (const path of msg.highlight_fields ?? []) {
+        slugs.add(path.split('.')[0])
+      }
+    }
+    return slugs
+  }
+
+  /** Per-parent-slug set of child slugs to highlight inside submodel fields. */
+  get highlightedSubFields(): Record<string, Set<string>> {
+    const result: Record<string, Set<string>> = {}
+    for (const msg of this.policyMessages) {
+      for (const path of msg.highlight_fields ?? []) {
+        const dot = path.indexOf('.')
+        if (dot === -1) continue
+        const parent = path.slice(0, dot)
+        const child = path.slice(dot + 1)
+        if (!result[parent]) result[parent] = new Set()
+        result[parent].add(child)
+      }
+    }
+    return result
   }
 }
 
@@ -78,6 +120,7 @@ export class UdmApiError extends Error {
 function throwApiError(errorBody: unknown, fallback: string): never {
   let pydanticErrors: PydanticErrorItem[] = []
   let fieldErrors: Record<string, string[]> = {}
+  let policyMessages: PolicyMessage[] = []
   let message = fallback
 
   if (errorBody !== null && typeof errorBody === 'object') {
@@ -96,13 +139,20 @@ function throwApiError(errorBody: unknown, fallback: string): never {
         message = Object.values(fieldErrors).flat().join('; ') || fallback
       }
     }
+    // Policy messages: {"policy_messages": [{level, text, highlight_fields?}]}
+    if (Array.isArray(body['policy_messages'])) {
+      policyMessages = body['policy_messages'] as PolicyMessage[]
+      if (!pydanticErrors.length && !Object.keys(fieldErrors).length) {
+        message = policyMessages.map(m => m.text).join('; ') || fallback
+      }
+    }
     // TransitionError / general backend error: {"error": "some_code", ...}
     if (message === fallback && typeof body['error'] === 'string') {
       message = body['error']
     }
   }
 
-  throw new UdmApiError(message, pydanticErrors, fieldErrors)
+  throw new UdmApiError(message, pydanticErrors, fieldErrors, policyMessages)
 }
 
 /** For raw fetch() calls: read the body, then throw. */

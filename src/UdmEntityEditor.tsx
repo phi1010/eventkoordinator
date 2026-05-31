@@ -81,6 +81,7 @@ interface FieldInputProps {
   disabled: boolean
   lang?: string
   entityChildren?: Record<string, unknown[]>
+  highlightedSubFields?: Set<string>
 }
 
 // ── Submodel editor ───────────────────────────────────────────────────────────
@@ -141,10 +142,12 @@ interface SubmodelChildCardProps {
   disabled: boolean
   onChange: (dirty: Record<string, unknown>) => void
   onDelete: () => void
+  highlightedSubFields?: Set<string>
 }
 
-function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete }: SubmodelChildCardProps) {
-  const [expanded, setExpanded] = useState(!item.id) // new items start expanded
+function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, highlightedSubFields }: SubmodelChildCardProps) {
+  const hasHighlightedFields = (highlightedSubFields?.size ?? 0) > 0
+  const [expanded, setExpanded] = useState(!item.id || hasHighlightedFields)
   const [activeLang, setActiveLang] = useState(subLanguages[0] ?? '')
   const label = item.id ? item.id.slice(0, 8) + '…' : 'New (unsaved)'
 
@@ -167,10 +170,12 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
 
   const hasChanges = Object.keys(item.dirty).length > 0
 
+  const cardBorderColor = item.deleted ? '#fca5a5' : hasHighlightedFields ? '#dc2626' : hasChanges ? '#f9a825' : '#e0e0e0'
   return (
     <div style={{
-      border: `1px solid ${item.deleted ? '#fca5a5' : hasChanges ? '#f9a825' : '#e0e0e0'}`,
+      border: `1px solid ${cardBorderColor}`,
       borderRadius: '6px', marginBottom: '0.5rem', background: item.deleted ? '#fef2f2' : '#fafafa',
+      ...(hasHighlightedFields ? { boxShadow: '0 0 0 2px rgba(220,38,38,0.15)' } : {}),
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem' }}>
         <span style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#555' }}>
@@ -219,9 +224,13 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
           {subFields.map(subFd => {
             const subLabel = getLang(subFd.label as Record<string, string>, uiLang) || subFd.slug
             const langs = subFd.is_localized ? subLanguages.filter(Boolean) : ['']
+            const subHasError = highlightedSubFields?.has(subFd.slug) ?? false
             return (
-              <div key={subFd.slug} style={{ marginBottom: '0.6rem' }}>
-                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#444', marginBottom: '0.2rem' }}>
+              <div key={subFd.slug} style={{
+                marginBottom: '0.6rem',
+                ...(subHasError ? { outline: '2px solid #dc2626', borderRadius: '4px', padding: '0.25rem' } : {}),
+              }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: subHasError ? '#dc2626' : '#444', marginBottom: '0.2rem' }}>
                   {subLabel} <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#999' }}>({subFd.data_type})</span>
                 </div>
                 {langs.map(lang => (
@@ -251,9 +260,10 @@ interface SubmodelEditorProps {
   disabled: boolean
   uiLang: string
   onChange: (ops: SubmodelOp[] | { op: string; fields?: Record<string, unknown> } | null) => void
+  highlightedSubFields?: Set<string>
 }
 
-function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange }: SubmodelEditorProps) {
+function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange, highlightedSubFields }: SubmodelEditorProps) {
   const isList = fd.data_type === 'submodel_list'
   const subConfig = fd.submodel_config as ConfigVersionOut | null | undefined
   const subFields = subConfig?.fields ?? []
@@ -366,6 +376,7 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
             disabled={disabled}
             onChange={dirty => updateItem(item.key, dirty)}
             onDelete={() => deleteItem(item.key)}
+            highlightedSubFields={highlightedSubFields}
           />
         ))}
         {!disabled && (
@@ -511,9 +522,13 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
               {subFields.map(subFd => {
                 const subLabel = getLang(subFd.label as Record<string, string>, uiLang) || subFd.slug
                 const langs = subFd.is_localized ? subLanguages.filter(Boolean) : ['']
+                const subHasError = highlightedSubFields?.has(subFd.slug) ?? false
                 return (
-                  <div key={subFd.slug} style={{ marginBottom: '0.6rem' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#444', marginBottom: '0.2rem' }}>
+                  <div key={subFd.slug} style={{
+                    marginBottom: '0.6rem',
+                    ...(subHasError ? { outline: '2px solid #dc2626', borderRadius: '4px', padding: '0.25rem' } : {}),
+                  }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: subHasError ? '#dc2626' : '#444', marginBottom: '0.2rem' }}>
                       {subLabel} <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#999' }}>({subFd.data_type})</span>
                     </div>
                     {langs.map(lang => (
@@ -954,7 +969,7 @@ function MarkdownFieldInput({ value, onChange, disabled }: FieldInputProps) {
   return <div ref={containerRef} className={styles.markdownEditor} />
 }
 
-function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren }: FieldInputProps) {
+function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, highlightedSubFields }: FieldInputProps) {
   const dt = fd.data_type
   const tc = fd.type_config as Record<string, unknown>
 
@@ -1123,6 +1138,7 @@ function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren }
         disabled={disabled}
         uiLang={lang || 'en'}
         onChange={onChange as (ops: unknown) => void}
+        highlightedSubFields={highlightedSubFields}
       />
     )
   }
@@ -1146,9 +1162,11 @@ interface FieldRowProps {
   editable: boolean
   languages: string[]
   uiLang: string
+  hasError?: boolean
+  highlightedSubFields?: Set<string>
 }
 
-function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang }: FieldRowProps) {
+function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, hasError, highlightedSubFields }: FieldRowProps) {
   const [activeLang, setActiveLang] = useState(languages[0] ?? '')
   const isDirty = fd.slug in dirty
   const isSubmodel = fd.data_type === 'submodel_list' || fd.data_type === 'submodel_select'
@@ -1189,8 +1207,9 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
     return v !== null && v !== undefined
   })()
 
+  const errorClass = hasError ? ` ${styles.fieldGroupError}` : ''
   return (
-    <div className={`${styles.fieldGroup} ${(isDirty && !isSubmodel) || submodelHasChanges ? styles.fieldGroupDirty : ''}`}>
+    <div className={`${styles.fieldGroup} ${(isDirty && !isSubmodel) || submodelHasChanges ? styles.fieldGroupDirty : ''}${errorClass}`}>
       <div className={styles.fieldHeader}>
         <div>
           <div className={styles.fieldLabel}>{label}</div>
@@ -1227,6 +1246,7 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
           disabled={!editable}
           lang={uiLang}
           entityChildren={entity.children as Record<string, unknown[]>}
+          highlightedSubFields={highlightedSubFields}
         />
       ) : fd.is_localized ? (
         <FieldInput
@@ -1307,6 +1327,8 @@ export function UdmEntityEditor() {
   const [errors, setErrors] = useState<string[]>([])
   const [success, setSuccess] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [fieldHighlights, setFieldHighlights] = useState<Set<string>>(new Set())
+  const [subFieldHighlights, setSubFieldHighlights] = useState<Record<string, Set<string>>>({})
 
   const uiLang = i18n.language.split('-')[0]
 
@@ -1388,9 +1410,15 @@ export function UdmEntityEditor() {
       const updated = await udmPatchEntity(resolvedEntityId, dirty)
       setEntity(updated)
       setDirty({})
+      setFieldHighlights(new Set())
+      setSubFieldHighlights({})
       setSuccess('Saved successfully.')
     } catch (e) {
       setErrors(e instanceof UdmApiError ? e.allMessages : [e instanceof Error ? e.message : 'Save failed'])
+      if (e instanceof UdmApiError && e.policyMessages.length > 0) {
+        setFieldHighlights(e.highlightedSlugs)
+        setSubFieldHighlights(e.highlightedSubFields)
+      }
     } finally {
       setSaving(false)
     }
@@ -1500,6 +1528,8 @@ export function UdmEntityEditor() {
             editable={editable}
             languages={fd.is_localized ? languages.filter(Boolean) : ['']}
             uiLang={uiLang}
+            hasError={fieldHighlights.has(fd.slug)}
+            highlightedSubFields={subFieldHighlights[fd.slug]}
           />
         ))}
       </div>
