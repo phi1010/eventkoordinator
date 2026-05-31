@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { StacksEditor, EditorType } from '@stackoverflow/stacks-editor'
+import '@stackoverflow/stacks-editor/dist/styles.css'
+import './stacks-scoped.css'
 import {
   udmGetEntity,
   udmGetConfigVersion,
@@ -809,6 +812,71 @@ function FileFieldInput({ fd, value, onChange, disabled }: FileFieldProps) {
   )
 }
 
+function MarkdownFieldInput({ value, onChange, disabled }: FieldInputProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const editorRef = useRef<StacksEditor | null>(null)
+  const onChangeRef = useRef(onChange)
+  const isSettingContentRef = useRef(false)
+
+  useEffect(() => { onChangeRef.current = onChange })
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    containerRef.current.innerHTML = ''
+    const editor = new StacksEditor(
+      containerRef.current,
+      (value as string) ?? '',
+      { defaultView: EditorType.Commonmark, imageUpload: { handler: undefined } },
+    )
+    editorRef.current = editor
+
+    function patchDispatch() {
+      const view = editor.editorView
+      const orig = view.dispatch.bind(view)
+      view.dispatch = (tr) => {
+        orig(tr)
+        if (!isSettingContentRef.current && tr.docChanged) {
+          onChangeRef.current(editor.content)
+        }
+      }
+    }
+    patchDispatch()
+
+    const target = containerRef.current
+    function handleViewChange() { patchDispatch() }
+    target.addEventListener('change', handleViewChange)
+
+    if (disabled) editor.disable()
+
+    return () => {
+      target.removeEventListener('change', handleViewChange)
+      editor.destroy()
+      editorRef.current = null
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    const incoming = (value as string) ?? ''
+    if (incoming !== editor.content) {
+      isSettingContentRef.current = true
+      editor.content = incoming
+      isSettingContentRef.current = false
+    }
+  }, [value])
+
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    if (disabled) editor.disable()
+    else editor.enable()
+  }, [disabled])
+
+  return <div ref={containerRef} className={styles.markdownEditor} />
+}
+
 function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren }: FieldInputProps) {
   const dt = fd.data_type
   const tc = fd.type_config as Record<string, unknown>
@@ -822,11 +890,15 @@ function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren }
     )
   }
 
-  if (dt === 'text_long' || dt === 'text_markdown') {
+  if (dt === 'text_long') {
     return (
       <textarea className={styles.textarea} rows={4} value={(value as string) ?? ''}
         onChange={e => onChange(e.target.value)} disabled={disabled} />
     )
+  }
+
+  if (dt === 'text_markdown') {
+    return <MarkdownFieldInput fd={fd} value={value} onChange={onChange} disabled={disabled} lang={lang} />
   }
 
   if (dt === 'text_richtext') {

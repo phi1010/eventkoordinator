@@ -391,3 +391,14 @@
   color: #888;
   margin-bottom: 1rem;
 }
+
+.markdownEditor {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  min-height: 200px;
+}
+
+.markdownEditor:focus-within {
+  border-color: #0066cc;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.15);
+}

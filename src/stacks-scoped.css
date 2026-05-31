@@ -1,0 +1,4 @@
+/* Import Stacks design system at a lower CSS layer priority so it doesn't
+   override the existing app styles. The editor toolbar needs Stacks CSS for
+   correct layout (s-btn-group, s-btn, design tokens on body). */
+@import "@stackoverflow/stacks/dist/css/stacks.css" layer(stacks);

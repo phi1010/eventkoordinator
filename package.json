@@ -13,6 +13,7 @@
     "@git-diff-view/file": "^0.1.1",
     "@git-diff-view/react": "^0.1.1",
     "@playwright/test": "^1.58.2",
+    "@stackoverflow/stacks-editor": "^0.15.3",
     "i18next": "^26.0.8",
     "i18next-browser-languagedetector": "^8.2.1",
     "i18next-http-backend": "^3.0.6",
