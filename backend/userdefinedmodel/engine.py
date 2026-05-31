@@ -67,14 +67,14 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
     """Evaluate all policies for node's UDMType; return PolicyOutput dict."""
     udm_type = get_udm_type_for_node(node)
     if udm_type is None:
-        return {"allow": True, "messages": [], "viewable_fields": [], "editable_fields": []}
+        return {"allow": True, "messages": [], "viewable_fields": None, "editable_fields": []}
 
     from userdefinedmodel.models import UserDefinedModelTypePolicy
     type_policies = list(
         udm_type.type_policies.select_related("policy").order_by("sort_order")
     )
     if not type_policies:
-        return {"allow": True, "messages": [], "viewable_fields": [], "editable_fields": []}
+        return {"allow": True, "messages": [], "viewable_fields": None, "editable_fields": []}
 
     try:
         import regorus
@@ -85,15 +85,15 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
         input_doc = build_policy_input(node, user, action, **kwargs)
         eng.set_input_json(json.dumps(input_doc))
 
-        def _eval_list(rule_path: str, default=None) -> list:
+        def _eval_list(rule_path: str, default=None):
             """Evaluate a Rego rule that should return a list; return default on undefined."""
             try:
                 raw = json.loads(eng.eval_rule_as_json(rule_path))
                 if isinstance(raw, list):
                     return raw
-                return default if default is not None else []
+                return default
             except Exception:
-                return default if default is not None else []
+                return default
 
         def _eval_bool(rule_path: str, default: bool = True) -> bool:
             """Evaluate a Rego rule that should return a bool; return default on undefined."""
@@ -109,15 +109,13 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
 
         # Deny by default: undefined allow rule = false (secure by default)
         allow = _eval_bool("data.udm.allow", default=False)
-        deny = _eval_list("data.udm.deny")
-        messages = _eval_list("data.udm.messages")
-        viewable_fields = _eval_list("data.udm.viewable_fields")
-        editable_fields = _eval_list("data.udm.editable_fields")
-        all_messages = deny + messages
+        messages = _eval_list("data.udm.messages", default=[])
+        viewable_fields = _eval_list("data.udm.viewable_fields", default=None)
+        editable_fields = _eval_list("data.udm.editable_fields", default=[])
 
         return {
             "allow": allow,
-            "messages": all_messages,
+            "messages": messages,
             "viewable_fields": viewable_fields,
             "editable_fields": editable_fields,
         }

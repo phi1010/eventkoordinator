@@ -478,6 +478,8 @@ class EntityOut(Schema):
     children: dict[str, list[Any]]
     overflow_data: dict[str, Any]
     created_at: str; updated_at: str
+    viewable_fields: Optional[list[str]] = None
+    editable_fields: list[str] = []
 
 # ─── Edit history schemas ─────────────────────────────────────────────────────
 

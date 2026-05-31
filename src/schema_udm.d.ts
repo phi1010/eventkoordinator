@@ -773,6 +773,10 @@ export interface components {
             updated_at: string;
             /** User Defined Model Type Id */
             user_defined_model_type_id: string | null;
+            /** Viewable Fields — null means no restriction (no policy) */
+            viewable_fields: string[] | null;
+            /** Editable Fields */
+            editable_fields: string[];
         };
         /** EntityPatchIn */
         EntityPatchIn: {

@@ -74,6 +74,22 @@ def _entity_out(entity) -> EntityOut:
     return EntityOut(**data)
 
 
+def _entity_out_for_user(entity, user) -> EntityOut:
+    from userdefinedmodel.writer import serialize_node
+    from userdefinedmodel.engine import evaluate_policy
+    data = serialize_node(entity)
+    policy = evaluate_policy(entity, user, "view")
+    viewable = policy.get("viewable_fields")   # None = no restriction
+    editable = policy.get("editable_fields") or []
+    if viewable is not None:
+        allowed = set(viewable)
+        data["field_values"] = [fv for fv in data["field_values"] if fv["field_slug"] in allowed]
+        data["children"] = {k: v for k, v in data["children"].items() if k in allowed}
+    data["viewable_fields"] = viewable
+    data["editable_fields"] = editable
+    return EntityOut(**data)
+
+
 def _serialize_config_version(version) -> ConfigVersionOut:
     fields_out = []
     for fd in version.field_definitions.prefetch_related("translations", "defaults", "single_field_rules").all():
@@ -764,7 +780,7 @@ def create_entity(request, payload: EntityCreateIn):
                 entity.current_state = initial_state
                 entity.save(update_fields=["current_state"])
         entity.materialize_defaults()
-    return 201, _entity_out(entity)
+    return 201, _entity_out_for_user(entity, request.user)
 
 
 @api.get("/entities/{entity_id}/", response=EntityOut, auth=django_auth)
@@ -776,7 +792,7 @@ def get_entity(request, entity_id: uuid.UUID):
         ).prefetch_related("editors", "field_values__field", "children").get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
         return JsonResponse({"detail": "Not found"}, status=404)
-    return _entity_out(entity)
+    return _entity_out_for_user(entity, request.user)
 
 
 @api.patch("/entities/{entity_id}/", response=EntityOut, auth=django_auth)
@@ -806,7 +822,7 @@ def patch_entity(request, entity_id: uuid.UUID, payload: EntityPatchIn):
                 return JsonResponse({"errors": errors}, status=400)
     except OperationalError:
         return _http409_concurrent()
-    return _entity_out(entity)
+    return _entity_out_for_user(entity, request.user)
 
 
 @api.delete("/entities/{entity_id}/", auth=django_auth)
@@ -843,7 +859,7 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn):
                 return JsonResponse({"error": str(e), **e.details}, status=e.http_status)
     except OperationalError:
         return _http409_concurrent()
-    return _entity_out(entity)
+    return _entity_out_for_user(entity, request.user)
 
 
 @api.get("/entities/{entity_id}/history/", response=EditHistoryOut, auth=django_auth)

@@ -1360,7 +1360,11 @@ export function UdmEntityEditor() {
   const languages = (config?.languages ?? []).map(l => l.code)
   if (languages.length === 0) languages.push('')
 
-  const fields = config?.fields ?? []
+  const allFields = config?.fields ?? []
+  const viewableFieldSlugs = entity.viewable_fields ? new Set(entity.viewable_fields) : null
+  const fields = viewableFieldSlugs
+    ? allFields.filter(fd => viewableFieldSlugs.has(fd.slug))
+    : allFields
 
   function handleDirty(slug: string, val: unknown) {
     setDirty(prev => ({ ...prev, [slug]: val }))

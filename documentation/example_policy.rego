@@ -3,28 +3,33 @@ package udm
 import rego.v1
 
 # ─── allow ────────────────────────────────────────────────────────────────────
-# Allow staff unconditionally; allow others only on view/save.
+# Allowed when the user is active, the action is permitted, and no critical
+# messages were produced.
+allow if {
+    input.user.is_active
+    input.action in {"view", "save"}
+    no_critical_messages
+}
+
 allow if {
     input.user.is_staff
+    no_critical_messages
 }
 
-allow if {
-    input.action in {"view", "save"}
-    input.user.is_active
+no_critical_messages if {
+    count([m | some m in messages; m.level == "critical"]) == 0
 }
 
-# ─── deny ─────────────────────────────────────────────────────────────────────
-# deny entries block the action and are merged into messages.
-deny contains msg if {
+# ─── messages ─────────────────────────────────────────────────────────────────
+# All validation feedback lives here. level "critical" blocks the action;
+# level "error" blocks transitions; level "warning" is advisory only.
+
+messages contains msg if {
     input.action == "save"
     not input.user.is_staff
     not _in_group("editors")
-    msg := {"level": "error", "text": "Only staff or editors may save this record."}
+    msg := {"level": "critical", "text": "Only staff or editors may save this record."}
 }
-
-# ─── messages (save-time validation) ──────────────────────────────────────────
-# Warnings and errors on save. Errors with level "critical"/"error" block
-# the transition engine; level "warning" is advisory only.
 
 messages contains msg if {
     input.action == "save"
