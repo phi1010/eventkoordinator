@@ -762,6 +762,22 @@ def update_workflow(request, workflow_id: uuid.UUID, payload: WorkflowUpdateIn):
 
             incoming_names = {s.name for s in payload.states}
             existing_states = {s.name: s for s in wf.states.all()}
+
+            # 0. Apply renames: states that supply previous_name get their DB row
+            #    renamed first, so the upsert loop can find them by new name.
+            for state_in in payload.states:
+                prev = state_in.previous_name
+                if prev and prev != state_in.name and prev in existing_states:
+                    if state_in.name in existing_states:
+                        return JsonResponse(
+                            {"detail": f"State name '{state_in.name}' is already in use"},
+                            status=400,
+                        )
+                    old_state = existing_states.pop(prev)
+                    old_state.name = state_in.name
+                    old_state.save()
+                    existing_states[state_in.name] = old_state
+
             states_to_delete = {n: s for n, s in existing_states.items() if n not in incoming_names}
 
             # 1. Clear is_initial on surviving states before the upsert loop to avoid

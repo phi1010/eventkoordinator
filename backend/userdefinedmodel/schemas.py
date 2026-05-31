@@ -231,6 +231,8 @@ class FieldConfigOut(Schema):
 
 class WorkflowStateIn(Schema):
     name: Annotated[str, Field(min_length=1, max_length=_MAX_STATE_NAME_LEN, pattern=r"^[a-z][a-z0-9_-]*$")]
+    # When renaming, previous_name is the old slug so the backend can locate the existing row.
+    previous_name: Optional[Annotated[str, Field(min_length=1, max_length=_MAX_STATE_NAME_LEN, pattern=r"^[a-z][a-z0-9_-]*$")]] = None
     label: LocalizedLabel
     is_initial: bool = False
     position_x: float = 0.0

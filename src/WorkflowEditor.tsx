@@ -31,7 +31,8 @@ import styles from './WorkflowEditor.module.css'
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface WfStateData {
-  label: string
+  label: string        // display string for canvas (primary language)
+  labels: Record<string, string>  // full localized label dict
   name: string
   isInitial: boolean
   usageCount?: number
@@ -40,13 +41,44 @@ interface WfStateData {
 }
 
 interface WfEdgeData {
-  label: string
+  label: string        // display string for canvas (primary language)
+  labels?: Record<string, string>  // full localized label dict
+  name?: string        // current transition slug (may differ from stable edge.id after rename)
   [key: string]: unknown
 }
 
 // All nodes share Record<string,unknown> data so special nodes can coexist.
 type AnyWfNode = Node<Record<string, unknown>>
 type WfEdge = Edge<WfEdgeData>
+
+// ─── Language helpers ─────────────────────────────────────────────────────────
+
+const LANG_PATTERN = /^[a-z]{2,3}(-[A-Za-z0-9]+)*$/
+
+function deriveLanguages(nodes: AnyWfNode[], edges: WfEdge[]): string[] {
+  const langs = new Set<string>()
+  for (const n of nodes) {
+    if (n.type === 'workflowState') {
+      const labels = (n.data as WfStateData).labels ?? {}
+      Object.keys(labels).forEach(k => langs.add(k))
+    }
+  }
+  for (const e of edges) {
+    const labels = (e.data as WfEdgeData).labels ?? {}
+    Object.keys(labels).forEach(k => langs.add(k))
+  }
+  return langs.size > 0 ? Array.from(langs) : ['en']
+}
+
+function pickDisplayLabel(labels: Record<string, string>, primary: string, fallback: string): string {
+  return labels[primary] ?? Object.values(labels).find(v => v) ?? fallback
+}
+
+// Remove empty-string values; ensure at least one entry so backend min_length=1 passes
+function cleanLabels(labels: Record<string, string>, fallbackKey: string, fallbackVal: string): Record<string, string> {
+  const out = Object.fromEntries(Object.entries(labels).filter(([, v]) => v && v.trim()))
+  return Object.keys(out).length > 0 ? out : { [fallbackKey]: fallbackVal }
+}
 
 // IDs for the singleton special nodes
 const ID_FROM_ANY = '__from_any__'
@@ -147,6 +179,7 @@ function wfToReactFlow(wf: WorkflowDefinitionOut): { nodes: AnyWfNode[]; edges: 
     position: { x: s.position_x, y: s.position_y },
     data: {
       label: s.label['en'] ?? Object.values(s.label)[0] ?? s.name,
+      labels: { ...s.label },
       name: s.name,
       isInitial: s.is_initial,
     } as Record<string, unknown>,
@@ -166,9 +199,10 @@ function wfToReactFlow(wf: WorkflowDefinitionOut): { nodes: AnyWfNode[]; edges: 
   let hasKeepState = false
 
   for (const t of wf.transitions) {
+    const displayLabel = t.label['en'] ?? Object.values(t.label)[0] ?? t.name
     const edgeBase: Omit<WfEdge, 'id' | 'source' | 'target' | 'sourceHandle' | 'targetHandle'> = {
-      data: { label: t.label['en'] ?? Object.values(t.label)[0] ?? t.name },
-      label: t.label['en'] ?? Object.values(t.label)[0] ?? t.name,
+      data: { label: displayLabel, labels: { ...t.label }, name: t.name },
+      label: displayLabel,
       markerEnd: { type: MarkerType.ArrowClosed },
       type: 'smoothstep',
       reconnectable: true,
@@ -208,14 +242,18 @@ function reactFlowToWf(
   edges: WfEdge[],
   name: string,
   description: string,
+  primaryLang: string = 'en',
 ) {
   const stateNodes = nodes.filter((n) => n.type === 'workflowState')
   const validStateIds = new Set(stateNodes.map((n) => n.id))
 
+  // Map stable node.id → current data.name (to resolve renamed states in edge references)
+  const idToName = new Map(stateNodes.map((n) => [n.id, nodeStateData(n).name ?? n.id]))
+
   // Migration edges are ephemeral editor instructions — not saved as transitions.
   const migrations = edges
     .filter((e) => e.data?.isMigration && validStateIds.has(e.source) && validStateIds.has(e.target))
-    .map((e) => ({ from_state: e.source, to_state: e.target }))
+    .map((e) => ({ from_state: idToName.get(e.source) ?? e.source, to_state: idToName.get(e.target) ?? e.target }))
 
   const transitions = edges
     .filter((e) => e.source && e.target && !e.data?.isMigration)
@@ -223,9 +261,9 @@ function reactFlowToWf(
       const srcType = nodes.find((n) => n.id === e.source)?.type
       const tgtType = nodes.find((n) => n.id === e.target)?.type
 
-      let from_state: string | null = e.source
+      let from_state: string | null = idToName.get(e.source) ?? e.source
       let from_undefined_only = false
-      let to_state = e.target
+      let to_state = idToName.get(e.target) ?? e.target
 
       if (srcType === 'fromAny') {
         from_state = null
@@ -241,12 +279,18 @@ function reactFlowToWf(
       }
 
       // Skip edges that reference missing real states
-      if (to_state === '' || !validStateIds.has(to_state)) return null
-      if (from_state !== null && !validStateIds.has(from_state)) return null
+      const resolvedValidNames = new Set(idToName.values())
+      if (to_state === '' || !resolvedValidNames.has(to_state)) return null
+      if (from_state !== null && !resolvedValidNames.has(from_state)) return null
 
+      const eData = e.data as WfEdgeData | undefined
+      const transName = eData?.name ?? e.id
       return {
-        name: e.id,
-        label: { en: String((e.data as WfEdgeData | undefined)?.label ?? e.id) },
+        name: transName,
+        label: cleanLabels(
+          eData?.labels ?? { [primaryLang]: String(eData?.label ?? transName) },
+          primaryLang, transName,
+        ),
         from_state,
         from_undefined_only,
         to_state,
@@ -261,9 +305,12 @@ function reactFlowToWf(
     description,
     states: stateNodes.map((n) => {
       const d = nodeStateData(n)
+      const stateName = d.name ?? n.id
+      const previousName = stateName !== n.id ? n.id : undefined
       return {
-        name: d.name,
-        label: { en: d.label },
+        name: stateName,
+        ...(previousName !== undefined ? { previous_name: previousName } : {}),
+        label: cleanLabels(d.labels ?? { [primaryLang]: d.label }, primaryLang, stateName),
         is_initial: d.isInitial,
         position_x: n.position.x,
         position_y: n.position.y,
@@ -282,7 +329,7 @@ const mkEdge = (id: string, src: string, tgt: string, sh: string, th: string, lb
   target: tgt,
   sourceHandle: sh,
   targetHandle: th,
-  data: { label: lbl },
+  data: { label: lbl, labels: { en: lbl }, name: id },
   label: lbl,
   markerEnd: { type: MarkerType.ArrowClosed },
   type: 'smoothstep',
@@ -291,11 +338,11 @@ const mkEdge = (id: string, src: string, tgt: string, sh: string, th: string, lb
 
 const PROPOSAL_EXAMPLE: { nodes: AnyWfNode[]; edges: WfEdge[] } = {
   nodes: [
-    { id: 'draft',     type: 'workflowState', position: { x: 60,  y: 220 }, data: { label: 'Draft',     name: 'draft',     isInitial: true  } },
-    { id: 'submitted', type: 'workflowState', position: { x: 380, y: 100 }, data: { label: 'Submitted', name: 'submitted', isInitial: false } },
-    { id: 'revise',    type: 'workflowState', position: { x: 380, y: 340 }, data: { label: 'Revise',    name: 'revise',    isInitial: false } },
-    { id: 'accepted',  type: 'workflowState', position: { x: 700, y: 20  }, data: { label: 'Accepted',  name: 'accepted',  isInitial: false } },
-    { id: 'rejected',  type: 'workflowState', position: { x: 700, y: 220 }, data: { label: 'Rejected',  name: 'rejected',  isInitial: false } },
+    { id: 'draft',     type: 'workflowState', position: { x: 60,  y: 220 }, data: { label: 'Draft',     labels: { en: 'Draft'     }, name: 'draft',     isInitial: true  } },
+    { id: 'submitted', type: 'workflowState', position: { x: 380, y: 100 }, data: { label: 'Submitted', labels: { en: 'Submitted' }, name: 'submitted', isInitial: false } },
+    { id: 'revise',    type: 'workflowState', position: { x: 380, y: 340 }, data: { label: 'Revise',    labels: { en: 'Revise'    }, name: 'revise',    isInitial: false } },
+    { id: 'accepted',  type: 'workflowState', position: { x: 700, y: 20  }, data: { label: 'Accepted',  labels: { en: 'Accepted'  }, name: 'accepted',  isInitial: false } },
+    { id: 'rejected',  type: 'workflowState', position: { x: 700, y: 220 }, data: { label: 'Rejected',  labels: { en: 'Rejected'  }, name: 'rejected',  isInitial: false } },
   ],
   edges: [
     mkEdge('submit',           'draft',     'submitted', 'right-top',    'left-top',     'Submit'),
@@ -418,6 +465,9 @@ interface PropsPanelProps {
   orphanedStates: WorkflowStateOut[]
   stateCounts: Record<string, number>
   onReadd: (state: WorkflowStateOut) => void
+  languages: string[]
+  onAddLanguage: (lang: string) => void
+  onRemoveLanguage: (lang: string) => void
 }
 
 const SPECIAL_DESCRIPTIONS: Record<string, string> = {
@@ -426,7 +476,9 @@ const SPECIAL_DESCRIPTIONS: Record<string, string> = {
   [ID_KEEP_STATE]:     'Transitions from a state to this node keep that state unchanged (self-loop).',
 }
 
-function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNodeChange, onEdgeChange, onDeleteSelected, orphanedStates, stateCounts, onReadd }: PropsPanelProps) {
+function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNodeChange, onEdgeChange, onDeleteSelected, orphanedStates, stateCounts, onReadd, languages, onAddLanguage, onRemoveLanguage }: PropsPanelProps) {
+  const [addingLang, setAddingLang] = useState(false)
+  const [newLang, setNewLang] = useState('')
   const selNodes = nodes.filter((n) => selectedNodeIds.includes(n.id))
   const selEdges = edges.filter((e) => selectedEdgeIds.includes(e.id) && !e.data?.isMigration)
   const selMigrationEdges = edges.filter((e) => selectedEdgeIds.includes(e.id) && e.data?.isMigration)
@@ -454,9 +506,56 @@ function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNod
     </div>
   )
 
+  function confirmAddLang() {
+    const trimmed = newLang.trim().toLowerCase()
+    if (trimmed && LANG_PATTERN.test(trimmed)) {
+      onAddLanguage(trimmed)
+    }
+    setNewLang('')
+    setAddingLang(false)
+  }
+
+  const langSection = (
+    <div className={styles.propsSection}>
+      <div className={styles.propsSectionTitle}>Languages</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+        {languages.map(lang => (
+          <span key={lang} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#e9ecef', borderRadius: 4, padding: '2px 7px', fontSize: '0.78rem', fontFamily: 'monospace' }}>
+            {lang}
+            {languages.length > 1 && (
+              <button
+                onClick={() => onRemoveLanguage(lang)}
+                style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#888', padding: 0, fontSize: '0.75rem', lineHeight: 1 }}
+                title={`Remove language ${lang}`}
+              >×</button>
+            )}
+          </span>
+        ))}
+      </div>
+      {addingLang ? (
+        <div style={{ display: 'flex', gap: 4 }}>
+          <input
+            className={styles.propsInput}
+            value={newLang}
+            onChange={e => setNewLang(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') confirmAddLang(); if (e.key === 'Escape') { setAddingLang(false); setNewLang('') } }}
+            placeholder="e.g. de"
+            autoFocus
+            style={{ flex: 1 }}
+          />
+          <button className={styles.deleteBtn} style={{ borderColor: '#198754', color: '#198754' }} onClick={confirmAddLang}>Add</button>
+          <button className={styles.deleteBtn} onClick={() => { setAddingLang(false); setNewLang('') }}>✕</button>
+        </div>
+      ) : (
+        <button className={styles.deleteBtn} style={{ borderColor: '#6c757d', color: '#6c757d', fontSize: '0.75rem' }} onClick={() => setAddingLang(true)}>+ Add language</button>
+      )}
+    </div>
+  )
+
   if (total === 0) {
     return (
       <div className={styles.propsPanel}>
+        {langSection}
         {orphanedSection}
         <p className={styles.propsPanelHint}>Select a state or transition to edit its properties.</p>
       </div>
@@ -465,6 +564,7 @@ function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNod
 
   return (
     <div className={styles.propsPanel}>
+      {langSection}
       {orphanedSection}
       <div className={styles.propsPanelHeader}>
         <span>{total} selected</span>
@@ -483,14 +583,41 @@ function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNod
           )
         }
         const d = nodeStateData(n)
+        const currentStateName = d.name ?? n.id
+        const otherStateNames = new Set(
+          nodes.filter(x => x.id !== n.id && x.type === 'workflowState')
+               .map(x => nodeStateData(x).name ?? x.id)
+        )
+        const stateNameErr = currentStateName === ''
+          ? 'Required'
+          : !/^[a-z][a-z0-9_-]*$/.test(currentStateName)
+          ? 'Lowercase letters, digits, _ or - only; must start with a letter'
+          : otherStateNames.has(currentStateName)
+          ? 'Name already used by another state'
+          : null
         return (
           <div key={n.id} className={styles.propsSection}>
             <div className={styles.propsSectionTitle}>State: {n.id}</div>
-            <label className={styles.propsLabel}>Display label
-              <input className={styles.propsInput} value={d.label} onChange={(e) => onNodeChange(n.id, { label: e.target.value })} />
-            </label>
-            <label className={styles.propsLabel}>Internal name (slug)
-              <input className={styles.propsInput} value={d.name} readOnly title="Slug is set at creation time" />
+            {languages.map(lang => (
+              <label key={lang} className={styles.propsLabel}>
+                Label [{lang}]
+                <input
+                  className={styles.propsInput}
+                  value={d.labels?.[lang] ?? ''}
+                  onChange={(e) => onNodeChange(n.id, { labels: { ...d.labels, [lang]: e.target.value } })}
+                />
+              </label>
+            ))}
+            <label className={styles.propsLabel}>
+              Slug
+              <input
+                className={styles.propsInput}
+                value={currentStateName}
+                onChange={(e) => onNodeChange(n.id, { name: e.target.value })}
+                style={stateNameErr ? { borderColor: '#dc3545' } : undefined}
+                title="Rename this state slug (only lowercase letters, digits, _ or -)"
+              />
+              {stateNameErr && <span style={{ color: '#dc3545', fontSize: '0.75rem' }}>{stateNameErr}</span>}
             </label>
             <label className={styles.propsCheckbox}>
               <input type="checkbox" checked={d.isInitial} onChange={(e) => onNodeChange(n.id, { isInitial: e.target.checked })} />
@@ -509,21 +636,48 @@ function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNod
         </div>
       ))}
 
-      {selEdges.map((e) => (
-        <div key={e.id} className={styles.propsSection}>
-          <div className={styles.propsSectionTitle}>Transition: {e.source} → {e.target}</div>
-          <label className={styles.propsLabel}>Label
-            <input
-              className={styles.propsInput}
-              value={String((e.data as WfEdgeData | undefined)?.label ?? '')}
-              onChange={(ev) => onEdgeChange(e.id, { label: ev.target.value })}
-            />
-          </label>
-          <label className={styles.propsLabel}>Internal name (slug)
-            <input className={styles.propsInput} value={e.id} readOnly title="Slug is set at creation time" />
-          </label>
-        </div>
-      ))}
+      {selEdges.map((e) => {
+        const eData = e.data as WfEdgeData
+        const eLabels = eData.labels ?? {}
+        const currentTransName = eData.name ?? e.id
+        const otherTransNames = new Set(
+          edges.filter(x => !x.data?.isMigration && x.id !== e.id)
+               .map(x => (x.data as WfEdgeData).name ?? x.id)
+        )
+        const transNameErr = currentTransName === ''
+          ? 'Required'
+          : !/^[a-z][a-z0-9_-]*$/.test(currentTransName)
+          ? 'Lowercase letters, digits, _ or - only; must start with a letter'
+          : otherTransNames.has(currentTransName)
+          ? 'Name already used by another transition'
+          : null
+        return (
+          <div key={e.id} className={styles.propsSection}>
+            <div className={styles.propsSectionTitle}>Transition: {e.source} → {e.target}</div>
+            {languages.map(lang => (
+              <label key={lang} className={styles.propsLabel}>
+                Label [{lang}]
+                <input
+                  className={styles.propsInput}
+                  value={eLabels[lang] ?? ''}
+                  onChange={(ev) => onEdgeChange(e.id, { labels: { ...eLabels, [lang]: ev.target.value } })}
+                />
+              </label>
+            ))}
+            <label className={styles.propsLabel}>
+              Slug
+              <input
+                className={styles.propsInput}
+                value={currentTransName}
+                onChange={(ev) => onEdgeChange(e.id, { name: ev.target.value })}
+                style={transNameErr ? { borderColor: '#dc3545' } : undefined}
+                title="Rename this transition slug"
+              />
+              {transNameErr && <span style={{ color: '#dc3545', fontSize: '0.75rem' }}>{transNameErr}</span>}
+            </label>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -539,9 +693,10 @@ interface EditorInnerProps {
   onSaved: (wf: WorkflowDefinitionOut) => void
   initialStateCounts: Record<string, number>
   savedStates: WorkflowStateOut[]
+  reloadGen: number
 }
 
-function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: initName, workflowDescription: initDesc, onSaved, initialStateCounts, savedStates }: EditorInnerProps) {
+function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: initName, workflowDescription: initDesc, onSaved, initialStateCounts, savedStates, reloadGen }: EditorInnerProps) {
   const [nodes, setNodes] = useNodesState<AnyWfNode>(initialNodes)
   const [edges, setEdges] = useEdgesState<WfEdge>(initialEdges)
   const [name, setName] = useState(initName)
@@ -550,6 +705,7 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [migrationMode, setMigrationMode] = useState(false)
+  const [languages, setLanguages] = useState(() => deriveLanguages(initialNodes, initialEdges))
   const { fitView } = useReactFlow()
 
   useEffect(() => {
@@ -557,9 +713,10 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
     setEdges(initialEdges)
     setName(initName)
     setDesc(initDesc)
+    setLanguages(deriveLanguages(initialNodes, initialEdges))
     setTimeout(() => fitView({ padding: 0.15 }), 50)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflowId, initName])
+  }, [workflowId, initName, reloadGen])
 
   // Inject usage counts into workflowState nodes whenever counts arrive/refresh
   useEffect(() => {
@@ -655,7 +812,7 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
       const base = toSlug(srcLabel, 't')
       const slug = uniqueSlug(`t_${base}`, existingNames)
       setEdges((eds) =>
-        addEdge({ ...connection, id: slug, data: { label: '' }, label: '', markerEnd: { type: MarkerType.ArrowClosed }, type: 'smoothstep', reconnectable: true }, eds),
+        addEdge({ ...connection, id: slug, data: { label: '', labels: {}, name: slug }, label: '', markerEnd: { type: MarkerType.ArrowClosed }, type: 'smoothstep', reconnectable: true }, eds),
       )
     },
     [edges, nodes, setEdges, migrationMode],
@@ -687,7 +844,7 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
         id: slug,
         type: 'workflowState',
         position: { x: 80 + nds.filter((n) => n.type === 'workflowState').length * 40, y: 80 },
-        data: { label: 'New State', name: slug, isInitial: !hasInitial },
+        data: { label: 'New State', labels: { [languages[0] ?? 'en']: 'New State' }, name: slug, isInitial: !hasInitial } as Record<string, unknown>,
       },
     ])
   }
@@ -709,7 +866,11 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
     setNodes((nds) =>
       nds.map((n) => {
         if (n.id !== id || n.type !== 'workflowState') return n
-        return { ...n, data: { ...n.data, ...patch } }
+        const newData = { ...(n.data as WfStateData), ...patch }
+        if (patch.labels !== undefined) {
+          newData.label = pickDisplayLabel(patch.labels, languages[0] ?? 'en', String(newData.name))
+        }
+        return { ...n, data: newData as Record<string, unknown> }
       }),
     )
     if (patch.isInitial) {
@@ -728,9 +889,35 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
       eds.map((e) => {
         if (e.id !== id) return e
         const newData = { ...(e.data as WfEdgeData), ...patch }
+        if (patch.labels !== undefined) {
+          newData.label = pickDisplayLabel(patch.labels, languages[0] ?? 'en', e.id)
+        }
         return { ...e, data: newData, label: newData.label }
       }),
     )
+  }
+
+  function addLanguage(lang: string) {
+    setLanguages(prev => prev.includes(lang) ? prev : [...prev, lang])
+  }
+
+  function removeLanguage(lang: string) {
+    const newLangs = languages.filter(l => l !== lang)
+    setLanguages(newLangs)
+    const primary = newLangs[0] ?? 'en'
+    setNodes(nds => nds.map(n => {
+      if (n.type !== 'workflowState') return n
+      const d = n.data as WfStateData
+      const newLabels = Object.fromEntries(Object.entries(d.labels ?? {}).filter(([k]) => k !== lang))
+      return { ...n, data: { ...n.data, labels: newLabels, label: pickDisplayLabel(newLabels, primary, String(d.name)) } as Record<string, unknown> }
+    }))
+    setEdges(eds => eds.map(e => {
+      if (e.data?.isMigration) return e
+      const eData = e.data as WfEdgeData
+      const newLabels = Object.fromEntries(Object.entries(eData.labels ?? {}).filter(([k]) => k !== lang))
+      const displayLabel = pickDisplayLabel(newLabels, primary, e.id)
+      return { ...e, data: { ...eData, labels: newLabels, label: displayLabel }, label: displayLabel }
+    }))
   }
 
   function deleteSelected() {
@@ -745,7 +932,8 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
   )
 
   function readd(state: WorkflowStateOut) {
-    const label = state.label['en'] ?? Object.values(state.label)[0] ?? state.name
+    const primary = languages[0] ?? 'en'
+    const label = state.label[primary] ?? Object.values(state.label)[0] ?? state.name
     const hasInitial = nodes.some((n) => n.type === 'workflowState' && nodeStateData(n).isInitial)
     setNodes((nds) => [
       ...nds,
@@ -755,6 +943,7 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
         position: { x: state.position_x, y: state.position_y },
         data: {
           label,
+          labels: { ...state.label },
           name: state.name,
           isInitial: state.is_initial && !hasInitial,
           usageCount: initialStateCounts[state.name] ?? 0,
@@ -796,7 +985,7 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
     setSaveError(null)
     setSaveSuccess(false)
     try {
-      const payload = reactFlowToWf(nodes, edges, name, desc)
+      const payload = reactFlowToWf(nodes, edges, name, desc, languages[0] ?? 'en')
       const result = workflowId
         ? await updateWorkflow(workflowId, payload)
         : await createWorkflow(payload)
@@ -875,6 +1064,9 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
           orphanedStates={orphanedStates}
           stateCounts={initialStateCounts}
           onReadd={readd}
+          languages={languages}
+          onAddLanguage={addLanguage}
+          onRemoveLanguage={removeLanguage}
         />
       </div>
     </div>
@@ -894,6 +1086,7 @@ export function WorkflowEditor() {
   const [activeSavedStates, setActiveSavedStates] = useState<WorkflowStateOut[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [reloadGen, setReloadGen] = useState(0)
   const loadedRef = useRef(false)
 
   useEffect(() => {
@@ -954,14 +1147,19 @@ export function WorkflowEditor() {
   }
 
   function onSaved(wf: WorkflowDefinitionOut) {
+    const { nodes, edges } = wfToReactFlow(wf)
     setActiveId(wf.id)
     setActiveName(wf.name)
+    setActiveDesc(wf.description)
+    setActiveNodes(nodes)
+    setActiveEdges(edges)
     setActiveSavedStates(wf.states)
     setWorkflows((wfs) => {
       const idx = wfs.findIndex((w) => w.id === wf.id)
       return idx >= 0 ? wfs.map((w) => (w.id === wf.id ? wf : w)) : [...wfs, wf]
     })
     refreshCounts(wf.id)
+    setReloadGen((g) => g + 1)
   }
 
   return (
@@ -1002,6 +1200,7 @@ export function WorkflowEditor() {
             onSaved={onSaved}
             initialStateCounts={activeStateCounts}
             savedStates={activeSavedStates}
+            reloadGen={reloadGen}
           />
         </ReactFlowProvider>
       </div>
