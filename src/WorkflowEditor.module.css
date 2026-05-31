@@ -375,6 +375,86 @@
   opacity: 1;
 }
 
+/* ── Toolbar separators ──────────────────────────────────────────────────── */
+.toolbarSep {
+  width: 1px;
+  height: 22px;
+  background: #dee2e6;
+  flex-shrink: 0;
+}
+
+/* ── Special nodes (From Any / From Undefined / Keep State) ──────────────── */
+.specialNode {
+  width: 130px;
+  height: 64px;
+  border: 2px dashed #6c757d;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: #fff;
+  position: relative;
+  cursor: default;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.fromAnyNode {
+  border-color: #0d6efd;
+  background: #eff6ff;
+}
+
+.fromUndefinedNode {
+  border-color: #6f42c1;
+  background: #f5f0ff;
+}
+
+.keepStateNode {
+  border-color: #fd7e14;
+  background: #fff8f0;
+}
+
+.specialNodeLabel {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #333;
+  pointer-events: none;
+}
+
+.specialNodeSub {
+  font-size: 0.65rem;
+  color: #888;
+  font-family: monospace;
+  pointer-events: none;
+}
+
+/* Button accent colours matching special nodes */
+.fromAnyBtn  { border-color: #0d6efd; color: #0d6efd; }
+.fromAnyBtn:hover:not(:disabled)  { background: #0d6efd; color: #fff; }
+
+.fromUndefBtn { border-color: #6f42c1; color: #6f42c1; }
+.fromUndefBtn:hover:not(:disabled) { background: #6f42c1; color: #fff; }
+
+.keepStateBtn { border-color: #fd7e14; color: #fd7e14; }
+.keepStateBtn:hover:not(:disabled) { background: #fd7e14; color: #fff; }
+
+.fromAnyBtn:disabled,
+.fromUndefBtn:disabled,
+.keepStateBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Properties panel special node description ───────────────────────────── */
+.specialDesc {
+  font-size: 0.82rem;
+  color: #555;
+  margin: 0;
+  line-height: 1.4;
+}
+
 /* ── Hint bar ────────────────────────────────────────────────────────────── */
 .hint {
   font-size: 0.75rem;

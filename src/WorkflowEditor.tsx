@@ -43,8 +43,18 @@ interface WfEdgeData {
   [key: string]: unknown
 }
 
-type WfNode = Node<WfStateData, 'workflowState'>
+// All nodes share Record<string,unknown> data so special nodes can coexist.
+type AnyWfNode = Node<Record<string, unknown>>
 type WfEdge = Edge<WfEdgeData>
+
+// IDs for the singleton special nodes
+const ID_FROM_ANY = '__from_any__'
+const ID_FROM_UNDEFINED = '__from_undefined__'
+const ID_KEEP_STATE = '__keep_state__'
+
+function nodeStateData(n: AnyWfNode): WfStateData {
+  return n.data as unknown as WfStateData
+}
 
 interface WorkflowStateOut {
   name: string
@@ -124,207 +134,248 @@ async function deleteWorkflow(id: string): Promise<void> {
 const NODE_WIDTH = 240
 const NODE_HEIGHT = 135
 
-function wfToReactFlow(wf: WorkflowDefinitionOut): { nodes: WfNode[]; edges: WfEdge[] } {
-  const nodes: WfNode[] = wf.states.map((s) => ({
+function wfToReactFlow(wf: WorkflowDefinitionOut): { nodes: AnyWfNode[]; edges: WfEdge[] } {
+  const stateNodes: AnyWfNode[] = wf.states.map((s) => ({
     id: s.name,
-    type: 'workflowState' as const,
+    type: 'workflowState',
     position: { x: s.position_x, y: s.position_y },
     data: {
       label: s.label['en'] ?? Object.values(s.label)[0] ?? s.name,
       name: s.name,
       isInitial: s.is_initial,
       allowsEdit: s.allows_edit,
-    },
+    } as Record<string, unknown>,
   }))
 
-  const edges: WfEdge[] = wf.transitions.map((t) => ({
-    id: t.name,
-    source: t.from_state ?? '',
-    target: t.to_state,
-    sourceHandle: t.source_handle || null,
-    targetHandle: t.target_handle || null,
-    data: { label: t.label['en'] ?? Object.values(t.label)[0] ?? t.name },
-    label: t.label['en'] ?? Object.values(t.label)[0] ?? t.name,
-    markerEnd: { type: MarkerType.ArrowClosed },
-    type: 'smoothstep',
-    reconnectable: true,
-  }))
+  // Calculate bounding box to place special nodes sensibly
+  const xs = stateNodes.map((n) => n.position.x)
+  const ys = stateNodes.map((n) => n.position.y)
+  const minX = xs.length ? Math.min(...xs) : 0
+  const maxX = xs.length ? Math.max(...xs) : 400
+  const midY = ys.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : 100
+
+  const nodes: AnyWfNode[] = [...stateNodes]
+  const edges: WfEdge[] = []
+  let hasFromAny = false
+  let hasFromUndefined = false
+  let hasKeepState = false
+
+  for (const t of wf.transitions) {
+    const edgeBase: Omit<WfEdge, 'id' | 'source' | 'target' | 'sourceHandle' | 'targetHandle'> = {
+      data: { label: t.label['en'] ?? Object.values(t.label)[0] ?? t.name },
+      label: t.label['en'] ?? Object.values(t.label)[0] ?? t.name,
+      markerEnd: { type: MarkerType.ArrowClosed },
+      type: 'smoothstep',
+      reconnectable: true,
+    }
+
+    if (t.from_state === null && !t.from_undefined_only) {
+      // From Any
+      if (!hasFromAny) {
+        nodes.push({ id: ID_FROM_ANY, type: 'fromAny', position: { x: minX - 200, y: midY - 40 }, data: {} })
+        hasFromAny = true
+      }
+      edges.push({ ...edgeBase, id: t.name, source: ID_FROM_ANY, target: t.to_state, sourceHandle: t.source_handle || null, targetHandle: t.target_handle || null })
+    } else if (t.from_state === null && t.from_undefined_only) {
+      // From Undefined
+      if (!hasFromUndefined) {
+        nodes.push({ id: ID_FROM_UNDEFINED, type: 'fromUndefined', position: { x: minX - 200, y: midY + 40 }, data: {} })
+        hasFromUndefined = true
+      }
+      edges.push({ ...edgeBase, id: t.name, source: ID_FROM_UNDEFINED, target: t.to_state, sourceHandle: t.source_handle || null, targetHandle: t.target_handle || null })
+    } else if (t.from_state !== null && t.from_state === t.to_state) {
+      // Keep State (self-loop)
+      if (!hasKeepState) {
+        nodes.push({ id: ID_KEEP_STATE, type: 'keepState', position: { x: maxX + NODE_WIDTH + 50, y: midY - 30 }, data: {} })
+        hasKeepState = true
+      }
+      edges.push({ ...edgeBase, id: t.name, source: t.from_state, target: ID_KEEP_STATE, sourceHandle: t.source_handle || null, targetHandle: t.target_handle || null })
+    } else {
+      edges.push({ ...edgeBase, id: t.name, source: t.from_state ?? '', target: t.to_state, sourceHandle: t.source_handle || null, targetHandle: t.target_handle || null })
+    }
+  }
 
   return { nodes, edges }
 }
 
 function reactFlowToWf(
-  nodes: WfNode[],
+  nodes: AnyWfNode[],
   edges: WfEdge[],
   name: string,
   description: string,
 ) {
+  const stateNodes = nodes.filter((n) => n.type === 'workflowState')
+  const validStateIds = new Set(stateNodes.map((n) => n.id))
+
+  const transitions = edges
+    .filter((e) => e.source && e.target)
+    .map((e) => {
+      const srcType = nodes.find((n) => n.id === e.source)?.type
+      const tgtType = nodes.find((n) => n.id === e.target)?.type
+
+      let from_state: string | null = e.source
+      let from_undefined_only = false
+      let to_state = e.target
+
+      if (srcType === 'fromAny') {
+        from_state = null
+        from_undefined_only = false
+      } else if (srcType === 'fromUndefined') {
+        from_state = null
+        from_undefined_only = true
+      }
+
+      if (tgtType === 'keepState') {
+        // Self-loop: to_state = from_state
+        to_state = from_state ?? ''
+      }
+
+      // Skip edges that reference missing real states
+      if (to_state === '' || !validStateIds.has(to_state)) return null
+      if (from_state !== null && !validStateIds.has(from_state)) return null
+
+      return {
+        name: e.id,
+        label: { en: String((e.data as WfEdgeData | undefined)?.label ?? e.id) },
+        from_state,
+        from_undefined_only,
+        to_state,
+        source_handle: e.sourceHandle ?? '',
+        target_handle: e.targetHandle ?? '',
+      }
+    })
+    .filter(Boolean)
+
   return {
     name,
     description,
-    states: nodes.map((n) => ({
-      name: n.data.name,
-      label: { en: n.data.label },
-      is_initial: n.data.isInitial,
-      allows_edit: n.data.allowsEdit,
-      position_x: n.position.x,
-      position_y: n.position.y,
-    })),
-    transitions: edges
-      .filter((e) => e.source && e.target)
-      .map((e) => ({
-        name: e.id,
-        label: { en: String((e.data as WfEdgeData | undefined)?.label ?? e.id) },
-        from_state: e.source || null,
-        from_undefined_only: false,
-        to_state: e.target,
-        source_handle: e.sourceHandle ?? '',
-        target_handle: e.targetHandle ?? '',
-      })),
+    states: stateNodes.map((n) => {
+      const d = nodeStateData(n)
+      return {
+        name: d.name,
+        label: { en: d.label },
+        is_initial: d.isInitial,
+        allows_edit: d.allowsEdit,
+        position_x: n.position.x,
+        position_y: n.position.y,
+      }
+    }),
+    transitions,
   }
 }
 
 // ─── Proposal workflow example ────────────────────────────────────────────────
 
-const PROPOSAL_EXAMPLE: { nodes: WfNode[]; edges: WfEdge[] } = {
+const mkEdge = (id: string, src: string, tgt: string, sh: string, th: string, lbl: string): WfEdge => ({
+  id,
+  source: src,
+  target: tgt,
+  sourceHandle: sh,
+  targetHandle: th,
+  data: { label: lbl },
+  label: lbl,
+  markerEnd: { type: MarkerType.ArrowClosed },
+  type: 'smoothstep',
+  reconnectable: true,
+})
+
+const PROPOSAL_EXAMPLE: { nodes: AnyWfNode[]; edges: WfEdge[] } = {
   nodes: [
-    {
-      id: 'draft',
-      type: 'workflowState',
-      position: { x: 60, y: 220 },
-      data: { label: 'Draft', name: 'draft', isInitial: true, allowsEdit: true },
-    },
-    {
-      id: 'submitted',
-      type: 'workflowState',
-      position: { x: 380, y: 100 },
-      data: { label: 'Submitted', name: 'submitted', isInitial: false, allowsEdit: false },
-    },
-    {
-      id: 'revise',
-      type: 'workflowState',
-      position: { x: 380, y: 340 },
-      data: { label: 'Revise', name: 'revise', isInitial: false, allowsEdit: true },
-    },
-    {
-      id: 'accepted',
-      type: 'workflowState',
-      position: { x: 700, y: 20 },
-      data: { label: 'Accepted', name: 'accepted', isInitial: false, allowsEdit: false },
-    },
-    {
-      id: 'rejected',
-      type: 'workflowState',
-      position: { x: 700, y: 220 },
-      data: { label: 'Rejected', name: 'rejected', isInitial: false, allowsEdit: false },
-    },
+    { id: 'draft',     type: 'workflowState', position: { x: 60,  y: 220 }, data: { label: 'Draft',     name: 'draft',     isInitial: true,  allowsEdit: true  } },
+    { id: 'submitted', type: 'workflowState', position: { x: 380, y: 100 }, data: { label: 'Submitted', name: 'submitted', isInitial: false, allowsEdit: false } },
+    { id: 'revise',    type: 'workflowState', position: { x: 380, y: 340 }, data: { label: 'Revise',    name: 'revise',    isInitial: false, allowsEdit: true  } },
+    { id: 'accepted',  type: 'workflowState', position: { x: 700, y: 20  }, data: { label: 'Accepted',  name: 'accepted',  isInitial: false, allowsEdit: false } },
+    { id: 'rejected',  type: 'workflowState', position: { x: 700, y: 220 }, data: { label: 'Rejected',  name: 'rejected',  isInitial: false, allowsEdit: false } },
   ],
   edges: [
-    {
-      id: 'submit',
-      source: 'draft',
-      target: 'submitted',
-      sourceHandle: 'right-top',
-      targetHandle: 'left-top',
-      data: { label: 'Submit' },
-      label: 'Submit',
-      markerEnd: { type: MarkerType.ArrowClosed },
-      type: 'smoothstep',
-      reconnectable: true,
-    },
-    {
-      id: 'resubmit',
-      source: 'revise',
-      target: 'submitted',
-      sourceHandle: 'top-center',
-      targetHandle: 'bottom-center',
-      data: { label: 'Resubmit' },
-      label: 'Resubmit',
-      markerEnd: { type: MarkerType.ArrowClosed },
-      type: 'smoothstep',
-    },
-    {
-      id: 'request-revision',
-      source: 'submitted',
-      target: 'revise',
-      sourceHandle: 'bottom-center',
-      targetHandle: 'top-center',
-      data: { label: 'Request Revision' },
-      label: 'Request Revision',
-      markerEnd: { type: MarkerType.ArrowClosed },
-      type: 'smoothstep',
-    },
-    {
-      id: 'allow-revision',
-      source: 'rejected',
-      target: 'revise',
-      sourceHandle: 'bottom-left',
-      targetHandle: 'right-bottom',
-      data: { label: 'Allow Revision' },
-      label: 'Allow Revision',
-      markerEnd: { type: MarkerType.ArrowClosed },
-      type: 'smoothstep',
-    },
-    {
-      id: 'accept',
-      source: 'submitted',
-      target: 'accepted',
-      sourceHandle: 'right-top',
-      targetHandle: 'left-top',
-      data: { label: 'Accept' },
-      label: 'Accept',
-      markerEnd: { type: MarkerType.ArrowClosed },
-      type: 'smoothstep',
-    },
-    {
-      id: 'reject',
-      source: 'submitted',
-      target: 'rejected',
-      sourceHandle: 'right-bottom',
-      targetHandle: 'left-top',
-      data: { label: 'Reject' },
-      label: 'Reject',
-      markerEnd: { type: MarkerType.ArrowClosed },
-      type: 'smoothstep',
-    },
+    mkEdge('submit',           'draft',     'submitted', 'right-top',    'left-top',     'Submit'),
+    mkEdge('resubmit',         'revise',    'submitted', 'top-center',   'bottom-center','Resubmit'),
+    mkEdge('request-revision', 'submitted', 'revise',    'bottom-center','top-center',   'Request Revision'),
+    mkEdge('allow-revision',   'rejected',  'revise',    'bottom-left',  'right-bottom', 'Allow Revision'),
+    mkEdge('accept',           'submitted', 'accepted',  'right-top',    'left-top',     'Accept'),
+    mkEdge('reject',           'submitted', 'rejected',  'right-bottom', 'left-top',     'Reject'),
   ],
 }
 
-// ─── Custom 16:9 node ─────────────────────────────────────────────────────────
+// ─── Custom 16:9 state node ───────────────────────────────────────────────────
 
-function WorkflowStateNode({ data, selected }: NodeProps<WfNode>) {
+function WorkflowStateNode({ data, selected }: NodeProps) {
+  const d = data as WfStateData
   return (
     <div
-      className={[styles.wfNode, selected ? styles.wfNodeSelected : '', data.isInitial ? styles.wfNodeInitial : ''].join(' ')}
+      className={[styles.wfNode, selected ? styles.wfNodeSelected : '', d.isInitial ? styles.wfNodeInitial : ''].join(' ')}
       style={{ width: NODE_WIDTH, height: NODE_HEIGHT }}
     >
-      {/* Top handles */}
-      <Handle type="source" position={Position.Top} id="top-left"   style={{ left: '25%' }} className={styles.handle} />
-      <Handle type="source" position={Position.Top} id="top-center" style={{ left: '50%' }} className={styles.handle} />
-      <Handle type="source" position={Position.Top} id="top-right"  style={{ left: '75%' }} className={styles.handle} />
-      {/* Bottom handles */}
-      <Handle type="source" position={Position.Bottom} id="bottom-left"   style={{ left: '25%' }} className={styles.handle} />
-      <Handle type="source" position={Position.Bottom} id="bottom-center" style={{ left: '50%' }} className={styles.handle} />
-      <Handle type="source" position={Position.Bottom} id="bottom-right"  style={{ left: '75%' }} className={styles.handle} />
-      {/* Left handles */}
-      <Handle type="source" position={Position.Left} id="left-top"    style={{ top: '33%' }} className={styles.handle} />
-      <Handle type="source" position={Position.Left} id="left-bottom" style={{ top: '67%' }} className={styles.handle} />
-      {/* Right handles */}
-      <Handle type="source" position={Position.Right} id="right-top"    style={{ top: '33%' }} className={styles.handle} />
-      <Handle type="source" position={Position.Right} id="right-bottom" style={{ top: '67%' }} className={styles.handle} />
-
+      <Handle type="source" position={Position.Top}    id="top-left"      style={{ left: '25%' }}  className={styles.handle} />
+      <Handle type="source" position={Position.Top}    id="top-center"    style={{ left: '50%' }}  className={styles.handle} />
+      <Handle type="source" position={Position.Top}    id="top-right"     style={{ left: '75%' }}  className={styles.handle} />
+      <Handle type="source" position={Position.Bottom} id="bottom-left"   style={{ left: '25%' }}  className={styles.handle} />
+      <Handle type="source" position={Position.Bottom} id="bottom-center" style={{ left: '50%' }}  className={styles.handle} />
+      <Handle type="source" position={Position.Bottom} id="bottom-right"  style={{ left: '75%' }}  className={styles.handle} />
+      <Handle type="source" position={Position.Left}   id="left-top"      style={{ top:  '33%' }}  className={styles.handle} />
+      <Handle type="source" position={Position.Left}   id="left-bottom"   style={{ top:  '67%' }}  className={styles.handle} />
+      <Handle type="source" position={Position.Right}  id="right-top"     style={{ top:  '33%' }}  className={styles.handle} />
+      <Handle type="source" position={Position.Right}  id="right-bottom"  style={{ top:  '67%' }}  className={styles.handle} />
       <div className={styles.wfNodeContent}>
-        {data.isInitial && <span className={styles.initialBadge}>●</span>}
-        <span className={styles.wfNodeLabel}>{data.label}</span>
-        <span className={styles.wfNodeSlug}>{data.name}</span>
+        {d.isInitial && <span className={styles.initialBadge}>●</span>}
+        <span className={styles.wfNodeLabel}>{d.label}</span>
+        <span className={styles.wfNodeSlug}>{d.name}</span>
       </div>
     </div>
   )
 }
 
-const NODE_TYPES = { workflowState: WorkflowStateNode }
+// ─── Special nodes (smaller, 4 handles one per side) ─────────────────────────
 
-// ─── slug helper ─────────────────────────────────────────────────────────────
+function SpecialNodeHandles({ type }: { type: 'source' | 'target' }) {
+  return (
+    <>
+      <Handle type={type} position={Position.Top}    id="top"    className={styles.handle} />
+      <Handle type={type} position={Position.Bottom} id="bottom" className={styles.handle} />
+      <Handle type={type} position={Position.Left}   id="left"   className={styles.handle} />
+      <Handle type={type} position={Position.Right}  id="right"  className={styles.handle} />
+    </>
+  )
+}
+
+function FromAnyNode({ selected }: NodeProps) {
+  return (
+    <div className={[styles.specialNode, styles.fromAnyNode, selected ? styles.wfNodeSelected : ''].join(' ')}>
+      <SpecialNodeHandles type="source" />
+      <span className={styles.specialNodeLabel}>From Any</span>
+      <span className={styles.specialNodeSub}>any state → …</span>
+    </div>
+  )
+}
+
+function FromUndefinedNode({ selected }: NodeProps) {
+  return (
+    <div className={[styles.specialNode, styles.fromUndefinedNode, selected ? styles.wfNodeSelected : ''].join(' ')}>
+      <SpecialNodeHandles type="source" />
+      <span className={styles.specialNodeLabel}>From Undefined</span>
+      <span className={styles.specialNodeSub}>null state → …</span>
+    </div>
+  )
+}
+
+function KeepStateNode({ selected }: NodeProps) {
+  return (
+    <div className={[styles.specialNode, styles.keepStateNode, selected ? styles.wfNodeSelected : ''].join(' ')}>
+      <SpecialNodeHandles type="target" />
+      <span className={styles.specialNodeLabel}>Keep State</span>
+      <span className={styles.specialNodeSub}>… → same state</span>
+    </div>
+  )
+}
+
+const NODE_TYPES = {
+  workflowState: WorkflowStateNode,
+  fromAny: FromAnyNode,
+  fromUndefined: FromUndefinedNode,
+  keepState: KeepStateNode,
+}
+
+// ─── Slug helpers ─────────────────────────────────────────────────────────────
 
 function toSlug(text: string, prefix: string): string {
   const base = text.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^[^a-z]+/, '').replace(/_+$/, '')
@@ -341,7 +392,7 @@ function uniqueSlug(base: string, existing: Set<string>): string {
 // ─── Properties panel ─────────────────────────────────────────────────────────
 
 interface PropsPanelProps {
-  nodes: WfNode[]
+  nodes: AnyWfNode[]
   edges: WfEdge[]
   selectedNodeIds: string[]
   selectedEdgeIds: string[]
@@ -350,15 +401,13 @@ interface PropsPanelProps {
   onDeleteSelected: () => void
 }
 
-function PropertiesPanel({
-  nodes,
-  edges,
-  selectedNodeIds,
-  selectedEdgeIds,
-  onNodeChange,
-  onEdgeChange,
-  onDeleteSelected,
-}: PropsPanelProps) {
+const SPECIAL_DESCRIPTIONS: Record<string, string> = {
+  [ID_FROM_ANY]:       'Transitions connecting here fire from any workflow state.',
+  [ID_FROM_UNDEFINED]: 'Transitions connecting here fire only when the field has no state yet (null).',
+  [ID_KEEP_STATE]:     'Transitions from a state to this node keep that state unchanged (self-loop).',
+}
+
+function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNodeChange, onEdgeChange, onDeleteSelected }: PropsPanelProps) {
   const selNodes = nodes.filter((n) => selectedNodeIds.includes(n.id))
   const selEdges = edges.filter((e) => selectedEdgeIds.includes(e.id))
   const total = selNodes.length + selEdges.length
@@ -378,42 +427,38 @@ function PropertiesPanel({
         <button className={styles.deleteBtn} onClick={onDeleteSelected} title="Delete selected">✕ Delete</button>
       </div>
 
-      {selNodes.map((n) => (
-        <div key={n.id} className={styles.propsSection}>
-          <div className={styles.propsSectionTitle}>State: {n.id}</div>
-          <label className={styles.propsLabel}>Display label
-            <input
-              className={styles.propsInput}
-              value={n.data.label}
-              onChange={(e) => onNodeChange(n.id, { label: e.target.value })}
-            />
-          </label>
-          <label className={styles.propsLabel}>Internal name (slug)
-            <input
-              className={styles.propsInput}
-              value={n.data.name}
-              readOnly
-              title="Slug is set at creation time"
-            />
-          </label>
-          <label className={styles.propsCheckbox}>
-            <input
-              type="checkbox"
-              checked={n.data.isInitial}
-              onChange={(e) => onNodeChange(n.id, { isInitial: e.target.checked })}
-            />
-            Initial state
-          </label>
-          <label className={styles.propsCheckbox}>
-            <input
-              type="checkbox"
-              checked={n.data.allowsEdit}
-              onChange={(e) => onNodeChange(n.id, { allowsEdit: e.target.checked })}
-            />
-            Allows editing
-          </label>
-        </div>
-      ))}
+      {selNodes.map((n) => {
+        if (n.type !== 'workflowState') {
+          return (
+            <div key={n.id} className={styles.propsSection}>
+              <div className={styles.propsSectionTitle}>
+                {n.type === 'fromAny' ? 'From Any' : n.type === 'fromUndefined' ? 'From Undefined' : 'Keep State'}
+              </div>
+              <p className={styles.specialDesc}>{SPECIAL_DESCRIPTIONS[n.id] ?? ''}</p>
+            </div>
+          )
+        }
+        const d = nodeStateData(n)
+        return (
+          <div key={n.id} className={styles.propsSection}>
+            <div className={styles.propsSectionTitle}>State: {n.id}</div>
+            <label className={styles.propsLabel}>Display label
+              <input className={styles.propsInput} value={d.label} onChange={(e) => onNodeChange(n.id, { label: e.target.value })} />
+            </label>
+            <label className={styles.propsLabel}>Internal name (slug)
+              <input className={styles.propsInput} value={d.name} readOnly title="Slug is set at creation time" />
+            </label>
+            <label className={styles.propsCheckbox}>
+              <input type="checkbox" checked={d.isInitial} onChange={(e) => onNodeChange(n.id, { isInitial: e.target.checked })} />
+              Initial state
+            </label>
+            <label className={styles.propsCheckbox}>
+              <input type="checkbox" checked={d.allowsEdit} onChange={(e) => onNodeChange(n.id, { allowsEdit: e.target.checked })} />
+              Allows editing
+            </label>
+          </div>
+        )
+      })}
 
       {selEdges.map((e) => (
         <div key={e.id} className={styles.propsSection}>
@@ -426,12 +471,7 @@ function PropertiesPanel({
             />
           </label>
           <label className={styles.propsLabel}>Internal name (slug)
-            <input
-              className={styles.propsInput}
-              value={e.id}
-              readOnly
-              title="Slug is set at creation time"
-            />
+            <input className={styles.propsInput} value={e.id} readOnly title="Slug is set at creation time" />
           </label>
         </div>
       ))}
@@ -442,7 +482,7 @@ function PropertiesPanel({
 // ─── Inner editor (needs ReactFlow context) ───────────────────────────────────
 
 interface EditorInnerProps {
-  initialNodes: WfNode[]
+  initialNodes: AnyWfNode[]
   initialEdges: WfEdge[]
   workflowId: string | null
   workflowName: string
@@ -450,15 +490,8 @@ interface EditorInnerProps {
   onSaved: (wf: WorkflowDefinitionOut) => void
 }
 
-function EditorInner({
-  initialNodes,
-  initialEdges,
-  workflowId,
-  workflowName: initName,
-  workflowDescription: initDesc,
-  onSaved,
-}: EditorInnerProps) {
-  const [nodes, setNodes] = useNodesState<WfNode>(initialNodes)
+function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: initName, workflowDescription: initDesc, onSaved }: EditorInnerProps) {
+  const [nodes, setNodes] = useNodesState<AnyWfNode>(initialNodes)
   const [edges, setEdges] = useEdgesState<WfEdge>(initialEdges)
   const [name, setName] = useState(initName)
   const [desc, setDesc] = useState(initDesc)
@@ -467,7 +500,6 @@ function EditorInner({
   const [saveSuccess, setSaveSuccess] = useState(false)
   const { fitView } = useReactFlow()
 
-  // reset when parent swaps workflow
   useEffect(() => {
     setNodes(initialNodes)
     setEdges(initialEdges)
@@ -480,31 +512,41 @@ function EditorInner({
   const selectedNodeIds = nodes.filter((n) => n.selected).map((n) => n.id)
   const selectedEdgeIds = edges.filter((e) => e.selected).map((e) => e.id)
 
+  const isValidConnection = useCallback(
+    (connection: Connection) => {
+      const src = nodes.find((n) => n.id === connection.source)
+      const tgt = nodes.find((n) => n.id === connection.target)
+      if (!src || !tgt) return false
+      // fromAny / fromUndefined are source-only; reject any incoming edge
+      if (tgt.type === 'fromAny' || tgt.type === 'fromUndefined') return false
+      // keepState is target-only; reject any outgoing edge
+      if (src.type === 'keepState') return false
+      return true
+    },
+    [nodes],
+  )
+
   const onConnect = useCallback(
     (connection: Connection) => {
       const existingNames = new Set(edges.map((e) => e.id))
-      const srcLabel = nodes.find((n) => n.id === connection.source)?.data.label ?? 'transition'
+      const srcNode = nodes.find((n) => n.id === connection.source)
+      // Special nodes don't have a meaningful label; fall back to a generic prefix
+      const srcLabel = srcNode?.type === 'workflowState'
+        ? String(nodeStateData(srcNode).label)
+        : srcNode?.type === 'fromAny'   ? 'from_any'
+        : srcNode?.type === 'fromUndefined' ? 'from_undef'
+        : 't'
       const base = toSlug(srcLabel, 't')
       const slug = uniqueSlug(`t_${base}`, existingNames)
       setEdges((eds) =>
-        addEdge(
-          {
-            ...connection,
-            id: slug,
-            data: { label: '' },
-            label: '',
-            markerEnd: { type: MarkerType.ArrowClosed },
-            type: 'smoothstep',
-          },
-          eds,
-        ),
+        addEdge({ ...connection, id: slug, data: { label: '' }, label: '', markerEnd: { type: MarkerType.ArrowClosed }, type: 'smoothstep', reconnectable: true }, eds),
       )
     },
     [edges, nodes, setEdges],
   )
 
   const onNodesChange = useCallback(
-    (changes: NodeChange<WfNode>[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
+    (changes: NodeChange<AnyWfNode>[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
     [setNodes],
   )
 
@@ -519,35 +561,47 @@ function EditorInner({
     [setEdges],
   )
 
-  function addNode() {
+  function addStateNode() {
     const existingNames = new Set(nodes.map((n) => n.id))
     const slug = uniqueSlug('state', existingNames)
-    const newNode: WfNode = {
-      id: slug,
-      type: 'workflowState',
-      position: { x: 80 + nodes.length * 40, y: 80 + nodes.length * 40 },
-      data: { label: 'New State', name: slug, isInitial: nodes.length === 0, allowsEdit: true },
-    }
-    setNodes((nds) => [...nds, newNode])
+    const hasInitial = nodes.some((n) => n.type === 'workflowState' && nodeStateData(n).isInitial)
+    setNodes((nds) => [
+      ...nds,
+      {
+        id: slug,
+        type: 'workflowState',
+        position: { x: 80 + nds.filter((n) => n.type === 'workflowState').length * 40, y: 80 },
+        data: { label: 'New State', name: slug, isInitial: !hasInitial, allowsEdit: true },
+      },
+    ])
+  }
+
+  function addSpecialNode(type: 'fromAny' | 'fromUndefined' | 'keepState') {
+    const id = type === 'fromAny' ? ID_FROM_ANY : type === 'fromUndefined' ? ID_FROM_UNDEFINED : ID_KEEP_STATE
+    if (nodes.some((n) => n.id === id)) return
+    const xs = nodes.map((n) => n.position.x)
+    const ys = nodes.map((n) => n.position.y)
+    const midY = ys.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : 100
+    const x = type === 'keepState'
+      ? (xs.length ? Math.max(...xs) + NODE_WIDTH + 60 : 600)
+      : (xs.length ? Math.min(...xs) - 200 : -160)
+    const y = type === 'fromUndefined' ? midY + 100 : midY - 30
+    setNodes((nds) => [...nds, { id, type, position: { x, y }, data: {} }])
   }
 
   function handleNodeChange(id: string, patch: Partial<WfStateData>) {
     setNodes((nds) =>
       nds.map((n) => {
-        if (n.id !== id) return n
-        const updated = { ...n, data: { ...n.data, ...patch } }
-        // Enforce single initial state
-        if (patch.isInitial && patch.isInitial === true) {
-          return updated
-        }
-        return updated
+        if (n.id !== id || n.type !== 'workflowState') return n
+        return { ...n, data: { ...n.data, ...patch } }
       }),
     )
-    // Unset other initial nodes if this one was set as initial
     if (patch.isInitial) {
       setNodes((nds) =>
         nds.map((n) =>
-          n.id !== id && n.data.isInitial ? { ...n, data: { ...n.data, isInitial: false } } : n,
+          n.id !== id && n.type === 'workflowState' && (n.data as WfStateData).isInitial
+            ? { ...n, data: { ...n.data, isInitial: false } }
+            : n,
         ),
       )
     }
@@ -575,7 +629,7 @@ function EditorInner({
     try {
       const payload = reactFlowToWf(nodes, edges, name, desc)
       const result = workflowId
-        ? await updateWorkflow(workflowId, { ...payload, states: payload.states, transitions: payload.transitions })
+        ? await updateWorkflow(workflowId, payload)
         : await createWorkflow(payload)
       setSaveSuccess(true)
       onSaved(result)
@@ -587,31 +641,26 @@ function EditorInner({
     }
   }
 
+  const hasFromAny       = nodes.some((n) => n.id === ID_FROM_ANY)
+  const hasFromUndefined = nodes.some((n) => n.id === ID_FROM_UNDEFINED)
+  const hasKeepState     = nodes.some((n) => n.id === ID_KEEP_STATE)
+
   return (
     <div className={styles.editorRoot}>
       <div className={styles.toolbar}>
-        <input
-          className={styles.nameInput}
-          placeholder="Workflow name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <input
-          className={styles.descInput}
-          placeholder="Description (optional)"
-          value={desc}
-          onChange={(e) => setDesc(e.target.value)}
-        />
-        <button className={styles.toolbarBtn} onClick={addNode}>+ Add State</button>
-        <button
-          className={`${styles.toolbarBtn} ${styles.saveBtn}`}
-          onClick={handleSave}
-          disabled={saving || !name.trim()}
-        >
+        <input className={styles.nameInput} placeholder="Workflow name" value={name} onChange={(e) => setName(e.target.value)} />
+        <input className={styles.descInput} placeholder="Description (optional)" value={desc} onChange={(e) => setDesc(e.target.value)} />
+        <span className={styles.toolbarSep} />
+        <button className={styles.toolbarBtn} onClick={addStateNode}>+ State</button>
+        <button className={`${styles.toolbarBtn} ${styles.fromAnyBtn}`}  onClick={() => addSpecialNode('fromAny')}  disabled={hasFromAny}  title="Add a 'From Any' virtual source node">+ From Any</button>
+        <button className={`${styles.toolbarBtn} ${styles.fromUndefBtn}`} onClick={() => addSpecialNode('fromUndefined')} disabled={hasFromUndefined} title="Add a 'From Undefined' virtual source node">+ From Undefined</button>
+        <button className={`${styles.toolbarBtn} ${styles.keepStateBtn}`} onClick={() => addSpecialNode('keepState')} disabled={hasKeepState} title="Add a 'Keep State' virtual target node">+ Keep State</button>
+        <span className={styles.toolbarSep} />
+        <button className={`${styles.toolbarBtn} ${styles.saveBtn}`} onClick={handleSave} disabled={saving || !name.trim()}>
           {saving ? 'Saving…' : workflowId ? 'Save' : 'Save (create)'}
         </button>
         {saveSuccess && <span className={styles.saveOk}>✓ Saved</span>}
-        {saveError && <span className={styles.saveErr}>{saveError}</span>}
+        {saveError   && <span className={styles.saveErr}>{saveError}</span>}
       </div>
 
       <div className={styles.canvasAndPanel}>
@@ -623,6 +672,7 @@ function EditorInner({
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onReconnect={onReconnect}
+            isValidConnection={isValidConnection}
             nodeTypes={NODE_TYPES}
             connectionMode={ConnectionMode.Loose}
             defaultEdgeOptions={{ reconnectable: true }}
@@ -634,7 +684,7 @@ function EditorInner({
             <Controls />
             <MiniMap />
             <Panel position="bottom-left">
-              <span className={styles.hint}>Drag handles to connect states • Delete key removes selected</span>
+              <span className={styles.hint}>Drag handles to connect • drag edge endpoints to reconnect • Delete removes selected</span>
             </Panel>
           </ReactFlow>
         </div>
@@ -659,7 +709,7 @@ export function WorkflowEditor() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [activeName, setActiveName] = useState('My Workflow')
   const [activeDesc, setActiveDesc] = useState('')
-  const [activeNodes, setActiveNodes] = useState<WfNode[]>([])
+  const [activeNodes, setActiveNodes] = useState<AnyWfNode[]>([])
   const [activeEdges, setActiveEdges] = useState<WfEdge[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -668,9 +718,7 @@ export function WorkflowEditor() {
   useEffect(() => {
     if (loadedRef.current) return
     loadedRef.current = true
-    listWorkflows()
-      .then(setWorkflows)
-      .catch((e) => setLoadError(e.message))
+    listWorkflows().then(setWorkflows).catch((e: Error) => setLoadError(e.message))
   }, [])
 
   function openNew() {
@@ -727,17 +775,9 @@ export function WorkflowEditor() {
       <div className={styles.sidebar}>
         <div className={styles.sidebarHeader}>Workflows</div>
         {loadError && <div className={styles.loadError}>{loadError}</div>}
-
         <button className={styles.sidebarNewBtn} onClick={openNew}>+ New Workflow</button>
-
         <div className={styles.sidebarSection}>Examples</div>
-        <button
-          className={styles.sidebarItem}
-          onClick={loadExample}
-        >
-          Proposal Workflow
-        </button>
-
+        <button className={styles.sidebarItem} onClick={loadExample}>Proposal Workflow</button>
         <div className={styles.sidebarSection}>Saved</div>
         {workflows.length === 0 && <div className={styles.sidebarEmpty}>No saved workflows</div>}
         {workflows.map((wf) => (
@@ -749,13 +789,8 @@ export function WorkflowEditor() {
             {wf.name}
           </button>
         ))}
-
         {activeId && (
-          <button
-            className={styles.deleteWorkflowBtn}
-            onClick={handleDelete}
-            disabled={deleting}
-          >
+          <button className={styles.deleteWorkflowBtn} onClick={handleDelete} disabled={deleting}>
             {deleting ? 'Deleting…' : 'Delete workflow'}
           </button>
         )}
