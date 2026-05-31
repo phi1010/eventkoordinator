@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# regorus renders an undefined rule result as this JSON string. It must never be
+# treated as a truthy value (bool("<undefined>") is True), or deny-by-default fails open.
+_UNDEFINED = "<undefined>"
+
 
 # ─── Policy evaluation (§16) ──────────────────────────────────────────────────
 
@@ -65,17 +69,22 @@ def get_udm_type_for_node(node: "UserDefinedModelEntityNode"):
 
 
 def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", action: str, **kwargs) -> dict:
-    """Evaluate all policies for node's UDMType; return PolicyOutput dict."""
+    """Evaluate all policies for node's UDMType; return PolicyOutput dict.
+
+    Default-deny: if the node has no UDMType, or its type has no policies attached,
+    nothing is permitted and no fields are exposed. Access must be granted by an
+    explicit policy clause.
+    """
     udm_type = get_udm_type_for_node(node)
     if udm_type is None:
-        return {"allow": True, "messages": [], "viewable_fields": None, "editable_fields": []}
+        return {"allow": False, "messages": [], "viewable_fields": [], "editable_fields": []}
 
     from userdefinedmodel.models import UserDefinedModelTypePolicy
     type_policies = list(
         udm_type.type_policies.select_related("policy").order_by("sort_order")
     )
     if not type_policies:
-        return {"allow": True, "messages": [], "viewable_fields": None, "editable_fields": []}
+        return {"allow": False, "messages": [], "viewable_fields": [], "editable_fields": []}
 
     try:
         import regorus
@@ -94,7 +103,7 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
                 raw = json.loads(eng.eval_rule_as_json(rule_path))
                 if isinstance(raw, list):
                     return raw
-                return default
+                return default  # includes the "<undefined>" sentinel
             except Exception:
                 return default
 
@@ -102,7 +111,10 @@ def evaluate_policy(node: "UserDefinedModelEntityNode", user: "OpenIDUser", acti
             """Evaluate a Rego rule that should return a bool; return default on undefined."""
             try:
                 raw = json.loads(eng.eval_rule_as_json(rule_path))
-                if raw is None:
+                # regorus serializes an undefined rule (no matching clause) as the
+                # JSON string "<undefined>". Treat it as the default — NOT as a
+                # truthy non-empty string — so deny-by-default actually denies.
+                if raw is None or raw == _UNDEFINED:
                     return default
                 if isinstance(raw, list):
                     return bool(raw[0]) if raw else default

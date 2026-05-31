@@ -27,7 +27,7 @@ from userdefinedmodel.tests.factories import (
     FieldDefinitionTranslationFactory, UserDefinedModelTypeFactory,
     UserDefinedModelEntityFactory, PolicyFactory,
     make_simple_config, make_full_workflow, make_entity_with_type,
-    ALLOW_ALL_POLICY, REGO_DENY_ALL, REGO_BLOCK_SUBMIT_IF_TITLE_EMPTY,
+    ALLOW_ALL_POLICY, REGO_DENY_ALL, REGO_OWNER_EDIT, REGO_BLOCK_SUBMIT_IF_TITLE_EMPTY,
 )
 
 User = get_user_model()
@@ -283,16 +283,31 @@ class EntityCRUDTests(BaseAPITest):
         data = resp.json()
         self.assertEqual(data["id"], str(entity.id))
 
-    def test_delete_entity_by_owner(self):
+    def test_delete_entity_allowed_by_policy(self):
+        # Deletion is authorized by the entity's policy ("delete" action), not by
+        # owner/staff status. REGO_OWNER_EDIT grants delete to the owner.
         owner = UserFactory()
-        entity, udm_type, version, config = make_entity_with_type(owner=owner)
+        entity, udm_type, version, config = make_entity_with_type(
+            owner=owner, policy_source=REGO_OWNER_EDIT,
+        )
         resp = self.delete(f"/entities/{entity.id}/", user=owner)
         self.assertEqual(resp.status_code, 204)
 
-    def test_delete_entity_by_non_owner_forbidden(self):
-        entity, udm_type, version, config = make_entity_with_type()
+    def test_delete_entity_denied_by_policy(self):
+        # A non-owner is denied delete by REGO_OWNER_EDIT.
+        entity, udm_type, version, config = make_entity_with_type(
+            owner=UserFactory(), policy_source=REGO_OWNER_EDIT,
+        )
         non_owner = UserFactory()
         resp = self.delete(f"/entities/{entity.id}/", user=non_owner)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_delete_entity_no_policy_denied(self):
+        # Default-deny: a type with no policy attached grants nothing, so even the
+        # owner cannot delete.
+        owner = UserFactory()
+        entity, udm_type, version, config = make_entity_with_type(owner=owner, policy_source=None)
+        resp = self.delete(f"/entities/{entity.id}/", user=owner)
         self.assertEqual(resp.status_code, 403)
 
     def test_entity_not_found(self):
@@ -611,7 +626,7 @@ class LocalizedFieldTests(BaseAPITest):
             sort_order=0, is_localized=True,
         )
         FieldDefinitionTranslation.objects.create(field=self.field, language="en", label="Abstract")
-        self.udm_type = UserDefinedModelType.objects.create(name="Localized Type", field_config=self.config)
+        self.udm_type = UserDefinedModelTypeFactory(name="Localized Type", field_config=self.config)
         self.entity = UserDefinedModelEntityFactory(
             config_version=self.version, user_defined_model_type=self.udm_type, owner=self.staff
         )
@@ -685,7 +700,7 @@ class SubmodelTests(BaseAPITest):
         )
         FieldDefinitionTranslation.objects.create(field=self.chair_field, language="en", label="Chair")
 
-        self.udm_type = UserDefinedModelType.objects.create(name="Submodel Type", field_config=self.config)
+        self.udm_type = UserDefinedModelTypeFactory(name="Submodel Type", field_config=self.config)
         self.entity = UserDefinedModelEntityFactory(
             config_version=self.version, user_defined_model_type=self.udm_type, owner=self.staff
         )
@@ -785,7 +800,7 @@ class MigrationTests(BaseAPITest):
         v_pub = ConfigVersion.objects.create(config=config, status="published")
         new_field = FieldDefinition.objects.create(version=v_pub, slug="new_name", data_type="text_short", sort_order=0)
         FieldDefinitionTranslation.objects.create(field=new_field, language="en", label="New")
-        udm_type = UserDefinedModelType.objects.create(name="Renamed Type", field_config=config)
+        udm_type = UserDefinedModelTypeFactory(name="Renamed Type", field_config=config)
         entity = UserDefinedModelEntityFactory(config_version=v_old, user_defined_model_type=udm_type, owner=self.staff)
         fv = FieldValue(node=entity, field=old_field, language="")
         fv.set_value("hello", field=old_field)
@@ -1063,7 +1078,7 @@ class DefaultValueMaterializationTests(BaseAPITest):
         FieldDefinitionTranslation.objects.create(field=field, language="en", label="Status Flag")
         FieldDefaultValue.objects.create(field=field, language="", value_bool=True)
 
-        udm_type = UserDefinedModelType.objects.create(name="Default Type", field_config=config)
+        udm_type = UserDefinedModelTypeFactory(name="Default Type", field_config=config)
 
         resp = self.post("/entities/", {"user_defined_model_type_id": str(udm_type.id)})
         self.assertEqual(resp.status_code, 201)
@@ -1071,3 +1086,111 @@ class DefaultValueMaterializationTests(BaseAPITest):
         fvs = {fv["field_slug"]: fv["value"] for fv in data["field_values"]}
         self.assertIn("status_flag", fvs)
         self.assertEqual(fvs["status_flag"], True)
+
+
+# ─── Object-level authorization (security review) ─────────────────────────────
+
+def _grant(user, *codenames):
+    """Grant userdefinedmodel app permissions to a user by codename."""
+    from django.contrib.auth.models import Permission
+    user.user_permissions.add(
+        *Permission.objects.filter(
+            content_type__app_label="userdefinedmodel", codename__in=codenames
+        )
+    )
+    # Drop the per-request permission cache so the next request re-reads the DB.
+    for attr in ("_perm_cache", "_user_perm_cache", "_group_perm_cache"):
+        user.__dict__.pop(attr, None)
+
+
+class EntityViewPolicyTests(BaseAPITest):
+    """get_entity / history enforce the policy 'view' allow decision (not just
+    field filtering)."""
+
+    def test_get_entity_denied_by_view_policy_returns_404(self):
+        entity, *_ = make_entity_with_type(owner=self.user, policy_source=REGO_DENY_ALL)
+        resp = self.get(f"/entities/{entity.id}/", user=self.user)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_get_entity_allowed_by_view_policy(self):
+        entity, *_ = make_entity_with_type(owner=self.user, policy_source=REGO_OWNER_EDIT)
+        resp = self.get(f"/entities/{entity.id}/", user=self.user)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_history_denied_by_view_policy_returns_404(self):
+        entity, *_ = make_entity_with_type(owner=self.user, policy_source=REGO_DENY_ALL)
+        resp = self.get(f"/entities/{entity.id}/history/", user=self.user)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_search_entities_filters_out_non_browsable(self):
+        visible, vis_type, *_ = make_entity_with_type(policy_source=REGO_OWNER_EDIT)
+        hidden, hid_type, *_ = make_entity_with_type(policy_source=REGO_DENY_ALL)
+        resp = self.get(
+            f"/entity-search/?type_ids={vis_type.id},{hid_type.id}", user=self.user
+        )
+        self.assertEqual(resp.status_code, 200)
+        ids = {e["id"] for e in resp.json()}
+        self.assertIn(str(visible.id), ids)
+        self.assertNotIn(str(hidden.id), ids)
+
+
+class EngineDenyByDefaultTests(BaseAPITest):
+    """The policy engine must fail closed: an 'allow if ...' rule that matches no
+    clause is undefined, which must read as deny — never as a truthy sentinel."""
+
+    def test_unmatched_allow_rule_denies(self):
+        from userdefinedmodel.engine import evaluate_policy
+        # REGO_OWNER_EDIT only grants delete to owner/staff; a stranger matches no
+        # clause, so allow is undefined and must evaluate to False.
+        entity, *_ = make_entity_with_type(owner=self.user, policy_source=REGO_OWNER_EDIT)
+        stranger = UserFactory()
+        self.assertFalse(evaluate_policy(entity, stranger, "delete")["allow"])
+        # The owner still passes the positive clause.
+        self.assertTrue(evaluate_policy(entity, self.user, "delete")["allow"])
+
+    def test_no_policy_denies_every_action(self):
+        from userdefinedmodel.engine import evaluate_policy
+        # A type with no policy attached grants nothing for any action.
+        entity, *_ = make_entity_with_type(owner=self.user, policy_source=None)
+        for action in ("view", "browse", "save", "delete", "transition"):
+            out = evaluate_policy(entity, self.user, action)
+            self.assertFalse(out["allow"], f"{action} should be denied")
+            self.assertEqual(out["viewable_fields"], [])
+
+
+class PermissionBasedAdminTests(BaseAPITest):
+    """Admin endpoints authorize on Django model permissions, not is_staff: a
+    non-staff user holding the explicit permission is allowed; a plain user is not."""
+
+    def test_non_staff_with_add_perm_can_create_config(self):
+        editor = UserFactory()  # is_staff = False
+        _grant(editor, "add_fieldconfig")
+        resp = self.post("/configs/", {
+            "name": "Perm Config",
+            "description": "",
+            "languages": [{"code": "en", "label": "English", "is_default": True, "sort_order": 0}],
+        }, user=editor)
+        self.assertEqual(resp.status_code, 201, resp.content)
+
+    def test_plain_user_cannot_create_config(self):
+        resp = self.post("/configs/", {
+            "name": "Nope", "description": "",
+            "languages": [{"code": "en", "label": "English", "is_default": True, "sort_order": 0}],
+        }, user=UserFactory())
+        self.assertEqual(resp.status_code, 403)
+
+    def test_get_policy_requires_view_policy_permission(self):
+        PolicyFactory(slug="secret-policy")
+        # Plain user: denied.
+        resp = self.get("/policies/secret-policy/", user=UserFactory())
+        self.assertEqual(resp.status_code, 403)
+        # Non-staff user granted view_policy: allowed.
+        viewer = UserFactory()
+        _grant(viewer, "view_policy")
+        resp = self.get("/policies/secret-policy/", user=viewer)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_list_type_policies_requires_view_policy_permission(self):
+        _, udm_type, *_ = make_entity_with_type()
+        resp = self.get(f"/types/{udm_type.id}/policies/", user=UserFactory())
+        self.assertEqual(resp.status_code, 403)

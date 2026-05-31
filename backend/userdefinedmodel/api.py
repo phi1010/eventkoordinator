@@ -68,17 +68,34 @@ def _http409_concurrent() -> JsonResponse:
     return JsonResponse({"error": "concurrent_edit", "retry_after_ms": 500}, status=409)
 
 
-def _entity_out(entity) -> EntityOut:
-    from userdefinedmodel.writer import serialize_node
-    data = serialize_node(entity)
-    return EntityOut(**data)
+def _require_perms(request, *perms: str) -> JsonResponse | None:
+    """Return a 403 response if the user lacks ALL the given Django model permissions.
+
+    Admin/schema endpoints authorize against explicit model permissions
+    (e.g. "userdefinedmodel.add_fieldconfig") rather than is_staff/is_superuser.
+    Never gate solely on is_staff — a superuser implicitly passes has_perms, and
+    granular permissions can be delegated without granting full staff access.
+    """
+    if not request.user.has_perms(perms):
+        return JsonResponse({"detail": "Permission denied"}, status=403)
+    return None
 
 
-def _entity_out_for_user(entity, user, policy_messages: list | None = None) -> EntityOut:
+def _policy_allows(entity, user, action: str, **kwargs) -> bool:
+    """Object-level authorization for an entity action via its Rego policy.
+
+    Default-deny: an entity with no UDMType or no attached policies, and any action
+    not affirmatively granted by a policy clause, evaluates to False.
+    """
+    from userdefinedmodel.engine import evaluate_policy
+    return bool(evaluate_policy(entity, user, action, **kwargs).get("allow", False))
+
+
+def _entity_out_for_user(entity, user, policy_messages: list | None = None, view_policy: dict | None = None) -> EntityOut:
     from userdefinedmodel.writer import serialize_node
     from userdefinedmodel.engine import evaluate_policy
     data = serialize_node(entity)
-    policy = evaluate_policy(entity, user, "view")
+    policy = view_policy if view_policy is not None else evaluate_policy(entity, user, "view")
     viewable = policy.get("viewable_fields")   # None = no restriction
     editable = policy.get("editable_fields") or []
     if viewable is not None:
@@ -201,8 +218,8 @@ def list_configs(request):
 @api.post("/configs/", response={201: FieldConfigOut}, auth=django_auth)
 def create_config(request, payload: FieldConfigCreateIn):
     from userdefinedmodel.models import FieldConfig, ConfigLanguage, ConfigVersion
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.add_fieldconfig"):
+        return denied
     with transaction.atomic():
         cfg = FieldConfig.objects.create(name=payload.name, description=payload.description)
         for lang in payload.languages:
@@ -234,8 +251,8 @@ def get_config(request, config_id: uuid.UUID):
 @api.patch("/configs/{config_id}/", response=FieldConfigOut, auth=django_auth)
 def update_config(request, config_id: uuid.UUID, payload: FieldConfigUpdateIn):
     from userdefinedmodel.models import FieldConfig
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.change_fieldconfig"):
+        return denied
     try:
         cfg = FieldConfig.objects.prefetch_related("languages", "user_defined_model_types").get(id=config_id)
     except FieldConfig.DoesNotExist:
@@ -251,8 +268,8 @@ def update_config(request, config_id: uuid.UUID, payload: FieldConfigUpdateIn):
 @api.delete("/configs/{config_id}/", auth=django_auth)
 def delete_config(request, config_id: uuid.UUID):
     from userdefinedmodel.models import FieldConfig
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.delete_fieldconfig"):
+        return denied
     try:
         cfg = FieldConfig.objects.get(id=config_id)
     except FieldConfig.DoesNotExist:
@@ -321,8 +338,8 @@ def get_config_version(request, version_id: uuid.UUID):
 @api.get("/configs/{config_id}/versions/draft/", response=ConfigVersionOut, auth=django_auth)
 def get_draft_version(request, config_id: uuid.UUID):
     from userdefinedmodel.models import ConfigVersion
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.change_fieldconfig"):
+        return denied
     try:
         version = ConfigVersion.objects.get(config_id=config_id, status=ConfigVersion.Status.DRAFT)
     except ConfigVersion.DoesNotExist:
@@ -337,8 +354,8 @@ def replace_draft(request, config_id: uuid.UUID, payload: ConfigDraftIn):
         WorkflowDefinition, WorkflowState, WorkflowStateTranslation,
         WorkflowTransition, WorkflowTransitionTranslation,
     )
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.change_fieldconfig"):
+        return denied
     try:
         cfg = FieldConfig.objects.get(id=config_id)
     except FieldConfig.DoesNotExist:
@@ -531,8 +548,8 @@ def _create_multi_field_rule(version, field_map, mfr_in):
 @api.post("/configs/{config_id}/versions/draft/publish/", response=ConfigVersionOut, auth=django_auth)
 def publish_draft(request, config_id: uuid.UUID):
     from userdefinedmodel.models import ConfigVersion, FieldConfig
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.change_fieldconfig"):
+        return denied
     try:
         cfg = FieldConfig.objects.get(id=config_id)
     except FieldConfig.DoesNotExist:
@@ -553,8 +570,8 @@ def publish_draft(request, config_id: uuid.UUID):
 @api.get("/types/", response=list[UDMTypeOut], auth=django_auth)
 def list_udm_types(request):
     from userdefinedmodel.models import UserDefinedModelType
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.view_userdefinedmodeltype"):
+        return denied
     types = UserDefinedModelType.objects.select_related("field_config").all()
     return [UDMTypeOut(id=t.id, name=t.name, description=t.description, field_config_id=t.field_config_id)
             for t in types]
@@ -563,8 +580,8 @@ def list_udm_types(request):
 @api.post("/types/", response={201: UDMTypeOut}, auth=django_auth)
 def create_udm_type(request, payload: UDMTypeCreateIn):
     from userdefinedmodel.models import UserDefinedModelType
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.add_userdefinedmodeltype"):
+        return denied
     udm_type = UserDefinedModelType.objects.create(name=payload.name, description=payload.description)
     return 201, UDMTypeOut(id=udm_type.id, name=udm_type.name, description=udm_type.description, field_config_id=None)
 
@@ -588,10 +605,14 @@ def eval_policy_for_type(
     action: str = "view",
     transition: Optional[str] = None,
 ):
-    """Superuser-only: evaluate the Rego policy for a given entity + user and return the full
-    input document, the raw policy sources, and the structured output."""
-    if not request.user.is_superuser:
-        return JsonResponse({"detail": "Superuser only"}, status=403)
+    """Evaluate the Rego policy for a given entity + user and return the full
+    input document, the raw policy sources, and the structured output.
+
+    The input document includes the entity's full field values — data the policy
+    would otherwise hide — plus the raw policy source. Require both view and
+    change policy permissions; never gate on staff/superuser status alone."""
+    if denied := _require_perms(request, "userdefinedmodel.view_policy", "userdefinedmodel.change_policy"):
+        return denied
 
     from userdefinedmodel.models import UserDefinedModelEntity, UserDefinedModelType
     from userdefinedmodel.engine import build_policy_input, get_udm_type_for_node
@@ -622,9 +643,10 @@ def eval_policy_for_type(
         kwargs["transition"] = transition
     input_doc = build_policy_input(entity, eval_user, action, **kwargs)
 
-    # Run evaluation
+    # Run evaluation. Default-deny when the type has no policies, mirroring
+    # engine.evaluate_policy so this introspection view reflects real behavior.
     error_msg = None
-    output = {"allow": True, "messages": [], "viewable_fields": [], "editable_fields": []}
+    output = {"allow": False, "messages": [], "viewable_fields": [], "editable_fields": []}
     if policy_entries:
         try:
             import json as _json
@@ -644,7 +666,9 @@ def eval_policy_for_type(
             def _eval_bool(rule_path, default=True):
                 try:
                     raw = _json.loads(eng.eval_rule_as_json(rule_path))
-                    if raw is None:
+                    # "<undefined>" is regorus' undefined sentinel; bool() of it
+                    # would be truthy, so treat it as the default instead.
+                    if raw is None or raw == "<undefined>":
                         return default
                     if isinstance(raw, list):
                         return bool(raw[0]) if raw else default
@@ -690,8 +714,8 @@ def get_type_config(request, type_id: uuid.UUID):
 @api.patch("/types/{type_id}/", response=UDMTypeOut, auth=django_auth)
 def update_udm_type(request, type_id: uuid.UUID, field_config_id: Optional[uuid.UUID] = None):
     from userdefinedmodel.models import UserDefinedModelType, FieldConfig
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.change_userdefinedmodeltype"):
+        return denied
     try:
         udm_type = UserDefinedModelType.objects.get(id=type_id)
     except UserDefinedModelType.DoesNotExist:
@@ -721,16 +745,16 @@ def update_udm_type(request, type_id: uuid.UUID, field_config_id: Optional[uuid.
 @api.get("/policies/", response=list[PolicyOut], auth=django_auth)
 def list_policies(request):
     from userdefinedmodel.models import Policy
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.view_policy"):
+        return denied
     return [PolicyOut(slug=p.slug, source=p.source) for p in Policy.objects.all()]
 
 
 @api.post("/policies/", response={201: PolicyOut}, auth=django_auth)
 def create_policy(request, payload: PolicyCreateIn):
     from userdefinedmodel.models import Policy
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.add_policy"):
+        return denied
     policy = Policy.objects.create(slug=payload.slug, source=payload.source)
     return 201, PolicyOut(slug=policy.slug, source=policy.source)
 
@@ -738,6 +762,8 @@ def create_policy(request, payload: PolicyCreateIn):
 @api.get("/policies/{slug}/", response=PolicyOut, auth=django_auth)
 def get_policy(request, slug: str):
     from userdefinedmodel.models import Policy
+    if denied := _require_perms(request, "userdefinedmodel.view_policy"):
+        return denied
     try:
         p = Policy.objects.get(slug=slug)
     except Policy.DoesNotExist:
@@ -748,8 +774,8 @@ def get_policy(request, slug: str):
 @api.put("/policies/{slug}/", response=PolicyOut, auth=django_auth)
 def update_policy(request, slug: str, payload: PolicyUpdateIn):
     from userdefinedmodel.models import Policy
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.change_policy"):
+        return denied
     try:
         p = Policy.objects.get(slug=slug)
     except Policy.DoesNotExist:
@@ -762,8 +788,8 @@ def update_policy(request, slug: str, payload: PolicyUpdateIn):
 @api.delete("/policies/{slug}/", auth=django_auth)
 def delete_policy(request, slug: str):
     from userdefinedmodel.models import Policy
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.delete_policy"):
+        return denied
     try:
         p = Policy.objects.get(slug=slug)
     except Policy.DoesNotExist:
@@ -777,6 +803,8 @@ def delete_policy(request, slug: str):
 @api.get("/types/{type_id}/policies/", response=list[PolicyOut], auth=django_auth)
 def list_type_policies(request, type_id: uuid.UUID):
     from userdefinedmodel.models import UserDefinedModelType
+    if denied := _require_perms(request, "userdefinedmodel.view_policy"):
+        return denied
     try:
         udm_type = UserDefinedModelType.objects.get(id=type_id)
     except UserDefinedModelType.DoesNotExist:
@@ -788,8 +816,8 @@ def list_type_policies(request, type_id: uuid.UUID):
 @api.post("/types/{type_id}/policies/", response={201: PolicyOut}, auth=django_auth)
 def assign_policy(request, type_id: uuid.UUID, payload: PolicyAssignIn):
     from userdefinedmodel.models import UserDefinedModelType, Policy, UserDefinedModelTypePolicy
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.change_userdefinedmodeltype"):
+        return denied
     try:
         udm_type = UserDefinedModelType.objects.get(id=type_id)
     except UserDefinedModelType.DoesNotExist:
@@ -808,8 +836,8 @@ def assign_policy(request, type_id: uuid.UUID, payload: PolicyAssignIn):
 @api.delete("/types/{type_id}/policies/{slug}/", auth=django_auth)
 def remove_policy(request, type_id: uuid.UUID, slug: str):
     from userdefinedmodel.models import UserDefinedModelType, UserDefinedModelTypePolicy
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.change_userdefinedmodeltype"):
+        return denied
     try:
         udm_type = UserDefinedModelType.objects.get(id=type_id)
     except UserDefinedModelType.DoesNotExist:
@@ -849,13 +877,19 @@ def create_entity(request, payload: EntityCreateIn):
 @api.get("/entities/{entity_id}/", response=EntityOut, auth=django_auth)
 def get_entity(request, entity_id: uuid.UUID):
     from userdefinedmodel.models import UserDefinedModelEntity
+    from userdefinedmodel.engine import evaluate_policy
     try:
         entity = UserDefinedModelEntity.objects.select_related(
             "config_version", "user_defined_model_type", "owner", "current_state"
         ).prefetch_related("editors", "field_values__field", "children").get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
         return JsonResponse({"detail": "Not found"}, status=404)
-    return _entity_out_for_user(entity, request.user)
+    # Object-level view authorization: the policy "view" allow decision gates
+    # whether the entity is visible at all. 404 (not 403) avoids leaking existence.
+    policy = evaluate_policy(entity, request.user, "view")
+    if not policy.get("allow", False):
+        return JsonResponse({"detail": "Not found"}, status=404)
+    return _entity_out_for_user(entity, request.user, view_policy=policy)
 
 
 @api.patch("/entities/{entity_id}/", response=EntityOut, auth=django_auth)
@@ -927,8 +961,10 @@ def delete_entity(request, entity_id: uuid.UUID):
         entity = UserDefinedModelEntity.objects.get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
         return JsonResponse({"detail": "Not found"}, status=404)
-    if entity.owner_id != request.user.id and not request.user.is_staff:
-        return JsonResponse({"detail": "Only owner can delete"}, status=403)
+    # Object-level delete authorization is delegated to the entity's policy
+    # ("delete" action). Default-deny: no policy means no delete.
+    if not _policy_allows(entity, request.user, "delete"):
+        return JsonResponse({"detail": "Delete denied by policy"}, status=403)
     entity.delete()
     return JsonResponse({}, status=204)
 
@@ -985,10 +1021,18 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
 def entity_history(request, entity_id: uuid.UUID, page: int = 1, page_size: int = 20):
     from userdefinedmodel.models import UserDefinedModelEntity
     from userdefinedmodel.models.history import EditGroup
+    from userdefinedmodel.engine import evaluate_policy
     try:
         entity = UserDefinedModelEntity.objects.get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
         return JsonResponse({"detail": "Not found"}, status=404)
+
+    # Object-level view authorization. History exposes old/new field values, so
+    # gate on the "view" allow decision and redact edits for non-viewable fields.
+    policy = evaluate_policy(entity, request.user, "view")
+    if not policy.get("allow", False):
+        return JsonResponse({"detail": "Not found"}, status=404)
+    viewable = policy.get("viewable_fields")  # None = no field-level restriction
 
     qs = EditGroup.objects.filter(root_entity=entity).prefetch_related(
         "field_edits__field__translations",
@@ -1005,6 +1049,11 @@ def entity_history(request, entity_id: uuid.UUID, page: int = 1, page_size: int 
     for group in groups:
         edits = []
         for fe in group.field_edits.all():
+            # Hide value edits for fields the policy does not expose to this user.
+            # Non-field edits (transitions, node add/remove) carry no field value
+            # and remain visible so structural history stays coherent.
+            if viewable is not None and fe.field is not None and fe.field.slug not in viewable:
+                continue
             slug = fe.field.slug if fe.field else None
             label = None
             if fe.field:
@@ -1048,8 +1097,11 @@ def entity_history(request, entity_id: uuid.UUID, page: int = 1, page_size: int 
 @api.get("/entities/{entity_id}/policy-document/", auth=django_auth)
 def entity_policy_document(request, entity_id: uuid.UUID):
     from userdefinedmodel.models import UserDefinedModelEntity
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    # Returns the raw, unredacted policy input document (every field value,
+    # bypassing the policy's own field-level visibility). Treat it like policy
+    # internals: require both view and change policy permissions.
+    if denied := _require_perms(request, "userdefinedmodel.view_policy", "userdefinedmodel.change_policy"):
+        return denied
     try:
         entity = UserDefinedModelEntity.objects.get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
@@ -1129,10 +1181,12 @@ def search_groups(request, q: str = "", ids: str = ""):
 @api.get("/entity-search/", response=list[EntityAutocompleteItem], auth=django_auth)
 def search_entities(request, q: str = "", type_ids: str = "", ids: str = ""):
     from userdefinedmodel.models import UserDefinedModelEntity
+    from userdefinedmodel.engine import evaluate_policy
     _entity_prefetch = [
         "field_values__field",
         "config_version__field_definitions",
         "config_version__config__languages",
+        "user_defined_model_type__type_policies__policy",
     ]
     qs = UserDefinedModelEntity.objects.select_related(
         "config_version__config", "user_defined_model_type"
@@ -1145,14 +1199,21 @@ def search_entities(request, q: str = "", type_ids: str = "", ids: str = ""):
         qs = UserDefinedModelEntity.objects.select_related(
             "config_version__config", "user_defined_model_type"
         ).filter(id__in=id_list).prefetch_related(*_entity_prefetch)
+    # Object-level filter: only surface entities the user may browse/view. We
+    # scan past non-viewable rows rather than slicing first, so the result can
+    # still reach the cap of 50 visible entities.
     results = []
-    for entity in qs[:50]:
+    for entity in qs.iterator(chunk_size=200):
+        if not evaluate_policy(entity, request.user, "browse").get("allow", False):
+            continue
         display = _entity_preview_display(entity)
         results.append(EntityAutocompleteItem(
             id=entity.id,
             display=display,
             type_id=entity.user_defined_model_type_id,
         ))
+        if len(results) >= 50:
+            break
     return results
 
 
@@ -1217,6 +1278,12 @@ def migration_preview(
         entity = UserDefinedModelEntity.objects.select_related("config_version").get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
         return JsonResponse({"detail": "Not found"}, status=404)
+
+    # Migration rewrites the entity's field values, so it is a write to the
+    # entity: gate on the "save" allow decision before reading its fields or
+    # creating the migration record.
+    if not _policy_allows(entity, request.user, "save"):
+        return JsonResponse({"detail": "Not allowed"}, status=403)
 
     if target_version:
         try:
@@ -1289,6 +1356,9 @@ def execute_migration(request, entity_id: uuid.UUID, payload: MigrationExecuteIn
         entity = UserDefinedModelEntity.objects.get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
         return JsonResponse({"detail": "Not found"}, status=404)
+    # Migration is a write to the entity: gate on the "save" allow decision.
+    if not _policy_allows(entity, request.user, "save"):
+        return JsonResponse({"detail": "Not allowed"}, status=403)
     try:
         migration = UserDefinedModelEntityMigration.objects.select_related(
             "target_version", "target_user_defined_model_type"
@@ -1347,7 +1417,7 @@ def execute_migration(request, entity_id: uuid.UUID, payload: MigrationExecuteIn
         migration.executed_by = request.user
         migration.save(update_fields=["executed_at", "executed_by"])
 
-    return _entity_out(entity)
+    return _entity_out_for_user(entity, request.user)
 
 
 # ─── Bulk migration ───────────────────────────────────────────────────────────
@@ -1360,8 +1430,8 @@ def bulk_migration_preview(
     type_filter_id: Optional[uuid.UUID] = None,
 ):
     from userdefinedmodel.models import ConfigVersion, UserDefinedModelEntity
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.view_bulkmigrationplan"):
+        return denied
     try:
         src = ConfigVersion.objects.get(id=source_version_id)
         tgt = ConfigVersion.objects.get(id=target_version_id)
@@ -1380,8 +1450,8 @@ def bulk_migration_preview(
 @api.post("/bulk-migrations/", response={201: BulkMigrationOut}, auth=django_auth)
 def create_bulk_migration(request, payload: BulkMigrationCreateIn):
     from userdefinedmodel.models import ConfigVersion, UserDefinedModelType, BulkMigrationPlan, BulkMigrationFieldMapping
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.add_bulkmigrationplan"):
+        return denied
     try:
         src = ConfigVersion.objects.get(id=payload.source_version_id)
         tgt = ConfigVersion.objects.get(id=payload.target_version_id)
@@ -1427,6 +1497,8 @@ def create_bulk_migration(request, payload: BulkMigrationCreateIn):
 @api.get("/bulk-migrations/{plan_id}/", response=BulkMigrationOut, auth=django_auth)
 def get_bulk_migration(request, plan_id: uuid.UUID):
     from userdefinedmodel.models import BulkMigrationPlan
+    if denied := _require_perms(request, "userdefinedmodel.view_bulkmigrationplan"):
+        return denied
     try:
         plan = BulkMigrationPlan.objects.get(id=plan_id)
     except BulkMigrationPlan.DoesNotExist:
@@ -1447,8 +1519,8 @@ def get_bulk_migration(request, plan_id: uuid.UUID):
 def execute_bulk_migration_plan(request, plan_id: uuid.UUID):
     from userdefinedmodel.models import BulkMigrationPlan
     from userdefinedmodel.tasks import execute_bulk_migration
-    if not request.user.is_staff:
-        return JsonResponse({"detail": "Staff only"}, status=403)
+    if denied := _require_perms(request, "userdefinedmodel.change_bulkmigrationplan"):
+        return denied
     try:
         plan = BulkMigrationPlan.objects.get(id=plan_id)
     except BulkMigrationPlan.DoesNotExist:

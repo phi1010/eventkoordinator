@@ -200,12 +200,9 @@ def _evaluate_save_policy(node, user, changed_fields: dict) -> list:
     import datetime as dt
     from userdefinedmodel.engine import evaluate_policy, get_udm_type_for_node, PolicyError
 
-    udm_type = get_udm_type_for_node(node)
-    if udm_type is None or not udm_type.type_policies.exists():
-        logger.debug(
-            "policy save skip node=%s: no udm_type or no policies", node.id
-        )
-        return []
+    # Default-deny: do NOT short-circuit when there is no policy. evaluate_policy
+    # returns allow=False for a node with no UDMType / no attached policies, so the
+    # allow check below raises PolicyError — a save requires an explicit grant.
 
     def _safe(v):
         if isinstance(v, decimal.Decimal):

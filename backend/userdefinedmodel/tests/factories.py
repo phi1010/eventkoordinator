@@ -33,7 +33,19 @@ class UserFactory(DjangoModelFactory):
 
 
 class StaffUserFactory(UserFactory):
+    """Admin user that manages configs/types/policies. The API authorizes these
+    operations against explicit Django model permissions (not is_staff), so grant
+    every userdefinedmodel permission here."""
     is_staff = True
+
+    @factory.post_generation
+    def grant_udm_perms(obj, create, extracted, **kwargs):
+        if not create:
+            return
+        from django.contrib.auth.models import Permission
+        obj.user_permissions.add(
+            *Permission.objects.filter(content_type__app_label="userdefinedmodel")
+        )
 
 
 # ─── FieldConfig ─────────────────────────────────────────────────────────────
@@ -207,6 +219,20 @@ class UserDefinedModelTypeFactory(DjangoModelFactory):
     description = ""
     field_config = None
 
+    @factory.post_generation
+    def policy(obj, create, extracted, **kwargs):
+        """Attach a policy so the default-deny engine permits operations on this
+        type. Defaults to allow-all; pass policy=<rego source> for a custom policy,
+        or policy=False to leave the type policy-less (i.e. deny everything)."""
+        if not create or extracted is False:
+            return
+        from userdefinedmodel.models import Policy, UserDefinedModelTypePolicy
+        source = extracted if isinstance(extracted, str) else ALLOW_ALL_POLICY
+        policy = Policy.objects.create(slug=f"type-policy-{obj.id}", source=source)
+        UserDefinedModelTypePolicy.objects.create(
+            user_defined_model_type=obj, policy=policy, sort_order=0
+        )
+
 
 # ─── Entity nodes ─────────────────────────────────────────────────────────────
 
@@ -304,9 +330,13 @@ def make_full_workflow(version=None):
     return wf, draft, submitted, trans
 
 
-def make_entity_with_type(owner=None, policy_source=None):
+def make_entity_with_type(owner=None, policy_source=ALLOW_ALL_POLICY):
     """
-    Create a complete entity with UDMType, published config, and optionally a policy.
+    Create a complete entity with UDMType, published config, and a policy.
+
+    Defaults to an allow-all policy so the default-deny engine permits operations.
+    Pass an explicit policy_source for custom rules, or policy_source=None to leave
+    the type policy-less (deny everything).
 
     Returns: (entity, udm_type, version, config)
     """
