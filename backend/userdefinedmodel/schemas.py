@@ -422,8 +422,6 @@ class EntityOut(Schema):
     id: uuid.UUID
     config_version_id: uuid.UUID
     user_defined_model_type_id: Optional[uuid.UUID]
-    owner: Optional[UserRefOut]
-    editors: list[UserRefOut]
     field_values: list[FieldValueOut]
     children: dict[str, list[Any]]
     overflow_data: dict[str, Any]

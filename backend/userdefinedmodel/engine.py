@@ -25,6 +25,97 @@ logger = logging.getLogger(__name__)
 _UNDEFINED = "<undefined>"
 
 
+# ─── User / group serialisation helpers ──────────────────────────────────────
+
+def _serialize_user(user, *, include_group_members: bool = True) -> dict:
+    """Return a rich user dict for the Rego input document.
+
+    When include_group_members=True each group entry also contains a 'members'
+    list (users without their own recursive group members, to cap depth at 2).
+    """
+    groups = []
+    for g in user.groups.all():
+        entry: dict = {"id": g.id, "name": g.name}
+        if include_group_members:
+            entry["members"] = [
+                _serialize_user(m, include_group_members=False)
+                for m in g.user_set.prefetch_related("groups").all()
+            ]
+        groups.append(entry)
+    return {
+        "id": str(user.id),
+        "username": user.username,
+        "email": user.email,
+        "phone_number": user.phone_number,
+        "is_active": user.is_active,
+        "is_staff": user.is_staff,
+        "groups": groups,
+    }
+
+
+def _serialize_group(group) -> dict:
+    """Return a rich group dict for the Rego input document, including members."""
+    return {
+        "id": group.id,
+        "name": group.name,
+        "members": [
+            _serialize_user(m, include_group_members=True)
+            for m in group.user_set.prefetch_related("groups").all()
+        ],
+    }
+
+
+def _expand_fields(fields_data: dict) -> None:
+    """Expand user_select / group_select values from raw PKs to rich objects, in-place."""
+    from openid_user_management.models import OpenIDUser
+    from django.contrib.auth.models import Group
+
+    # Collect IDs first for batch loading
+    user_ids = []
+    group_ids = []
+    for entry in fields_data.values():
+        dt = entry.get("data_type")
+        val = entry.get("value")
+        if val is None:
+            continue
+        if dt == "user_select":
+            user_ids.append(val)
+        elif dt == "user_select_multi" and isinstance(val, list):
+            user_ids.extend(val)
+        elif dt == "group_select":
+            group_ids.append(int(val))
+        elif dt == "group_select_multi" and isinstance(val, list):
+            group_ids.extend(int(v) for v in val)
+
+    users = {}
+    if user_ids:
+        for u in OpenIDUser.objects.prefetch_related("groups__user_set__groups").filter(id__in=user_ids):
+            users[str(u.id)] = u
+
+    groups = {}
+    if group_ids:
+        for g in Group.objects.prefetch_related("user_set__groups").filter(id__in=group_ids):
+            groups[g.id] = g
+
+    for entry in fields_data.values():
+        dt = entry.get("data_type")
+        val = entry.get("value")
+        if val is None:
+            continue
+        if dt == "user_select":
+            u = users.get(str(val))
+            if u:
+                entry["value"] = _serialize_user(u)
+        elif dt == "user_select_multi" and isinstance(val, list):
+            entry["value"] = [_serialize_user(users[str(v)]) for v in val if str(v) in users]
+        elif dt == "group_select":
+            g = groups.get(int(val))
+            if g:
+                entry["value"] = _serialize_group(g)
+        elif dt == "group_select_multi" and isinstance(val, list):
+            entry["value"] = [_serialize_group(groups[int(v)]) for v in val if int(v) in groups]
+
+
 # ─── Policy evaluation (§16) ──────────────────────────────────────────────────
 
 def build_policy_input(node: "UserDefinedModelEntityNode", user: "OpenIDUser", action: str, **kwargs) -> dict:
@@ -37,14 +128,14 @@ def build_policy_input(node: "UserDefinedModelEntityNode", user: "OpenIDUser", a
     policy_doc = node.to_policy_document()
     logger.debug("build_policy_input node=%s action=%s user=%s", node.id, action, user.username)
 
-    user_doc = {
-        "id": str(user.id),
-        "username": user.username,
-        "is_active": user.is_active,
-        "is_staff": user.is_staff,
-        "groups": list(user.groups.values("id", "name")),
-        "permissions": list(user.user_permissions.values_list("codename", flat=True)),
-    }
+    user_doc = _serialize_user(user, include_group_members=True)
+    user_doc["permissions"] = list(user.user_permissions.values_list("codename", flat=True))
+
+    # Expand user_select / group_select field values to rich objects
+    _expand_fields(policy_doc.get("fields", {}))
+    for child_list in policy_doc.get("children", {}).values():
+        for child_doc in child_list:
+            _expand_fields(child_doc.get("fields", {}))
 
     input_doc = {
         "action": action,

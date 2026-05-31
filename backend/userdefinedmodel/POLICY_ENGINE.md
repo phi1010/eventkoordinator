@@ -54,14 +54,6 @@ Built by `UserDefinedModelEntityNode.to_policy_document()`.
   "config_version_id": "<uuid>",
   "config_id": "<uuid>",
   "type_id": "<uuid | null>",
-  "owner": {
-    "id": "<uuid>",
-    "username": "<string>",
-    "is_active": true
-  },
-  "editors": [
-    { "id": "<uuid>", "username": "<string>" }
-  ],
   "fields": { /* FieldsMap — see §3.3 */ },
   "children": { /* ChildrenMap — see §3.4 */ },
   "overflow_data": { /* arbitrary JSON from archived fields */ },
@@ -70,15 +62,13 @@ Built by `UserDefinedModelEntityNode.to_policy_document()`.
 }
 ```
 
-`owner` is `null` when no owner is set. `editors` is `[]` when empty.
-
 ### 3.2 Submodel node
 
 When the policy engine recurses into a child node (submodel), `to_policy_document()` is also called on the
 child. The child document has the same shape except:
 
 - `type` is `"submodel:<parent_field_slug>"` instead of `"entity"`.
-- `type_id`, `owner`, and `editors` are `null` / `[]` — these are only set on root entities.
+- `type_id` is `null` — this is only set on root entities.
 
 ### 3.3 FieldsMap (`input.entity.fields`)
 
@@ -333,20 +323,12 @@ allow if {
     input.user.is_staff
 }
 
-# Allow the entity owner to view and save
+# Everyone may view and browse
 allow if {
-    input.action in {"view", "browse", "save"}
-    input.user.id == input.entity.owner.id
+    input.action in {"view", "browse"}
 }
 
-# Everyone in the "reviewers" group may view
-allow if {
-    input.action == "view"
-    some g in input.user.groups
-    g.name == "reviewers"
-}
-
-# Restrict which fields editors can modify
+# Restrict which fields non-staff users can modify
 editable_fields := ["title", "description"] if {
     input.action == "save"
     not input.user.is_staff

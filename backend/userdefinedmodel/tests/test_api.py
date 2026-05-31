@@ -280,30 +280,23 @@ class EntityCRUDTests(BaseAPITest):
         self.assertEqual(data["id"], str(entity.id))
 
     def test_delete_entity_allowed_by_policy(self):
-        # Deletion is authorized by the entity's policy ("delete" action), not by
-        # owner/staff status. REGO_OWNER_EDIT grants delete to the owner.
-        owner = UserFactory()
-        entity, udm_type, version, config = make_entity_with_type(
-            owner=owner, policy_source=REGO_OWNER_EDIT,
-        )
-        resp = self.delete(f"/entities/{entity.id}/", user=owner)
+        # Deletion is authorized by the entity's policy ("delete" action).
+        # REGO_OWNER_EDIT grants delete to staff.
+        entity, udm_type, version, config = make_entity_with_type(policy_source=REGO_OWNER_EDIT)
+        resp = self.delete(f"/entities/{entity.id}/", user=self.staff)
         self.assertEqual(resp.status_code, 204)
 
     def test_delete_entity_denied_by_policy(self):
-        # A non-owner is denied delete by REGO_OWNER_EDIT.
-        entity, udm_type, version, config = make_entity_with_type(
-            owner=UserFactory(), policy_source=REGO_OWNER_EDIT,
-        )
-        non_owner = UserFactory()
-        resp = self.delete(f"/entities/{entity.id}/", user=non_owner)
+        # A non-staff user is denied delete by REGO_OWNER_EDIT.
+        entity, udm_type, version, config = make_entity_with_type(policy_source=REGO_OWNER_EDIT)
+        non_staff = UserFactory()
+        resp = self.delete(f"/entities/{entity.id}/", user=non_staff)
         self.assertEqual(resp.status_code, 403)
 
     def test_delete_entity_no_policy_denied(self):
-        # Default-deny: a type with no policy attached grants nothing, so even the
-        # owner cannot delete.
-        owner = UserFactory()
-        entity, udm_type, version, config = make_entity_with_type(owner=owner, policy_source=None)
-        resp = self.delete(f"/entities/{entity.id}/", user=owner)
+        # Default-deny: a type with no policy attached grants nothing.
+        entity, udm_type, version, config = make_entity_with_type(policy_source=None)
+        resp = self.delete(f"/entities/{entity.id}/", user=self.staff)
         self.assertEqual(resp.status_code, 403)
 
     def test_entity_not_found(self):
@@ -319,7 +312,7 @@ class EntityPatchTests(BaseAPITest):
         config, self.version, self.field, self.lang = make_simple_config(data_type="text_short")
         self.udm_type = UserDefinedModelTypeFactory(field_config=config)
         self.entity = UserDefinedModelEntityFactory(
-            config_version=self.version, user_defined_model_type=self.udm_type, owner=self.staff
+            config_version=self.version, user_defined_model_type=self.udm_type
         )
 
     def test_patch_scalar_field(self):
@@ -387,7 +380,7 @@ class ValidationRuleTests(BaseAPITest):
         config, version, field, lang = make_simple_config(required=False)
         RequiredRule.objects.create(field=field, applies_to_save=True)
         udm_type = UserDefinedModelTypeFactory(field_config=config)
-        entity = UserDefinedModelEntityFactory(config_version=version, user_defined_model_type=udm_type, owner=self.staff)
+        entity = UserDefinedModelEntityFactory(config_version=version, user_defined_model_type=udm_type)
 
         resp = self.patch(f"/entities/{entity.id}/", {
             "changed_fields": {"content": None}
@@ -401,7 +394,7 @@ class ValidationRuleTests(BaseAPITest):
         config, version, field, lang = make_simple_config(required=False)
         RegexRule.objects.create(field=field, applies_to_save=True, pattern=r"^\d+$", failure_message="Digits only")
         udm_type = UserDefinedModelTypeFactory(field_config=config)
-        entity = UserDefinedModelEntityFactory(config_version=version, user_defined_model_type=udm_type, owner=self.staff)
+        entity = UserDefinedModelEntityFactory(config_version=version, user_defined_model_type=udm_type)
         # Store a valid value first
         from userdefinedmodel.models import FieldValue
         FieldValue.objects.create(node=entity, field=field, language="", value_text="123")
@@ -424,7 +417,7 @@ class ValidationRuleTests(BaseAPITest):
         FieldDefinitionTranslationFactory(field=field)
 
         udm_type = UserDefinedModelTypeFactory(field_config=config)
-        entity = UserDefinedModelEntityFactory(config_version=version, user_defined_model_type=udm_type, owner=self.staff)
+        entity = UserDefinedModelEntityFactory(config_version=version, user_defined_model_type=udm_type)
 
         from userdefinedmodel.models import FieldValue
         FieldValue.objects.create(node=entity, field=field, language="", value_decimal=Decimal("5"))
@@ -445,7 +438,6 @@ class WorkflowTransitionTests(BaseAPITest):
         self.entity = UserDefinedModelEntityFactory(
             config_version=self.version,
             user_defined_model_type=self.udm_type,
-            owner=self.staff,
         )
         # Materialize defaults to set initial workflow state
         self.entity.materialize_defaults()
@@ -551,7 +543,7 @@ class PolicyEnforcementTests(BaseAPITest):
     def test_rego_deny_blocks_transition(self):
         """A policy that denies transition blocks it."""
         entity, udm_type, version, config = make_entity_with_type(
-            owner=self.staff, policy_source=REGO_BLOCK_SUBMIT_IF_TITLE_EMPTY
+            policy_source=REGO_BLOCK_SUBMIT_IF_TITLE_EMPTY
         )
         wf, draft, submitted, trans = make_full_workflow()
         add_workflow_field(version, wf, slug="status")
@@ -565,7 +557,7 @@ class PolicyEnforcementTests(BaseAPITest):
     def test_rego_allow_passes_transition(self):
         """Policy passes when required field is filled."""
         entity, udm_type, version, config = make_entity_with_type(
-            owner=self.staff, policy_source=REGO_BLOCK_SUBMIT_IF_TITLE_EMPTY
+            policy_source=REGO_BLOCK_SUBMIT_IF_TITLE_EMPTY
         )
         wf, draft, submitted, trans = make_full_workflow()
         add_workflow_field(version, wf, slug="status")
@@ -605,7 +597,7 @@ messages contains msg if {
             FieldValue, Policy, UserDefinedModelTypePolicy,
         )
         entity, udm_type, version, config = make_entity_with_type(
-            owner=self.staff, policy_source=CROSS_WORKFLOW_POLICY
+            policy_source=CROSS_WORKFLOW_POLICY
         )
 
         # Workflow A: status
@@ -641,7 +633,7 @@ class EditHistoryTests(BaseAPITest):
         config, self.version, self.field, self.lang = make_simple_config()
         self.udm_type = UserDefinedModelTypeFactory(field_config=config)
         self.entity = UserDefinedModelEntityFactory(
-            config_version=self.version, user_defined_model_type=self.udm_type, owner=self.staff
+            config_version=self.version, user_defined_model_type=self.udm_type
         )
 
     def test_patch_creates_history(self):
@@ -741,7 +733,7 @@ class LocalizedFieldTests(BaseAPITest):
         FieldDefinitionTranslation.objects.create(field=self.field, language="en", label="Abstract")
         self.udm_type = UserDefinedModelTypeFactory(name="Localized Type", field_config=self.config)
         self.entity = UserDefinedModelEntityFactory(
-            config_version=self.version, user_defined_model_type=self.udm_type, owner=self.staff
+            config_version=self.version, user_defined_model_type=self.udm_type
         )
 
     def test_patch_localized_field(self):
@@ -815,7 +807,7 @@ class SubmodelTests(BaseAPITest):
 
         self.udm_type = UserDefinedModelTypeFactory(name="Submodel Type", field_config=self.config)
         self.entity = UserDefinedModelEntityFactory(
-            config_version=self.version, user_defined_model_type=self.udm_type, owner=self.staff
+            config_version=self.version, user_defined_model_type=self.udm_type
         )
 
     def test_create_submodel_via_patch(self):
@@ -881,7 +873,7 @@ class MigrationTests(BaseAPITest):
     def test_migration_preview(self):
         config, version, field, lang = make_simple_config()
         udm_type = UserDefinedModelTypeFactory(field_config=config)
-        entity = UserDefinedModelEntityFactory(config_version=version, user_defined_model_type=udm_type, owner=self.staff)
+        entity = UserDefinedModelEntityFactory(config_version=version, user_defined_model_type=udm_type)
 
         # Create a second version (use a separate config to avoid unique_published_per_config violation)
         from userdefinedmodel.models import ConfigVersion, FieldDefinition, FieldDefinitionTranslation, FieldConfig, ConfigLanguage
@@ -914,7 +906,7 @@ class MigrationTests(BaseAPITest):
         new_field = FieldDefinition.objects.create(version=v_pub, slug="new_name", data_type="text_short", sort_order=0)
         FieldDefinitionTranslation.objects.create(field=new_field, language="en", label="New")
         udm_type = UserDefinedModelTypeFactory(name="Renamed Type", field_config=config)
-        entity = UserDefinedModelEntityFactory(config_version=v_old, user_defined_model_type=udm_type, owner=self.staff)
+        entity = UserDefinedModelEntityFactory(config_version=v_old, user_defined_model_type=udm_type)
         fv = FieldValue(node=entity, field=old_field, language="")
         fv.set_value("hello", field=old_field)
         fv.save()
@@ -1048,7 +1040,7 @@ class ConcurrentWriteTests(TransactionTestCase):
         config, version, field, lang = make_simple_config()
         udm_type = UserDefinedModelTypeFactory(field_config=config)
         entity = UserDefinedModelEntityFactory(
-            config_version=version, user_defined_model_type=udm_type, owner=self.staff
+            config_version=version, user_defined_model_type=udm_type
         )
 
         import threading
@@ -1221,17 +1213,17 @@ class EntityViewPolicyTests(BaseAPITest):
     field filtering)."""
 
     def test_get_entity_denied_by_view_policy_returns_404(self):
-        entity, *_ = make_entity_with_type(owner=self.user, policy_source=REGO_DENY_ALL)
+        entity, *_ = make_entity_with_type(policy_source=REGO_DENY_ALL)
         resp = self.get(f"/entities/{entity.id}/", user=self.user)
         self.assertEqual(resp.status_code, 404)
 
     def test_get_entity_allowed_by_view_policy(self):
-        entity, *_ = make_entity_with_type(owner=self.user, policy_source=REGO_OWNER_EDIT)
+        entity, *_ = make_entity_with_type(policy_source=REGO_OWNER_EDIT)
         resp = self.get(f"/entities/{entity.id}/", user=self.user)
         self.assertEqual(resp.status_code, 200)
 
     def test_history_denied_by_view_policy_returns_404(self):
-        entity, *_ = make_entity_with_type(owner=self.user, policy_source=REGO_DENY_ALL)
+        entity, *_ = make_entity_with_type(policy_source=REGO_DENY_ALL)
         resp = self.get(f"/entities/{entity.id}/history/", user=self.user)
         self.assertEqual(resp.status_code, 404)
 
@@ -1253,18 +1245,18 @@ class EngineDenyByDefaultTests(BaseAPITest):
 
     def test_unmatched_allow_rule_denies(self):
         from userdefinedmodel.engine import evaluate_policy
-        # REGO_OWNER_EDIT only grants delete to owner/staff; a stranger matches no
+        # REGO_OWNER_EDIT only grants delete to staff; a non-staff user matches no
         # clause, so allow is undefined and must evaluate to False.
-        entity, *_ = make_entity_with_type(owner=self.user, policy_source=REGO_OWNER_EDIT)
-        stranger = UserFactory()
-        self.assertFalse(evaluate_policy(entity, stranger, "delete")["allow"])
-        # The owner still passes the positive clause.
-        self.assertTrue(evaluate_policy(entity, self.user, "delete")["allow"])
+        entity, *_ = make_entity_with_type(policy_source=REGO_OWNER_EDIT)
+        non_staff = UserFactory()
+        self.assertFalse(evaluate_policy(entity, non_staff, "delete")["allow"])
+        # Staff passes the positive clause.
+        self.assertTrue(evaluate_policy(entity, self.staff, "delete")["allow"])
 
     def test_no_policy_denies_every_action(self):
         from userdefinedmodel.engine import evaluate_policy
         # A type with no policy attached grants nothing for any action.
-        entity, *_ = make_entity_with_type(owner=self.user, policy_source=None)
+        entity, *_ = make_entity_with_type(policy_source=None)
         for action in ("view", "browse", "save", "delete", "transition"):
             out = evaluate_policy(entity, self.user, action)
             self.assertFalse(out["allow"], f"{action} should be denied")

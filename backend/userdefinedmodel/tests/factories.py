@@ -173,27 +173,19 @@ import rego.v1
 allow := true
 """
 
-# Owner/editor edit policy
-OWNER_EDITOR_POLICY = """
+# Staff-only edit policy
+STAFF_EDIT_POLICY = """
 package udm
 
 import rego.v1
 
 allow if {
-    input.action in {"view", "edit", "save", "create", "delete", "browse"}
-    user_is_participant
+    input.action in {"view", "browse"}
 }
 
 allow if {
+    input.action in {"edit", "save", "create", "delete"}
     input.user.is_staff
-}
-
-user_is_participant if {
-    input.entity.owner.id == input.user.id
-}
-user_is_participant if {
-    some editor in input.entity.editors
-    editor.id == input.user.id
 }
 """
 
@@ -240,7 +232,6 @@ class UserDefinedModelEntityFactory(DjangoModelFactory):
 
     config_version = factory.SubFactory(PublishedConfigVersionFactory)
     user_defined_model_type = factory.SubFactory(UserDefinedModelTypeFactory)
-    owner = factory.SubFactory(UserFactory)
     overflow_data = {}
 
 
@@ -342,7 +333,7 @@ def add_workflow_field(version, workflow, slug="status"):
     return field
 
 
-def make_entity_with_type(owner=None, policy_source=ALLOW_ALL_POLICY):
+def make_entity_with_type(policy_source=ALLOW_ALL_POLICY):
     """
     Create a complete entity with UDMType, published config, and a policy.
 
@@ -358,9 +349,6 @@ def make_entity_with_type(owner=None, policy_source=ALLOW_ALL_POLICY):
         Policy, UserDefinedModelTypePolicy,
     )
 
-    if owner is None:
-        owner = UserFactory()
-
     config = FieldConfig.objects.create(name="Entity Config")
     ConfigLanguage.objects.create(config=config, code="en", label="English", is_default=True)
     version = ConfigVersion.objects.create(config=config, status="published")
@@ -370,7 +358,7 @@ def make_entity_with_type(owner=None, policy_source=ALLOW_ALL_POLICY):
     udm_type = UserDefinedModelType.objects.create(name="Test Type", field_config=config)
 
     entity = UserDefinedModelEntity.objects.create(
-        config_version=version, user_defined_model_type=udm_type, owner=owner,
+        config_version=version, user_defined_model_type=udm_type,
     )
 
     if policy_source:
@@ -411,10 +399,6 @@ allow if {
 
 allow if {
     input.action in {"edit", "save", "create", "delete"}
-    input.entity.owner.id == input.user.id
-}
-
-allow if {
     input.user.is_staff
 }
 """

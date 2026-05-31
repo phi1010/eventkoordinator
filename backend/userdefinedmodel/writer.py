@@ -57,8 +57,6 @@ def serialize_node(node: "UserDefinedModelEntityNode") -> dict:
         "id": str(node.id),
         "config_version_id": str(node.config_version_id),
         "user_defined_model_type_id": None,
-        "owner": None,
-        "editors": [],
         "field_values": field_values,
         "children": children,
         "overflow_data": node.overflow_data,
@@ -69,14 +67,6 @@ def serialize_node(node: "UserDefinedModelEntityNode") -> dict:
     try:
         entity = node.userdefinedmodelentity
         result["user_defined_model_type_id"] = str(entity.user_defined_model_type_id) if entity.user_defined_model_type_id else None
-        result["owner"] = {
-            "id": str(entity.owner_id),
-            "display_name": entity.owner.username if entity.owner else "",
-        } if entity.owner_id else None
-        result["editors"] = [
-            {"id": str(e.id), "display_name": e.username}
-            for e in entity.editors.all()
-        ]
     except UserDefinedModelEntity.DoesNotExist:
         pass
 

@@ -190,8 +190,6 @@ class UserDefinedModelEntityNode(MetaBase):
             "config_version_id": str(self.config_version_id),
             "config_id": str(self.config_version.config_id),
             "type_id": None,
-            "owner": None,
-            "editors": [],
             "fields": fields_data,
             "children": children_data,
             "overflow_data": self.overflow_data,
@@ -203,21 +201,27 @@ class UserDefinedModelEntityNode(MetaBase):
         try:
             entity = self.userdefinedmodelentity
             doc["type_id"] = str(entity.user_defined_model_type_id) if entity.user_defined_model_type_id else None
-            doc["owner"] = {
-                "id": str(entity.owner_id),
-                "username": entity.owner.username if entity.owner else "",
-                "is_active": entity.owner.is_active if entity.owner else False,
-            } if entity.owner_id else None
-            doc["editors"] = [
-                {"id": str(e.id), "username": e.username}
-                for e in entity.editors.all()
-            ]
         except UserDefinedModelEntity.DoesNotExist:
             # Submodel — label with parent field slug
             if self.parent_field:
                 doc["type"] = f"submodel:{self.parent_field.slug}"
 
         return doc
+
+    def materialize_user_defaults(self, user) -> None:
+        """Set user_select / user_select_multi fields that have default_current_user=true in type_config."""
+        for field in self.config_version.field_definitions.filter(
+            data_type__in=("user_select", "user_select_multi")
+        ):
+            if not (field.type_config or {}).get("default_current_user"):
+                continue
+            fv, created = FieldValue.objects.get_or_create(node=self, field=field, language="")
+            if created:
+                if field.data_type == "user_select_multi":
+                    fv.set_value([str(user.id)], field=field)
+                else:
+                    fv.set_value(user.id, field=field)
+                fv.save()
 
     def materialize_defaults(self):
         from userdefinedmodel.models.config import FieldDefaultValue, FieldDefinition, SlugIdSequence
@@ -274,18 +278,6 @@ class UserDefinedModelEntity(UserDefinedModelEntityNode):
         null=True,
         blank=True,
         related_name="entities",
-    )
-    owner = models.ForeignKey(
-        "openid_user_management.OpenIDUser",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="owned_entities",
-    )
-    editors = models.ManyToManyField(
-        "openid_user_management.OpenIDUser",
-        blank=True,
-        related_name="edited_entities",
     )
 
     def __str__(self):

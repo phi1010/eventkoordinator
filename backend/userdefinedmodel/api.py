@@ -1012,9 +1012,10 @@ def create_entity(request, payload: EntityCreateIn):
         return JsonResponse({"detail": "No published config version"}, status=400)
     with transaction.atomic():
         entity = UserDefinedModelEntity.objects.create(
-            config_version=version, user_defined_model_type=udm_type, owner=request.user,
+            config_version=version, user_defined_model_type=udm_type,
         )
         entity.materialize_defaults()
+        entity.materialize_user_defaults(request.user)
     return 201, _entity_out_for_user(entity, request.user)
 
 
@@ -1024,8 +1025,8 @@ def get_entity(request, entity_id: uuid.UUID):
     from userdefinedmodel.engine import evaluate_policy
     try:
         entity = UserDefinedModelEntity.objects.select_related(
-            "config_version", "user_defined_model_type", "owner"
-        ).prefetch_related("editors", "field_values__field", "children").get(id=entity_id)
+            "config_version", "user_defined_model_type"
+        ).prefetch_related("field_values__field", "children").get(id=entity_id)
     except UserDefinedModelEntity.DoesNotExist:
         return JsonResponse({"detail": "Not found"}, status=404)
     # Object-level view authorization: the policy "view" allow decision gates
