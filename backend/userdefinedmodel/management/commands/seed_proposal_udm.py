@@ -125,14 +125,17 @@ class Command(BaseCommand):
 
             _create_field(
                 review_draft, "author", FieldDefinition.DataType.USER_SELECT, 0, "Author",
-                type_config={"default_current_user": True},
+                type_config={"default_current_user": True}, is_preview=True,
             )
             _create_field(
                 review_draft, "vote", FieldDefinition.DataType.SELECT_SINGLE, 1, "Vote",
                 type_config={"choices": ["accept", "request_changes", "reject"]},
                 is_preview=True,
             )
-            _create_field(review_draft, "comment", FieldDefinition.DataType.TEXT_LONG, 2, "Comment")
+            _create_field(
+                review_draft, "comment", FieldDefinition.DataType.TEXT_LONG, 2, "Comment",
+                is_preview=True,
+            )
 
             if publish:
                 review_draft.publish()

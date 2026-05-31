@@ -167,12 +167,27 @@ function getChildFieldValue(child: LocalChild, slug: string, lang = ''): unknown
   return fv?.value ?? null
 }
 
+function resolvePreviewValue(fd: FieldDefinitionOut, val: unknown, nameMap: Record<string, string>): string | null {
+  if (val === null || val === undefined || val === '') return null
+  const dt = fd.data_type
+  if (dt === 'user_select' || dt === 'group_select') {
+    return nameMap[String(val)] ?? String(val)
+  }
+  if (dt === 'user_select_multi' || dt === 'group_select_multi') {
+    const ids = Array.isArray(val) ? (val as unknown[]) : [val]
+    if (ids.length === 0) return null
+    return ids.map(id => nameMap[String(id)] ?? String(id)).join(', ')
+  }
+  return String(val)
+}
+
 function buildPreviewLabel(
   subFields: FieldDefinitionOut[],
   fieldValues: Array<{ field_slug: string; language: string; value: unknown }>,
   dirty: Record<string, unknown>,
   uiLang: string,
   fallback: string,
+  nameMap: Record<string, string> = {},
 ): string {
   const previewFields = subFields.filter(f => f.is_preview)
   if (previewFields.length === 0) return fallback
@@ -193,7 +208,8 @@ function buildPreviewLabel(
     } else {
       val = fieldValues.find(v => v.field_slug === fd.slug && v.language === '')?.value
     }
-    if (val !== null && val !== undefined && val !== '') parts.push(String(val))
+    const resolved = resolvePreviewValue(fd, val, nameMap)
+    if (resolved !== null) parts.push(resolved)
   }
   return parts.length > 0 ? parts.join(' · ') : fallback
 }
@@ -208,15 +224,16 @@ interface SubmodelChildCardProps {
   onDelete: () => void
   subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
+  nameMap?: Record<string, string>
 }
 
-function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, subFieldSeverities, subFieldMessages }: SubmodelChildCardProps) {
+function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, subFieldSeverities, subFieldMessages, nameMap = {} }: SubmodelChildCardProps) {
   const hasHighlightedFields = Object.keys(subFieldSeverities ?? {}).length > 0
   const [expanded, setExpanded] = useState(!item.id || hasHighlightedFields)
   const [activeLang, setActiveLang] = useState(subLanguages[0] ?? '')
   const fallbackLabel = item.id ? item.id.slice(0, 8) + '…' : 'New (unsaved)'
   const label = item.id
-    ? buildPreviewLabel(subFields, item.saved?.field_values ?? [], item.dirty, uiLang, fallbackLabel)
+    ? buildPreviewLabel(subFields, item.saved?.field_values ?? [], item.dirty, uiLang, fallbackLabel, nameMap)
     : fallbackLabel
 
   function handleFieldChange(slug: string, lang: string, val: unknown) {
@@ -451,6 +468,72 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey])
 
+  // ── Resolve user/group display names for preview fields ──────────────────
+  const [previewNameMap, setPreviewNameMap] = useState<Record<string, string>>({})
+
+  const previewUserGroupFields = useMemo(
+    () => subFields.filter(f => f.is_preview && (
+      f.data_type === 'user_select' || f.data_type === 'user_select_multi' ||
+      f.data_type === 'group_select' || f.data_type === 'group_select_multi'
+    )),
+    [subFields],
+  )
+
+  useEffect(() => {
+    if (previewUserGroupFields.length === 0) return
+
+    const userIds = new Set<string>()
+    const groupIds = new Set<string>()
+
+    function collect(values: Array<{ field_slug: string; language: string; value: unknown }>, dirty: Record<string, unknown>) {
+      for (const fd of previewUserGroupFields) {
+        const val = fd.slug in dirty
+          ? dirty[fd.slug]
+          : values.find(v => v.field_slug === fd.slug && v.language === '')?.value
+        const ids = Array.isArray(val) ? (val as unknown[]) : (val != null ? [val] : [])
+        const isUser = fd.data_type === 'user_select' || fd.data_type === 'user_select_multi'
+        for (const id of ids) {
+          const key = String(id)
+          if (!(key in previewNameMap)) {
+            if (isUser) userIds.add(key)
+            else groupIds.add(key)
+          }
+        }
+      }
+    }
+
+    if (isList) {
+      for (const item of items) collect(item.saved?.field_values ?? [], item.dirty)
+    } else {
+      collect(ownedChild?.field_values ?? [], selectDirty)
+    }
+
+    if (userIds.size === 0 && groupIds.size === 0) return
+
+    if (userIds.size > 0) {
+      udmSearchUsers('').then(users => {
+        setPreviewNameMap(prev => {
+          const next = { ...prev }
+          for (const u of users) if (userIds.has(u.id)) next[u.id] = u.display_name
+          return next
+        })
+      }).catch(() => {})
+    }
+    if (groupIds.size > 0) {
+      udmSearchGroups('').then(groups => {
+        setPreviewNameMap(prev => {
+          const next = { ...prev }
+          for (const g of groups) if (groupIds.has(String(g.id))) next[String(g.id)] = g.name
+          return next
+        })
+      }).catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isList ? items.map(it => it.key).join(',') : selectNodeId,
+    previewUserGroupFields,
+  ])
+
   // ── submodel_list UI ──
   if (isList) {
     const visible = items.filter(it => !(it.deleted && !it.id))
@@ -472,6 +555,7 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
             onDelete={() => deleteItem(item.key)}
             subFieldSeverities={subFieldSeverities}
             subFieldMessages={subFieldMessages}
+            nameMap={previewNameMap}
           />
         ))}
         {!disabled && (
@@ -570,6 +654,7 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
                 selectDirty,
                 uiLang,
                 `${selectNodeId?.slice(0, 8)}…`,
+                previewNameMap,
               )}
             </span>
             <div style={{ display: 'flex', gap: '0.4rem' }}>
@@ -675,27 +760,82 @@ function UserSelectInput({ value, onChange, disabled, fd }: FieldInputProps) {
   const groupIdsStr = Array.isArray(groupIds) ? (groupIds as number[]).join(',') : undefined
   const fetcher = useCallback((q: string) => udmSearchUsers(q, groupIdsStr), [groupIdsStr])
   const ac = useAutocomplete<UserAutocompleteItem>(fetcher)
+  const [highlightedIndex, setHighlightedIndex] = useState(-1)
+  const [nameMap, setNameMap] = useState<Record<string, string>>({})
+  const listboxId = useId()
 
   const currentIds: string[] = multi
     ? (Array.isArray(value) ? value as string[] : [])
     : (value ? [value as string] : [])
 
+  // Persist display names from search results
+  useEffect(() => {
+    if (ac.results.length === 0) return
+    setNameMap(prev => {
+      const next = { ...prev }
+      for (const u of ac.results) next[u.id] = u.display_name
+      return next
+    })
+  }, [ac.results])
+
+  // Fetch display names for pre-selected IDs not yet in the map
+  useEffect(() => {
+    const missing = currentIds.filter(id => !(id in nameMap))
+    if (missing.length === 0) return
+    udmSearchUsers('', groupIdsStr).then(users => {
+      setNameMap(prev => {
+        const next = { ...prev }
+        for (const u of users) next[u.id] = u.display_name
+        return next
+      })
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIds.join(',')])
+
+  // Reset highlight when results change
+  useEffect(() => { setHighlightedIndex(-1) }, [ac.results])
+
+  const filteredResults = ac.results.filter(u => !currentIds.includes(u.id))
+
   function selectItem(item: UserAutocompleteItem) {
+    setNameMap(prev => ({ ...prev, [item.id]: item.display_name }))
     if (multi) {
-      if (!currentIds.includes(item.id))
-        onChange([...currentIds, item.id])
+      if (!currentIds.includes(item.id)) onChange([...currentIds, item.id])
     } else {
       onChange(item.id)
     }
     ac.setQuery('')
     ac.setResults([])
     ac.setOpen(false)
+    setHighlightedIndex(-1)
   }
 
   function removeItem(id: string) {
     if (multi) onChange(currentIds.filter(x => x !== id))
     else onChange(null)
   }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlightedIndex(prev => Math.min(prev + 1, filteredResults.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlightedIndex(prev => Math.max(prev - 1, -1))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (highlightedIndex >= 0 && filteredResults[highlightedIndex]) {
+        selectItem(filteredResults[highlightedIndex])
+      } else if (filteredResults.length === 1) {
+        selectItem(filteredResults[0])
+      }
+    } else if (e.key === 'Escape') {
+      ac.setOpen(false)
+      setHighlightedIndex(-1)
+    }
+  }
+
+  const isOpen = ac.open && filteredResults.length > 0
 
   return (
     <div className={styles.autocompleteWrapper}>
@@ -704,33 +844,48 @@ function UserSelectInput({ value, onChange, disabled, fd }: FieldInputProps) {
           className={styles.input}
           value={ac.query}
           onChange={e => ac.search(e.target.value)}
-          onBlur={() => setTimeout(() => ac.setOpen(false), 150)}
+          onBlur={() => setTimeout(() => { ac.setOpen(false); setHighlightedIndex(-1) }, 150)}
+          onKeyDown={handleKeyDown}
           placeholder="Search users…"
           disabled={disabled}
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={highlightedIndex >= 0 ? `${listboxId}-${highlightedIndex}` : undefined}
         />
       )}
-      {ac.open && ac.results.length > 0 && (
-        <div className={styles.autocompleteDropdown}>
-          {ac.results.map(u => (
-            <div key={u.id} className={styles.autocompleteItem} onMouseDown={() => selectItem(u)}>
+      {isOpen && (
+        <ul
+          id={listboxId}
+          role="listbox"
+          className={styles.autocompleteDropdown}
+          style={{ listStyle: 'none', margin: 0, padding: 0 }}
+        >
+          {filteredResults.map((u, index) => (
+            <li
+              key={u.id}
+              id={`${listboxId}-${index}`}
+              role="option"
+              aria-selected={index === highlightedIndex}
+              className={`${styles.autocompleteItem}${index === highlightedIndex ? ` ${styles.autocompleteItemHighlighted}` : ''}`}
+              onMouseDown={() => selectItem(u)}
+              onMouseEnter={() => setHighlightedIndex(index)}
+            >
               {u.display_name}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
       <div className={styles.selectedTags}>
-        {currentIds.map(id => {
-          const found = ac.results.find(u => u.id === id)
-          const label = found ? found.display_name : id
-          return (
-            <span key={id} className={styles.selectedTag}>
-              {label}
-              {!disabled && (
-                <button type="button" className={styles.removeTag} onClick={() => removeItem(id)}>×</button>
-              )}
-            </span>
-          )
-        })}
+        {currentIds.map(id => (
+          <span key={id} className={styles.selectedTag}>
+            {nameMap[id] ?? id}
+            {!disabled && (
+              <button type="button" className={styles.removeTag} onClick={() => removeItem(id)}>×</button>
+            )}
+          </span>
+        ))}
       </div>
     </div>
   )
