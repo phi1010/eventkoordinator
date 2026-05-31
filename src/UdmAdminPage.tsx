@@ -23,6 +23,7 @@ import {
   udmSearchEntities,
   udmSearchUsers,
   udmEvalPolicy,
+  udmListWorkflows,
   type FieldConfigOut,
   type ConfigVersionOut,
   type FieldDefinitionIn,
@@ -34,6 +35,7 @@ import {
   type PolicyEvalOut,
   type EntityAutocompleteItem,
   type UserAutocompleteItem,
+  type WorkflowDefinitionOut,
 } from './apiUdm'
 import { usePermissions } from './usePermissions'
 import { BulkMigrationTab } from './UdmMigration'
@@ -48,7 +50,7 @@ const DATA_TYPES: DataType[] = [
   'select_single', 'select_multi', 'image', 'file',
   'user_select', 'user_select_multi', 'group_select', 'group_select_multi',
   'submodel_select', 'submodel_list', 'entity_select', 'entity_select_multi',
-  'slug_id',
+  'slug_id', 'workflow',
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -295,6 +297,41 @@ function SubmodelVersionPicker({ value, onChange, allConfigs }: SubmodelVersionP
   )
 }
 
+// ── Workflow Definition Picker ────────────────────────────────────────────────
+
+function WorkflowDefinitionPicker({ value, onChange }: { value: string | null; onChange: (id: string | null) => void }) {
+  const [workflows, setWorkflows] = useState<WorkflowDefinitionOut[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    udmListWorkflows().then(setWorkflows).catch(() => setWorkflows([])).finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
+      <label className={styles.label}>Workflow Definition * {loading && '(loading…)'}</label>
+      <select
+        className={styles.select}
+        value={value ?? ''}
+        onChange={e => onChange(e.target.value || null)}
+      >
+        <option value="">— select a workflow —</option>
+        {workflows.map(wf => (
+          <option key={wf.id} value={wf.id}>
+            {wf.name} ({wf.states.length} states, {wf.transitions.length} transitions)
+          </option>
+        ))}
+      </select>
+      {workflows.length === 0 && !loading && (
+        <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.25rem' }}>
+          No workflows found. Create one in the Workflow Editor first.
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Field Definition Editor ───────────────────────────────────────────────────
 
 interface FieldEditorProps {
@@ -308,7 +345,7 @@ interface FieldEditorProps {
 // Types that cannot have manual defaults (mirrors backend _NO_DEFAULT_TYPES + slug_id is auto)
 const NO_DEFAULT_TYPES = new Set<DataType>([
   'image', 'file', 'entity_select', 'entity_select_multi',
-  'submodel_select', 'submodel_list',
+  'submodel_select', 'submodel_list', 'workflow',
 ])
 
 // FK-based types where defaults require a live lookup — deferred to a future picker
@@ -509,6 +546,7 @@ function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: Field
                   setF({
                     data_type: dt,
                     submodel_config_version_id: isSubmodel ? field.submodel_config_version_id : null,
+                    workflow_definition_id: dt === 'workflow' ? (field.workflow_definition_id ?? null) : null,
                   })
                 }}>
                 {DATA_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -662,6 +700,14 @@ function FieldEditor({ field, onChange, onRemove, languages, allConfigs }: Field
                 />
               </div>
             )}
+
+            {/* Workflow definition — required for workflow type */}
+            {field.data_type === 'workflow' && (
+              <WorkflowDefinitionPicker
+                value={field.workflow_definition_id ?? null}
+                onChange={id => setF({ workflow_definition_id: id })}
+              />
+            )}
           </div>
 
           {/* Default value */}
@@ -747,6 +793,7 @@ function DraftEditor({ configId, languages, onSaved, allConfigs }: DraftEditorPr
       type_config: fd.type_config as Record<string, unknown>,
       default: fd.default ?? null,
       submodel_config_version_id: fd.submodel_config?.version_id ?? null,
+      workflow_definition_id: (fd as FieldDefinitionOut & { workflow_definition?: { id?: string } }).workflow_definition?.id ?? null,
       rules: [],
     }
   }

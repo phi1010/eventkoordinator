@@ -261,6 +261,7 @@ export type WorkflowOut = components['schemas']['WorkflowOut']
 export type WorkflowStateOut = components['schemas']['WorkflowStateOut']
 export type WorkflowTransitionOut = components['schemas']['WorkflowTransitionOut']
 export type WorkflowDefinitionIn = components['schemas']['WorkflowDefinitionIn']
+export type WorkflowDefinitionOut = components['schemas']['WorkflowDefinitionOut']
 export type DataType = components['schemas']['DataType']
 export type TransitionIn = components['schemas']['TransitionIn']
 export type EditHistoryOut = components['schemas']['EditHistoryOut']
@@ -538,13 +539,19 @@ export async function udmDeleteEntity(entityId: string): Promise<void> {
   if (error || !response.ok) throw new Error('Failed to delete entity')
 }
 
-export async function udmTransitionEntity(entityId: string, transition: string): Promise<EntityOut> {
+export async function udmTransitionEntity(entityId: string, field: string, transition: string): Promise<EntityOut> {
   const { data, error, response } = await udmClient.POST('/api/udm/entities/{entity_id}/transition/', {
     params: { path: { entity_id: entityId } },
-    body: { transition },
+    body: { field, transition },
   })
   if (error || !response.ok || !data) throwApiError(error, 'Transition failed')
   return data as EntityOut
+}
+
+export async function udmListWorkflows(): Promise<WorkflowDefinitionOut[]> {
+  const { data, error, response } = await udmClient.GET('/api/udm/workflows/', {})
+  if (error || !response.ok || !data) throw new Error('Failed to load workflows')
+  return data as WorkflowDefinitionOut[]
 }
 
 export async function udmEntityHistory(entityId: string, page = 1): Promise<EditHistoryOut> {

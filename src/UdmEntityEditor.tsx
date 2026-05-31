@@ -19,8 +19,8 @@ import {
   type EntityOut,
   type ConfigVersionOut,
   type FieldDefinitionOut,
-  type WorkflowStateOut,
   type WorkflowTransitionOut,
+  type WorkflowDefinitionOut,
   type EditHistoryOut,
   type UserAutocompleteItem,
   type GroupAutocompleteItem,
@@ -1280,6 +1280,81 @@ function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, 
   )
 }
 
+// ── Workflow field widget ─────────────────────────────────────────────────────
+
+interface WorkflowFieldWidgetProps {
+  fd: FieldDefinitionOut
+  entity: EntityOut
+  uiLang: string
+  onTransition: (fieldSlug: string, transitionName: string) => Promise<void>
+  transitioning: boolean
+}
+
+function WorkflowFieldWidget({ fd, entity, uiLang, onTransition, transitioning }: WorkflowFieldWidgetProps) {
+  const wfDef = (fd as FieldDefinitionOut & { workflow_definition?: WorkflowDefinitionOut | null }).workflow_definition
+  const fv = entity.field_values.find(v => v.field_slug === fd.slug)
+  const currentStateName = (fv?.value as string | null) ?? null
+
+  const label = getLang(fd.label as Record<string, string>, uiLang) || fd.slug
+  const helpText = getLang(fd.help_text as Record<string, string>, uiLang)
+
+  const currentState = wfDef?.states.find(s => s.name === currentStateName) ?? null
+  const stateLabel = currentState
+    ? getLang(currentState.label as Record<string, string>, uiLang) || currentStateName
+    : currentStateName
+
+  // Mirror engine.py transition gate exactly
+  const availableTransitions: WorkflowTransitionOut[] = (wfDef?.transitions ?? []).filter(t => {
+    if (t.from_undefined_only) return currentStateName === null
+    if (t.from_state !== null) return t.from_state === currentStateName
+    return true // from_state null, not from_undefined_only → always available
+  })
+
+  return (
+    <div className={styles.fieldGroup}>
+      <div className={styles.fieldHeader}>
+        <div>
+          <div className={styles.fieldLabel}>{label}</div>
+          <div className={styles.fieldSlug}>{fd.slug} · workflow</div>
+          {helpText && <div className={styles.fieldHelp}>{helpText}</div>}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <span style={{
+          display: 'inline-block',
+          padding: '0.2rem 0.6rem',
+          borderRadius: '4px',
+          fontSize: '0.85rem',
+          fontWeight: 600,
+          background: currentStateName ? '#dbeafe' : '#f1f5f9',
+          color: currentStateName ? '#1d4ed8' : '#64748b',
+          border: '1px solid',
+          borderColor: currentStateName ? '#93c5fd' : '#cbd5e1',
+        }}>
+          {stateLabel ?? '(no state)'}
+        </span>
+        {availableTransitions.map(t => {
+          const tLabel = getLang(t.label as Record<string, string>, uiLang) || t.name
+          return (
+            <button
+              key={t.name}
+              type="button"
+              className={styles.transitionBtn}
+              disabled={transitioning}
+              onClick={() => void onTransition(fd.slug, t.name)}
+            >
+              {tLabel}
+            </button>
+          )
+        })}
+        {availableTransitions.length === 0 && (
+          <span style={{ fontSize: '0.82rem', color: '#888', fontStyle: 'italic' }}>No transitions available</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Field row ─────────────────────────────────────────────────────────────────
 
 interface FieldRowProps {
@@ -1295,12 +1370,19 @@ interface FieldRowProps {
   messages?: PolicyMessage[]
   highlightedSubFields?: Set<string>
   subFieldMessages?: Record<string, PolicyMessage[]>
+  onTransition: (fieldSlug: string, transitionName: string) => Promise<void>
+  transitioning: boolean
 }
 
-function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, hasError, messages, highlightedSubFields, subFieldMessages }: FieldRowProps) {
+function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, hasError, messages, highlightedSubFields, subFieldMessages, onTransition, transitioning }: FieldRowProps) {
   const [activeLang, setActiveLang] = useState(languages[0] ?? '')
   const isDirty = fd.slug in dirty
   const isSubmodel = fd.data_type === 'submodel_list' || fd.data_type === 'submodel_select'
+
+  // Workflow fields are fully managed by WorkflowFieldWidget — no dirty/value editing
+  if (fd.data_type === 'workflow') {
+    return <WorkflowFieldWidget fd={fd} entity={entity} uiLang={uiLang} onTransition={onTransition} transitioning={transitioning} />
+  }
   const label = getLang(fd.label as Record<string, string>, uiLang) || fd.slug
   const helpText = getLang(fd.help_text as Record<string, string>, uiLang)
 
@@ -1594,18 +1676,7 @@ export function UdmEntityEditor() {
   const isArchived = config?.status === 'archived'
 
   // Determine editability from workflow state (archived overrides everything)
-  const currentStateName = entity.current_state
-  const workflowState: WorkflowStateOut | null = config?.workflow?.states.find(
-    s => s.name === currentStateName
-  ) ?? null
-  const editable = !isArchived && (workflowState ? workflowState.allows_edit : true)
-
-  // Available transitions from current state
-  const availableTransitions: WorkflowTransitionOut[] = config?.workflow
-    ? config.workflow.transitions.filter(
-        t => t.from_state === currentStateName || t.from_state === null
-      )
-    : []
+    const editable = !isArchived
 
   const languages = (config?.languages ?? []).map(l => l.code)
   if (languages.length === 0) languages.push('')
@@ -1650,12 +1721,12 @@ export function UdmEntityEditor() {
     }
   }
 
-  async function handleTransition(transitionName: string) {
+  async function handleTransition(fieldSlug: string, transitionName: string) {
     setTransitioning(true)
     setErrors([])
     setSuccess(null)
     try {
-      const updated = await udmTransitionEntity(resolvedEntityId, transitionName)
+      const updated = await udmTransitionEntity(resolvedEntityId, fieldSlug, transitionName)
       setEntity(updated)
       setSuccess(`Transition "${transitionName}" applied.`)
     } catch (e) {
@@ -1666,11 +1737,6 @@ export function UdmEntityEditor() {
   }
 
   const dirtyCount = Object.keys(dirty).length
-  const stateLabel = currentStateName
-    ? (workflowState
-        ? getLang(workflowState.label as Record<string, string>, uiLang) || currentStateName
-        : currentStateName)
-    : null
 
   return (
     <div className={styles.page}>
@@ -1684,11 +1750,6 @@ export function UdmEntityEditor() {
             {entityId.slice(0, 8)}…
           </span>
         </h1>
-        {stateLabel && (
-          <span className={`${styles.stateBadge} ${!editable ? styles.stateReadonly : ''}`}>
-            {stateLabel}
-          </span>
-        )}
       </div>
 
       <div className={styles.metaInfo}>
@@ -1705,34 +1766,6 @@ export function UdmEntityEditor() {
           sourceConfig={config}
           onMigrated={updated => { setEntity(updated); setDirty({}); void load() }}
         />
-      )}
-
-      {!editable && !isArchived && (
-        <div className={styles.readonlyNote}>
-          This entity is in state "{stateLabel ?? currentStateName}" which does not allow editing.
-          {availableTransitions.length > 0 && ' Use a workflow transition to change the state.'}
-        </div>
-      )}
-
-      {/* Workflow transitions */}
-      {availableTransitions.length > 0 && (
-        <div style={{ marginBottom: '1rem' }}>
-          <strong style={{ fontSize: '0.875rem', color: '#555', display: 'block', marginBottom: '0.4rem' }}>
-            Workflow Transitions:
-          </strong>
-          <div className={styles.transitionRow}>
-            {availableTransitions.map(t => {
-              const label = getLang(t.label as Record<string, string>, uiLang) || t.name
-              return (
-                <button key={t.name} type="button" className={styles.transitionBtn}
-                  onClick={() => void handleTransition(t.name)}
-                  disabled={transitioning}>
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
       )}
 
       {/* Dynamic form */}
@@ -1758,6 +1791,8 @@ export function UdmEntityEditor() {
             messages={fieldMessages[fd.slug]}
             highlightedSubFields={subFieldHighlights[fd.slug]}
             subFieldMessages={subFieldMessages[fd.slug]}
+            onTransition={handleTransition}
+            transitioning={transitioning}
           />
         ))}
       </div>

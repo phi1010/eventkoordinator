@@ -487,8 +487,12 @@ export interface paths {
         };
         /**
          * Eval Policy For Type
-         * @description Superuser-only: evaluate the Rego policy for a given entity + user and return the full
+         * @description Evaluate the Rego policy for a given entity + user and return the full
          *     input document, the raw policy sources, and the structured output.
+         *
+         *     The input document includes the entity's full field values — data the policy
+         *     would otherwise hide — plus the raw policy source. Require both view and
+         *     change policy permissions; never gate on staff/superuser status alone.
          */
         get: operations["userdefinedmodel_api_eval_policy_for_type"];
         put?: never;
@@ -546,6 +550,43 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/udm/workflows/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Workflows */
+        get: operations["userdefinedmodel_api_list_workflows"];
+        put?: never;
+        /** Create Workflow */
+        post: operations["userdefinedmodel_api_create_workflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/udm/workflows/{workflow_id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Workflow */
+        get: operations["userdefinedmodel_api_get_workflow"];
+        /** Update Workflow */
+        put: operations["userdefinedmodel_api_update_workflow"];
+        post?: never;
+        /** Delete Workflow */
+        delete: operations["userdefinedmodel_api_delete_workflow"];
         options?: never;
         head?: never;
         patch?: never;
@@ -637,7 +678,6 @@ export interface components {
              * @default
              */
             notes: string;
-            workflow?: components["schemas"]["WorkflowDefinitionIn"] | null;
         };
         /** ConfigLanguageIn */
         ConfigLanguageIn: {
@@ -684,13 +724,12 @@ export interface components {
              * Format: uuid
              */
             version_id: string;
-            workflow?: components["schemas"]["WorkflowOut"] | null;
         };
         /**
          * DataType
          * @enum {string}
          */
-        DataType: "text_short" | "text_long" | "text_markdown" | "text_richtext" | "integer" | "float" | "boolean" | "date" | "time" | "datetime" | "select_single" | "select_multi" | "image" | "file" | "user_select" | "user_select_multi" | "group_select" | "group_select_multi" | "submodel_select" | "submodel_list" | "entity_select" | "entity_select_multi" | "slug_id";
+        DataType: "text_short" | "text_long" | "text_markdown" | "text_richtext" | "integer" | "float" | "boolean" | "date" | "time" | "datetime" | "select_single" | "select_multi" | "image" | "file" | "user_select" | "user_select_multi" | "group_select" | "group_select_multi" | "submodel_select" | "submodel_list" | "entity_select" | "entity_select_multi" | "slug_id" | "workflow";
         /** EditGroupOut */
         EditGroupOut: {
             /** Edits */
@@ -753,8 +792,6 @@ export interface components {
             config_version_id: string;
             /** Created At */
             created_at: string;
-            /** Current State */
-            current_state: string | null;
             /**
              * Editable Fields
              * @default []
@@ -833,6 +870,8 @@ export interface components {
         /** FieldDefinitionIn */
         FieldDefinitionIn: {
             data_type: components["schemas"]["DataType"];
+            /** Default */
+            default?: unknown | null;
             /** Help Texts */
             help_texts?: {
                 [key: string]: string;
@@ -860,14 +899,14 @@ export interface components {
              * @default 0
              */
             sort_order: number;
-            /** Default */
-            default?: unknown | null;
             /** Submodel Config Version Id */
             submodel_config_version_id?: string | null;
             /** Type Config */
             type_config?: {
                 [key: string]: unknown;
             };
+            /** Workflow Definition Id */
+            workflow_definition_id?: string | null;
         };
         /** FieldDefinitionOut */
         FieldDefinitionOut: {
@@ -905,6 +944,7 @@ export interface components {
             type_config: {
                 [key: string]: unknown;
             };
+            workflow_definition?: components["schemas"]["WorkflowDefinitionOut"] | null;
         };
         /** FieldEditOut */
         FieldEditOut: {
@@ -1298,6 +1338,8 @@ export interface components {
         };
         /** TransitionIn */
         TransitionIn: {
+            /** Field */
+            field: string;
             /** Transition */
             transition: string;
         };
@@ -1345,8 +1387,8 @@ export interface components {
              */
             id: string;
         };
-        /** WorkflowDefinitionIn */
-        WorkflowDefinitionIn: {
+        /** WorkflowCreateIn */
+        WorkflowCreateIn: {
             /**
              * Description
              * @default
@@ -1359,10 +1401,19 @@ export interface components {
             /** Transitions */
             transitions?: components["schemas"]["WorkflowTransitionIn"][];
         };
-        /** WorkflowOut */
-        WorkflowOut: {
+        /** WorkflowDefinitionOut */
+        WorkflowDefinitionOut: {
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
             /** Initial State */
-            initial_state: string;
+            initial_state: string | null;
+            /** Name */
+            name: string;
             /** States */
             states: components["schemas"]["WorkflowStateOut"][];
             /** Transitions */
@@ -1386,6 +1437,16 @@ export interface components {
             };
             /** Name */
             name: string;
+            /**
+             * Position X
+             * @default 0
+             */
+            position_x: number;
+            /**
+             * Position Y
+             * @default 0
+             */
+            position_y: number;
         };
         /** WorkflowStateOut */
         WorkflowStateOut: {
@@ -1399,17 +1460,36 @@ export interface components {
             };
             /** Name */
             name: string;
+            /** Position X */
+            position_x: number;
+            /** Position Y */
+            position_y: number;
         };
         /** WorkflowTransitionIn */
         WorkflowTransitionIn: {
             /** From State */
             from_state?: string | null;
+            /**
+             * From Undefined Only
+             * @default false
+             */
+            from_undefined_only: boolean;
             /** Label */
             label: {
                 [key: string]: string;
             };
             /** Name */
             name: string;
+            /**
+             * Source Handle
+             * @default
+             */
+            source_handle: string;
+            /**
+             * Target Handle
+             * @default
+             */
+            target_handle: string;
             /** To State */
             to_state: string;
         };
@@ -1417,14 +1497,31 @@ export interface components {
         WorkflowTransitionOut: {
             /** From State */
             from_state: string | null;
+            /** From Undefined Only */
+            from_undefined_only: boolean;
             /** Label */
             label: {
                 [key: string]: string;
             };
             /** Name */
             name: string;
+            /** Source Handle */
+            source_handle: string;
+            /** Target Handle */
+            target_handle: string;
             /** To State */
             to_state: string;
+        };
+        /** WorkflowUpdateIn */
+        WorkflowUpdateIn: {
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name?: string | null;
+            /** States */
+            states?: components["schemas"]["WorkflowStateIn"][] | null;
+            /** Transitions */
+            transitions?: components["schemas"]["WorkflowTransitionIn"][] | null;
         };
     };
     responses: never;
@@ -2427,6 +2524,118 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["UserAutocompleteItem"][];
                 };
+            };
+        };
+    };
+    userdefinedmodel_api_list_workflows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinitionOut"][];
+                };
+            };
+        };
+    };
+    userdefinedmodel_api_create_workflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinitionOut"];
+                };
+            };
+        };
+    };
+    userdefinedmodel_api_get_workflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinitionOut"];
+                };
+            };
+        };
+    };
+    userdefinedmodel_api_update_workflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinitionOut"];
+                };
+            };
+        };
+    };
+    userdefinedmodel_api_delete_workflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
