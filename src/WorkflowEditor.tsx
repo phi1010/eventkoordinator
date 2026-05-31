@@ -35,6 +35,7 @@ interface WfStateData {
   name: string
   isInitial: boolean
   allowsEdit: boolean
+  usageCount?: number
   [key: string]: unknown
 }
 
@@ -127,6 +128,12 @@ async function updateWorkflow(id: string, payload: unknown): Promise<WorkflowDef
 async function deleteWorkflow(id: string): Promise<void> {
   const res = await apiFetch(`/api/udm/workflows/${id}/`, 'DELETE')
   if (!res.ok && res.status !== 204) throw new Error('Failed to delete workflow')
+}
+
+async function fetchStateCounts(workflowId: string): Promise<Record<string, number>> {
+  const res = await apiFetch(`/api/udm/workflows/${workflowId}/state-counts/`, 'GET')
+  if (!res.ok) return {}
+  return res.json()
 }
 
 // ─── Conversions ──────────────────────────────────────────────────────────────
@@ -321,6 +328,11 @@ function WorkflowStateNode({ data, selected }: NodeProps) {
         <span className={styles.wfNodeLabel}>{d.label}</span>
         <span className={styles.wfNodeSlug}>{d.name}</span>
       </div>
+      {d.usageCount !== undefined && (
+        <span className={`${styles.countBadge} ${d.usageCount > 0 ? styles.countBadgeActive : styles.countBadgeMuted}`}>
+          {d.usageCount}
+        </span>
+      )}
     </div>
   )
 }
@@ -399,6 +411,9 @@ interface PropsPanelProps {
   onNodeChange: (id: string, patch: Partial<WfStateData>) => void
   onEdgeChange: (id: string, patch: Partial<WfEdgeData>) => void
   onDeleteSelected: () => void
+  orphanedStates: WorkflowStateOut[]
+  stateCounts: Record<string, number>
+  onReadd: (state: WorkflowStateOut) => void
 }
 
 const SPECIAL_DESCRIPTIONS: Record<string, string> = {
@@ -407,14 +422,37 @@ const SPECIAL_DESCRIPTIONS: Record<string, string> = {
   [ID_KEEP_STATE]:     'Transitions from a state to this node keep that state unchanged (self-loop).',
 }
 
-function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNodeChange, onEdgeChange, onDeleteSelected }: PropsPanelProps) {
+function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNodeChange, onEdgeChange, onDeleteSelected, orphanedStates, stateCounts, onReadd }: PropsPanelProps) {
   const selNodes = nodes.filter((n) => selectedNodeIds.includes(n.id))
   const selEdges = edges.filter((e) => selectedEdgeIds.includes(e.id))
   const total = selNodes.length + selEdges.length
 
+  const orphanedSection = orphanedStates.length > 0 && (
+    <div className={styles.orphanedSection}>
+      <div className={styles.orphanedHeader}>⚠ Removed states with live data</div>
+      <p className={styles.orphanedHint}>
+        Saving will set these entities to no state. Re-add before saving to preserve them.
+      </p>
+      {orphanedStates.map(s => {
+        const label = s.label['en'] ?? Object.values(s.label)[0] ?? s.name
+        const count = stateCounts[s.name] ?? 0
+        return (
+          <div key={s.name} className={styles.orphanedItem}>
+            <div className={styles.orphanedItemInfo}>
+              <span className={styles.orphanedItemName}>{label}</span>
+              <span className={styles.orphanedItemCount}>{count} entit{count === 1 ? 'y' : 'ies'}</span>
+            </div>
+            <button className={styles.readdBtn} onClick={() => onReadd(s)}>Re-add</button>
+          </div>
+        )
+      })}
+    </div>
+  )
+
   if (total === 0) {
     return (
       <div className={styles.propsPanel}>
+        {orphanedSection}
         <p className={styles.propsPanelHint}>Select a state or transition to edit its properties.</p>
       </div>
     )
@@ -422,6 +460,7 @@ function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNod
 
   return (
     <div className={styles.propsPanel}>
+      {orphanedSection}
       <div className={styles.propsPanelHeader}>
         <span>{total} selected</span>
         <button className={styles.deleteBtn} onClick={onDeleteSelected} title="Delete selected">✕ Delete</button>
@@ -488,9 +527,11 @@ interface EditorInnerProps {
   workflowName: string
   workflowDescription: string
   onSaved: (wf: WorkflowDefinitionOut) => void
+  initialStateCounts: Record<string, number>
+  savedStates: WorkflowStateOut[]
 }
 
-function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: initName, workflowDescription: initDesc, onSaved }: EditorInnerProps) {
+function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: initName, workflowDescription: initDesc, onSaved, initialStateCounts, savedStates }: EditorInnerProps) {
   const [nodes, setNodes] = useNodesState<AnyWfNode>(initialNodes)
   const [edges, setEdges] = useEdgesState<WfEdge>(initialEdges)
   const [name, setName] = useState(initName)
@@ -508,6 +549,17 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
     setTimeout(() => fitView({ padding: 0.15 }), 50)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowId, initName])
+
+  // Inject usage counts into workflowState nodes whenever counts arrive/refresh
+  useEffect(() => {
+    if (Object.keys(initialStateCounts).length === 0) return
+    setNodes(nds => nds.map(n =>
+      n.type === 'workflowState'
+        ? { ...n, data: { ...n.data, usageCount: initialStateCounts[n.id] ?? 0 } }
+        : n,
+    ))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialStateCounts])
 
   const selectedNodeIds = nodes.filter((n) => n.selected).map((n) => n.id)
   const selectedEdgeIds = edges.filter((e) => e.selected).map((e) => e.id)
@@ -622,6 +674,32 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
     setEdges((eds) => eds.filter((e) => !e.selected))
   }
 
+  // Orphaned = saved states not currently on canvas but with live entity data
+  const currentNodeIds = new Set(nodes.map((n) => n.id))
+  const orphanedStates = savedStates.filter(
+    (s) => !currentNodeIds.has(s.name) && (initialStateCounts[s.name] ?? 0) > 0,
+  )
+
+  function readd(state: WorkflowStateOut) {
+    const label = state.label['en'] ?? Object.values(state.label)[0] ?? state.name
+    const hasInitial = nodes.some((n) => n.type === 'workflowState' && nodeStateData(n).isInitial)
+    setNodes((nds) => [
+      ...nds,
+      {
+        id: state.name,
+        type: 'workflowState',
+        position: { x: state.position_x, y: state.position_y },
+        data: {
+          label,
+          name: state.name,
+          isInitial: state.is_initial && !hasInitial,
+          allowsEdit: state.allows_edit,
+          usageCount: initialStateCounts[state.name] ?? 0,
+        },
+      },
+    ])
+  }
+
   async function handleSave() {
     setSaving(true)
     setSaveError(null)
@@ -696,6 +774,9 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
           onNodeChange={handleNodeChange}
           onEdgeChange={handleEdgeChange}
           onDeleteSelected={deleteSelected}
+          orphanedStates={orphanedStates}
+          stateCounts={initialStateCounts}
+          onReadd={readd}
         />
       </div>
     </div>
@@ -711,6 +792,8 @@ export function WorkflowEditor() {
   const [activeDesc, setActiveDesc] = useState('')
   const [activeNodes, setActiveNodes] = useState<AnyWfNode[]>([])
   const [activeEdges, setActiveEdges] = useState<WfEdge[]>([])
+  const [activeStateCounts, setActiveStateCounts] = useState<Record<string, number>>({})
+  const [activeSavedStates, setActiveSavedStates] = useState<WorkflowStateOut[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const loadedRef = useRef(false)
@@ -721,12 +804,18 @@ export function WorkflowEditor() {
     listWorkflows().then(setWorkflows).catch((e: Error) => setLoadError(e.message))
   }, [])
 
+  function refreshCounts(id: string) {
+    fetchStateCounts(id).then(setActiveStateCounts).catch(() => {})
+  }
+
   function openNew() {
     setActiveId(null)
     setActiveName('New Workflow')
     setActiveDesc('')
     setActiveNodes([])
     setActiveEdges([])
+    setActiveStateCounts({})
+    setActiveSavedStates([])
   }
 
   function loadWorkflow(wf: WorkflowDefinitionOut) {
@@ -736,6 +825,9 @@ export function WorkflowEditor() {
     setActiveDesc(wf.description)
     setActiveNodes(nodes)
     setActiveEdges(edges)
+    setActiveSavedStates(wf.states)
+    setActiveStateCounts({})
+    refreshCounts(wf.id)
   }
 
   function loadExample() {
@@ -744,6 +836,8 @@ export function WorkflowEditor() {
     setActiveDesc('Workflow for conference talk proposals (from apiv1/flows.py)')
     setActiveNodes(PROPOSAL_EXAMPLE.nodes)
     setActiveEdges(PROPOSAL_EXAMPLE.edges)
+    setActiveStateCounts({})
+    setActiveSavedStates([])
   }
 
   async function handleDelete() {
@@ -764,10 +858,12 @@ export function WorkflowEditor() {
   function onSaved(wf: WorkflowDefinitionOut) {
     setActiveId(wf.id)
     setActiveName(wf.name)
+    setActiveSavedStates(wf.states)
     setWorkflows((wfs) => {
       const idx = wfs.findIndex((w) => w.id === wf.id)
       return idx >= 0 ? wfs.map((w) => (w.id === wf.id ? wf : w)) : [...wfs, wf]
     })
+    refreshCounts(wf.id)
   }
 
   return (
@@ -806,6 +902,8 @@ export function WorkflowEditor() {
             workflowName={activeName}
             workflowDescription={activeDesc}
             onSaved={onSaved}
+            initialStateCounts={activeStateCounts}
+            savedStates={activeSavedStates}
           />
         </ReactFlowProvider>
       </div>

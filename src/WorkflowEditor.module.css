@@ -360,6 +360,103 @@
   font-family: monospace;
 }
 
+/* ── Usage count badge on state nodes ───────────────────────────────────── */
+.countBadge {
+  position: absolute;
+  bottom: 5px;
+  right: 7px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 9px;
+  pointer-events: none;
+}
+
+.countBadgeActive {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+}
+
+.countBadgeMuted {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border: 1px solid #e2e8f0;
+}
+
+/* ── Orphaned states section in properties panel ─────────────────────────── */
+.orphanedSection {
+  background: #fff8f0;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.orphanedHeader {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #c2410c;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.orphanedHint {
+  font-size: 0.75rem;
+  color: #78350f;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.orphanedItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.orphanedItemInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.orphanedItemName {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.orphanedItemCount {
+  font-size: 0.72rem;
+  color: #c2410c;
+  font-weight: 600;
+}
+
+.readdBtn {
+  padding: 3px 8px;
+  border: 1px solid #ea580c;
+  background: transparent;
+  color: #ea580c;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.readdBtn:hover {
+  background: #ea580c;
+  color: #fff;
+}
+
 /* ── Handles ─────────────────────────────────────────────────────────────── */
 .handle {
   width: 10px !important;

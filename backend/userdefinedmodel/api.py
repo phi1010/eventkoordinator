@@ -824,17 +824,39 @@ def update_workflow(request, workflow_id: uuid.UUID, payload: WorkflowUpdateIn):
         if payload.states is not None:
             if sum(1 for s in payload.states if s.is_initial) != 1:
                 return JsonResponse({"detail": "exactly one state must have is_initial=True"}, status=400)
-            wf.states.all().delete()
+
+            incoming_names = {s.name for s in payload.states}
+            existing_states = {s.name: s for s in wf.states.all()}
+
+            # Delete removed states — SET_NULL fires on FieldValues referencing them
+            for name, state in existing_states.items():
+                if name not in incoming_names:
+                    state.delete()
+
+            # Clear is_initial on surviving states before the upsert loop to avoid
+            # the partial-unique constraint firing if the initial state changes.
+            wf.states.filter(name__in=incoming_names).update(is_initial=False)
+
             state_map = {}
             for state_in in payload.states:
-                state = WorkflowState.objects.create(
-                    workflow=wf, name=state_in.name,
-                    is_initial=state_in.is_initial, allows_edit=state_in.allows_edit,
-                    position_x=state_in.position_x, position_y=state_in.position_y,
-                )
-                state_map[state_in.name] = state
+                if state_in.name in existing_states:
+                    state = existing_states[state_in.name]
+                    state.is_initial = state_in.is_initial
+                    state.allows_edit = state_in.allows_edit
+                    state.position_x = state_in.position_x
+                    state.position_y = state_in.position_y
+                    state.save()
+                    state.translations.all().delete()
+                else:
+                    state = WorkflowState.objects.create(
+                        workflow=wf, name=state_in.name,
+                        is_initial=state_in.is_initial, allows_edit=state_in.allows_edit,
+                        position_x=state_in.position_x, position_y=state_in.position_y,
+                    )
                 for lang, label in state_in.label.items():
                     WorkflowStateTranslation.objects.create(state=state, language=lang, label=label)
+                state_map[state_in.name] = state
+
             if payload.transitions is not None:
                 wf.transitions.all().delete()
                 for trans_in in payload.transitions:
@@ -866,6 +888,30 @@ def delete_workflow(request, workflow_id: uuid.UUID):
     except Exception:
         return JsonResponse({"detail": "Workflow is in use and cannot be deleted"}, status=409)
     return JsonResponse({}, status=204)
+
+
+@api.get("/workflows/{workflow_id}/state-counts/", auth=django_auth)
+def workflow_state_counts(request, workflow_id: uuid.UUID):
+    """Return a dict of state_name → entity count for fields using this workflow."""
+    from userdefinedmodel.models import WorkflowDefinition
+    from userdefinedmodel.models.node import FieldValue
+    from django.db.models import Count
+
+    if denied := _require_perms(request, "userdefinedmodel.view_fielddefinition"):
+        return denied
+    try:
+        WorkflowDefinition.objects.get(id=workflow_id)
+    except WorkflowDefinition.DoesNotExist:
+        return JsonResponse({"detail": "Not found"}, status=404)
+
+    rows = (
+        FieldValue.objects
+        .filter(field__workflow_definition_id=workflow_id, value_workflow_state__isnull=False)
+        .values("value_workflow_state__name")
+        .annotate(count=Count("id"))
+    )
+    result = {row["value_workflow_state__name"]: row["count"] for row in rows}
+    return JsonResponse(result)
 
 
 # ─── Policies ─────────────────────────────────────────────────────────────────
