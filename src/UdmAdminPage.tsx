@@ -865,9 +865,6 @@ function ConfigDetail({ configId, onBack }: ConfigDetailProps) {
             )}
           </div>
           <div><strong>Fields:</strong> {published.fields.length}</div>
-          {published.workflow && (
-            <div><strong>Workflow:</strong> {published.workflow.states.length} states, {published.workflow.transitions.length} transitions</div>
-          )}
           <div style={{ marginTop: '0.5rem' }}>
             {published.fields.map(f => (
               <span key={f.slug} className={styles.ruleTag}>{f.slug} ({f.data_type})</span>
@@ -1389,8 +1386,8 @@ function PolicyEvaluator({ typeId }: PolicyEvaluatorProps) {
               ) : result.policies.map((p: Record<string, string>) => {
                 const slug = p['slug'] as string
                 const coverageFile = result.coverage?.find(f => f.path === `policy_${slug}.rego`)
-                const coveredSet = new Set(coverageFile?.covered ?? [])
-                const notCoveredSet = new Set(coverageFile?.not_covered ?? [])
+                const coveredSet = new Set((coverageFile?.covered ?? []) as number[])
+                const notCoveredSet = new Set((coverageFile?.not_covered ?? []) as number[])
 
                 // Map line number → print values emitted at that line for this policy
                 const printsByLine = new Map<number, string[]>()
@@ -1411,7 +1408,7 @@ function PolicyEvaluator({ typeId }: PolicyEvaluatorProps) {
                       {slug}
                       {coverageFile && (
                         <span style={{ fontWeight: 400, fontSize: '0.75rem', color: '#555', marginLeft: '0.6rem' }}>
-                          {coverageFile.covered.length} covered · {coverageFile.not_covered.length} not covered
+                          {(coverageFile.covered as number[]).length} covered · {(coverageFile.not_covered as number[]).length} not covered
                         </span>
                       )}
                     </div>

@@ -11,7 +11,7 @@ import { PolicyMessageList } from './shared'
 import { FieldInput } from './FieldInput'
 import { FieldPreview } from './FieldPreview'
 import { PreviewTable, type PreviewRow } from './PreviewTable'
-import styles from '../UdmEntityEditor.module.css'
+
 
 // ── Helpers (SubmodelEditor-local) ────────────────────────────────────────────
 

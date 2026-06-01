@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { udmTransitionEntity } from '../apiUdm'
-import type { WorkflowDefinitionOut, WorkflowTransitionOut, FieldDefinitionOut } from '../apiUdm'
+import type { WorkflowDefinitionOut, WorkflowTransitionOut, FieldDefinitionOut, PolicyMessage } from '../apiUdm'
 import type { FieldInputProps } from './types'
 import { getLang } from './types'
 import { fieldEditorRegistry } from './registry'
@@ -25,7 +25,7 @@ function WorkflowCellEditor({ fd, value, disabled, lang = '', nodeId, onEntityRe
     setChildTransitioning(true)
     try {
       const result = await udmTransitionEntity(nodeId, fd.slug, transitionName)
-      await onEntityRefresh(result.policy_messages ?? [])
+      await onEntityRefresh((result.policy_messages ?? []) as PolicyMessage[])
     } finally {
       setChildTransitioning(false)
     }

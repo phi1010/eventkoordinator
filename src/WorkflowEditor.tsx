@@ -132,6 +132,7 @@ interface WorkflowDefinitionOut {
   initial_state: string | null
   states: WorkflowStateOut[]
   transitions: WorkflowTransitionOut[]
+  virtual_node_positions?: Record<string, unknown>
 }
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
@@ -823,7 +824,7 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
   const selectedEdgeIds = edges.filter((e) => e.selected).map((e) => e.id)
 
   const isValidConnection = useCallback(
-    (connection: Connection) => {
+    (connection: WfEdge | Connection) => {
       const src = nodes.find((n) => n.id === connection.source)
       const tgt = nodes.find((n) => n.id === connection.target)
       if (!src || !tgt) return false

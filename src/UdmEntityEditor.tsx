@@ -41,15 +41,6 @@ function getAllLangValues(entity: EntityOut, slug: string): Record<string, unkno
 
 const SEVERITY_ORDER = ['info', 'warning', 'error', 'critical']
 
-/** Border color for a field card. Edited (orange) beats warning/info but not error/critical. */
-function highlightBorderColor(severity: string | undefined, isDirty: boolean): string | undefined {
-  if (!severity) return undefined
-  if (severity === 'critical' || severity === 'error') return '#dc2626'
-  if (isDirty) return '#f9a825'
-  if (severity === 'warning') return '#eab308'
-  return '#3b82f6'
-}
-
 // ── Workflow field widget ─────────────────────────────────────────────────────
 
 interface WorkflowFieldWidgetProps {
@@ -568,7 +559,7 @@ export function UdmEntityEditor() {
       const updated = await udmPatchEntity(resolvedEntityId, dirty)
       setEntity(updated)
       setDirty({})
-      setPolicyMessages(updated.policy_messages ?? [])
+      setPolicyMessages((updated.policy_messages ?? []) as PolicyMessage[])
       setSuccess('Saved successfully.')
     } catch (e) {
       if (e instanceof UdmApiError) {
@@ -600,7 +591,7 @@ export function UdmEntityEditor() {
     try {
       const updated = await udmTransitionEntity(resolvedEntityId, fieldSlug, transitionName, dirty)
       setDirty({})
-      const globalMsgs = (updated.policy_messages ?? []).filter((m: PolicyMessage) => !m.highlight_fields?.length)
+      const globalMsgs = ((updated.policy_messages ?? []) as PolicyMessage[]).filter((m: PolicyMessage) => !m.highlight_fields?.length)
       if (globalMsgs.length > 0) {
         setTransitionPopup(globalMsgs)
       } else {

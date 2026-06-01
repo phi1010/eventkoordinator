@@ -1254,6 +1254,11 @@ export interface components {
         /** WorkflowStateIn */
         WorkflowStateIn: {
             /**
+             * Background Color
+             * @default #ffffff
+             */
+            background_color: string;
+            /**
              * Is Initial
              * @default false
              */
@@ -1279,6 +1284,11 @@ export interface components {
         };
         /** WorkflowStateOut */
         WorkflowStateOut: {
+            /**
+             * Background Color
+             * @default #ffffff
+             */
+            background_color: string;
             /** Is Initial */
             is_initial: boolean;
             /** Label */
@@ -1291,9 +1301,10 @@ export interface components {
             position_x: number;
             /** Position Y */
             position_y: number;
-            /** Background Color */
-            background_color: string;
-            /** Text Color */
+            /**
+             * Text Color
+             * @default #000000
+             */
             text_color: string;
         };
         /** WorkflowTransitionIn */
