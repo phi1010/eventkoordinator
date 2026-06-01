@@ -1,23 +1,35 @@
+import { useState, useEffect } from 'react'
+import { Chip } from 'primereact/chip'
+import { udmSearchGroups } from '../apiUdm'
+import type { GroupAutocompleteItem } from '../apiUdm'
 import type { PreviewProps } from './FieldPreview'
 import { fieldPreviewRegistry } from './registry-preview'
 
-function GroupChip({ id }: { id: number | string }) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: '999px', fontSize: '0.82rem', background: '#fefce8', color: '#713f12', border: '1px solid #fef08a' }}>
-      # {id}
-    </span>
-  )
-}
-
 function GroupSelectPreview({ fd, value }: PreviewProps) {
   const multi = fd.data_type === 'group_select_multi'
-  const ids: (number | string)[] = multi
-    ? (Array.isArray(value) ? (value as (number | string)[]) : [])
-    : (value != null ? [value as number | string] : [])
+  const ids: number[] = multi
+    ? (Array.isArray(value) ? (value as number[]) : [])
+    : (value != null ? [value as number] : [])
+
+  const [nameMap, setNameMap] = useState<Map<number, string>>(new Map())
+
+  useEffect(() => {
+    if (ids.length === 0) return
+    udmSearchGroups('').then((groups: GroupAutocompleteItem[]) => {
+      setNameMap(new Map(groups.map(g => [g.id, g.name])))
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ids.join(',')])
+
   if (ids.length === 0) return <span style={{ color: '#9ca3af' }}>—</span>
+
+  const labels = ids.map(id => nameMap.get(id) ?? String(id))
+
+  if (!multi) return <span style={{ fontSize: '0.9rem', color: '#374151' }}>{labels[0]}</span>
+
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-      {ids.map(id => <GroupChip key={String(id)} id={id} />)}
+      {labels.map((label, i) => <Chip key={ids[i]} label={label} style={{ fontSize: '0.82rem' }} />)}
     </div>
   )
 }

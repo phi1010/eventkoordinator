@@ -19,6 +19,7 @@ import {
 } from './apiUdm'
 import { MigrationAssistant } from './UdmMigration'
 import { FieldInput, getLang, PolicyMessageList } from './udm-editors'
+import { EntityCombobox } from './udm-editors/EntityCombobox'
 import styles from './UdmEntityEditor.module.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -742,12 +743,10 @@ export function UdmEntityEditor() {
 export function UdmEntityPanel() {
   const navigate = useNavigate()
   const [types, setTypes] = useState<import('./apiUdm').UDMTypeOut[]>([])
-  const [entities, setEntities] = useState<import('./apiUdm').EntityAutocompleteItem[]>([])
   const [filterTypeId, setFilterTypeId] = useState('')
-  const [selectedEntityId, setSelectedEntityId] = useState('')
+  const [selectedEntity, setSelectedEntity] = useState<import('./apiUdm').EntityAutocompleteItem | null>(null)
   const [createTypeId, setCreateTypeId] = useState('')
   const [creating, setCreating] = useState(false)
-  const [loadingEntities, setLoadingEntities] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -756,17 +755,8 @@ export function UdmEntityPanel() {
     })
   }, [])
 
-  // Reload entity list when type filter changes
-  useEffect(() => {
-    setLoadingEntities(true)
-    setSelectedEntityId('')
-    import('./apiUdm').then(({ udmSearchEntities }) => {
-      udmSearchEntities('', filterTypeId || undefined)
-        .then(setEntities)
-        .catch(() => setEntities([]))
-        .finally(() => setLoadingEntities(false))
-    })
-  }, [filterTypeId])
+  // Clear entity selection when type filter changes
+  useEffect(() => { setSelectedEntity(null) }, [filterTypeId])
 
   async function handleCreate() {
     if (!createTypeId) { setError('Select a UDM type'); return }
@@ -784,8 +774,8 @@ export function UdmEntityPanel() {
   }
 
   function handleOpen() {
-    if (!selectedEntityId) { setError('Select an entity'); return }
-    navigate(`/udm-entity/${selectedEntityId}`)
+    if (!selectedEntity) { setError('Select an entity'); return }
+    navigate(`/udm-entity/${selectedEntity.id}`)
   }
 
   const panelStyle: React.CSSProperties = {
@@ -795,6 +785,7 @@ export function UdmEntityPanel() {
     width: '100%', padding: '0.45rem 0.7rem', border: '1px solid #ccc',
     borderRadius: '4px', marginBottom: '0.5rem', boxSizing: 'border-box', fontSize: '0.9rem', background: '#fff',
   }
+  const labelStyle: React.CSSProperties = { fontSize: '0.82rem', color: '#666', display: 'block', marginBottom: '0.25rem' }
 
   return (
     <div style={{ padding: '2rem', maxWidth: '560px', margin: '0 auto' }}>
@@ -802,30 +793,21 @@ export function UdmEntityPanel() {
 
       <div style={panelStyle}>
         <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Open Existing Entity</div>
-        <label style={{ fontSize: '0.82rem', color: '#666', display: 'block', marginBottom: '0.25rem' }}>
-          Filter by type (optional)
-        </label>
+        <label style={labelStyle}>Filter by type (optional)</label>
         <select style={selectStyle} value={filterTypeId} onChange={e => setFilterTypeId(e.target.value)}>
           <option value="">— all types —</option>
           {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
-        <label style={{ fontSize: '0.82rem', color: '#666', display: 'block', marginBottom: '0.25rem' }}>
-          Entity {loadingEntities ? '(loading…)' : `(${entities.length} found)`}
-        </label>
-        <select style={selectStyle} value={selectedEntityId}
-          onChange={e => setSelectedEntityId(e.target.value)}
-          disabled={loadingEntities}>
-          <option value="">— select entity —</option>
-          {entities.map(e => (
-            <option key={e.id} value={e.id}>
-              {e.display && e.display !== e.id ? `${e.display} (${e.id.slice(0, 8)}…)` : e.id}
-            </option>
-          ))}
-        </select>
-        {error && <div style={{ color: '#dc2626', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{error}</div>}
+        <label style={{ ...labelStyle, marginBottom: '0.4rem' }}>Entity</label>
+        <EntityCombobox
+          value={selectedEntity}
+          onChange={entity => { setSelectedEntity(entity); setError(null) }}
+          typeId={filterTypeId || undefined}
+        />
+        {error && <div style={{ color: '#dc2626', fontSize: '0.85rem', margin: '0.5rem 0' }}>{error}</div>}
         <button
-          style={{ padding: '0.45rem 1rem', background: '#0066cc', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: !selectedEntityId ? 0.5 : 1 }}
-          onClick={handleOpen} disabled={!selectedEntityId}>
+          style={{ padding: '0.45rem 1rem', background: '#0066cc', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: !selectedEntity ? 0.5 : 1, marginTop: '0.75rem' }}
+          onClick={handleOpen} disabled={!selectedEntity}>
           Open
         </button>
       </div>

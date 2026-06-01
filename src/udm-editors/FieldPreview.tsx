@@ -5,6 +5,7 @@ export interface PreviewProps {
   fd: FieldDefinitionOut
   value: unknown
   lang?: string
+  entityChildren?: Record<string, unknown[]>
 }
 
 // Plain-text fallback — no React, suitable for CSV, titles, aria-labels, etc.
@@ -46,9 +47,9 @@ export function fieldPreviewText(fd: FieldDefinitionOut, value: unknown, lang = 
   }
 }
 
-export function FieldPreview({ fd, value, lang }: PreviewProps) {
+export function FieldPreview({ fd, value, lang, entityChildren }: PreviewProps) {
   const Renderer = fieldPreviewRegistry.get(fd.data_type)
-  if (Renderer) return <Renderer fd={fd} value={value} lang={lang} />
+  if (Renderer) return <Renderer fd={fd} value={value} lang={lang} entityChildren={entityChildren} />
   const text = fieldPreviewText(fd, value, lang)
   return <span style={{ fontSize: '0.9rem', color: '#374151' }}>{text || '—'}</span>
 }
