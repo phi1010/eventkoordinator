@@ -1,0 +1,713 @@
+import { useState, useEffect, useRef, useMemo } from 'react'
+import {
+  udmSearchUsers,
+  udmSearchGroups,
+} from '../apiUdm'
+import type { FieldDefinitionOut, PolicyMessage, ConfigVersionOut } from '../apiUdm'
+import type { FieldInputProps } from './types'
+import { getLang } from './types'
+import { fieldEditorRegistry } from './registry'
+import { PolicyMessageList } from './shared'
+import { FieldInput } from './FieldInput'
+import styles from '../UdmEntityEditor.module.css'
+
+// ── Helpers (SubmodelEditor-local) ────────────────────────────────────────────
+
+const SEVERITY_ORDER = ['info', 'warning', 'error', 'critical']
+
+function maxSeverity(msgs: PolicyMessage[]): string | undefined {
+  let max: string | undefined
+  for (const m of msgs) {
+    if (!max || SEVERITY_ORDER.indexOf(m.level) > SEVERITY_ORDER.indexOf(max)) max = m.level
+  }
+  return max
+}
+
+function subFieldColor(severity: string | undefined): string {
+  if (severity === 'critical' || severity === 'error') return '#dc2626'
+  if (severity === 'warning') return '#d97706'
+  if (severity === 'info') return '#2563eb'
+  return '#444'
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface ChildNode {
+  id: string
+  field_values: Array<{ field_slug: string; data_type: string; value: unknown; language: string }>
+  children: Record<string, unknown[]>
+  current_state: string | null
+}
+
+interface SubmodelOp {
+  op: 'create' | 'update' | 'delete'
+  id?: string
+  fields?: Record<string, unknown>
+  sort_order?: number
+}
+
+interface LocalChild {
+  key: string
+  id: string | null
+  dirty: Record<string, unknown>
+  saved: ChildNode | null
+  deleted: boolean
+}
+
+function buildOps(items: LocalChild[]): SubmodelOp[] {
+  const ops: SubmodelOp[] = []
+  for (const item of items) {
+    if (item.deleted && item.id) {
+      ops.push({ op: 'delete', id: item.id })
+    } else if (!item.id && !item.deleted) {
+      ops.push({ op: 'create', fields: item.dirty })
+    } else if (item.id && !item.deleted && Object.keys(item.dirty).length > 0) {
+      ops.push({ op: 'update', id: item.id, fields: item.dirty })
+    }
+  }
+  return ops
+}
+
+function getChildFieldValue(child: LocalChild, slug: string, lang = ''): unknown {
+  if (slug in child.dirty) {
+    const d = child.dirty[slug]
+    if (lang && typeof d === 'object' && d !== null) return (d as Record<string, unknown>)[lang]
+    return d
+  }
+  const fv = child.saved?.field_values.find(v => v.field_slug === slug && v.language === lang)
+  return fv?.value ?? null
+}
+
+function resolvePreviewValue(fd: FieldDefinitionOut, val: unknown, nameMap: Record<string, string>): string | null {
+  if (val === null || val === undefined || val === '') return null
+  const dt = fd.data_type
+  if (dt === 'user_select' || dt === 'group_select') {
+    return nameMap[String(val)] ?? String(val)
+  }
+  if (dt === 'user_select_multi' || dt === 'group_select_multi') {
+    const ids = Array.isArray(val) ? (val as unknown[]) : [val]
+    if (ids.length === 0) return null
+    return ids.map(id => nameMap[String(id)] ?? String(id)).join(', ')
+  }
+  return String(val)
+}
+
+function buildPreviewLabel(
+  subFields: FieldDefinitionOut[],
+  fieldValues: Array<{ field_slug: string; language: string; value: unknown }>,
+  dirty: Record<string, unknown>,
+  uiLang: string,
+  fallback: string,
+  nameMap: Record<string, string> = {},
+): string {
+  const previewFields = subFields.filter(f => f.is_preview)
+  if (previewFields.length === 0) return fallback
+  const parts: string[] = []
+  for (const fd of previewFields) {
+    let val: unknown
+    if (fd.slug in dirty) {
+      const d = dirty[fd.slug]
+      if (fd.is_localized && typeof d === 'object' && d !== null) {
+        val = (d as Record<string, unknown>)[uiLang] ?? Object.values(d as object)[0]
+      } else {
+        val = d
+      }
+    } else if (fd.is_localized) {
+      const fv = fieldValues.find(v => v.field_slug === fd.slug && v.language === uiLang)
+        ?? fieldValues.find(v => v.field_slug === fd.slug)
+      val = fv?.value
+    } else {
+      val = fieldValues.find(v => v.field_slug === fd.slug && v.language === '')?.value
+    }
+    const resolved = resolvePreviewValue(fd, val, nameMap)
+    if (resolved !== null) parts.push(resolved)
+  }
+  return parts.length > 0 ? parts.join(' · ') : fallback
+}
+
+// ── SubmodelChildCard ─────────────────────────────────────────────────────────
+
+interface SubmodelChildCardProps {
+  item: LocalChild
+  subFields: FieldDefinitionOut[]
+  subLanguages: string[]
+  uiLang: string
+  disabled: boolean
+  onChange: (dirty: Record<string, unknown>) => void
+  onDelete: () => void
+  subFieldSeverities?: Record<string, string>
+  subFieldMessages?: Record<string, PolicyMessage[]>
+  nameMap?: Record<string, string>
+  onEntityRefresh?: (policyMessages?: PolicyMessage[]) => void | Promise<void>
+}
+
+function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, subFieldSeverities, subFieldMessages, nameMap = {}, onEntityRefresh }: SubmodelChildCardProps) {
+  const hasHighlightedFields = Object.keys(subFieldSeverities ?? {}).length > 0
+  const [expanded, setExpanded] = useState(!item.id || hasHighlightedFields)
+  const [activeLang, setActiveLang] = useState(subLanguages[0] ?? '')
+  const fallbackLabel = item.id ? item.id.slice(0, 8) + '…' : 'New (unsaved)'
+  const label = item.id
+    ? buildPreviewLabel(subFields, item.saved?.field_values ?? [], item.dirty, uiLang, fallbackLabel, nameMap)
+    : fallbackLabel
+
+  function handleFieldChange(slug: string, lang: string, val: unknown) {
+    const subFd = subFields.find(f => f.slug === slug)
+    let update: Record<string, unknown>
+    if (subFd?.is_localized) {
+      const existing = (typeof item.dirty[slug] === 'object' && item.dirty[slug] !== null)
+        ? item.dirty[slug] as Record<string, unknown>
+        : subLanguages.reduce((acc, l) => {
+            acc[l] = getChildFieldValue(item, slug, l)
+            return acc
+          }, {} as Record<string, unknown>)
+      update = { ...item.dirty, [slug]: { ...existing, [lang]: val } }
+    } else {
+      update = { ...item.dirty, [slug]: val }
+    }
+    onChange(update)
+  }
+
+  const hasChanges = Object.keys(item.dirty).length > 0
+
+  const topSeverity = hasHighlightedFields ? maxSeverity(
+    Object.entries(subFieldSeverities ?? {}).flatMap(([, sev]) => [{ level: sev } as PolicyMessage])
+  ) : undefined
+  const cardBorderColor = item.deleted ? '#fca5a5'
+    : ((() => {
+        if (!topSeverity) return hasChanges ? '#f9a825' : '#e0e0e0'
+        if (topSeverity === 'critical' || topSeverity === 'error') return '#dc2626'
+        if (hasChanges) return '#f9a825'
+        if (topSeverity === 'warning') return '#eab308'
+        return '#3b82f6'
+      })())
+  return (
+    <div style={{
+      border: `1px solid ${cardBorderColor}`,
+      borderRadius: '6px', marginBottom: '0.5rem', background: item.deleted ? '#fef2f2' : '#fafafa',
+      ...(hasHighlightedFields ? { boxShadow: '0 0 0 2px rgba(220,38,38,0.15)' } : {}),
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem' }}>
+        <span style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#555' }}>
+          {label}{hasChanges && !item.deleted ? ' *' : ''}{item.deleted ? ' (will be deleted)' : ''}
+        </span>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          {!item.deleted && (
+            <>
+              <button type="button"
+                style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', background: '#fff' }}
+                onClick={() => setExpanded(e => !e)}>
+                {expanded ? 'Collapse' : 'Edit'}
+              </button>
+              {!disabled && (
+                <button type="button"
+                  style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#dc2626' }}
+                  onClick={onDelete}>
+                  Delete
+                </button>
+              )}
+            </>
+          )}
+          {item.deleted && !disabled && (
+            <button type="button"
+              style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', background: '#fff' }}
+              onClick={() => onChange({ ...item.dirty, _undelete: true })}>
+              Restore
+            </button>
+          )}
+        </div>
+      </div>
+
+      {expanded && !item.deleted && (
+        <div style={{ padding: '0.5rem 0.75rem', borderTop: '1px solid #e8e8e8' }}>
+          {subLanguages.length > 1 && (
+            <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.5rem' }}>
+              {subLanguages.map(l => (
+                <button key={l} type="button"
+                  style={{ padding: '0.2rem 0.5rem', border: '1px solid #ccc', borderRadius: '4px 4px 0 0', cursor: 'pointer', fontSize: '0.78rem', background: activeLang === l ? '#0066cc' : '#fff', color: activeLang === l ? '#fff' : '#555' }}
+                  onClick={() => setActiveLang(l)}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+          {subFields.map(subFd => {
+            const subLabel = getLang(subFd.label as Record<string, string>, uiLang) || subFd.slug
+            const langs = subFd.is_localized ? subLanguages.filter(Boolean) : ['']
+            const sev = subFieldSeverities?.[subFd.slug]
+            const subColor = subFieldColor(sev)
+            const subMsgs = subFieldMessages?.[subFd.slug] ?? []
+            return (
+              <div key={subFd.slug} style={{
+                marginBottom: '0.6rem',
+                ...(sev ? { outline: `2px solid ${subColor}`, borderRadius: '4px', padding: '0.25rem' } : {}),
+              }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: sev ? subColor : '#444', marginBottom: '0.2rem' }}>
+                  {subLabel} <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#999' }}>({subFd.data_type})</span>
+                </div>
+                {langs.map(lang => (
+                  <FieldInput
+                    key={lang || 'nolang'}
+                    fd={subFd}
+                    value={getChildFieldValue(item, subFd.slug, lang)}
+                    onChange={val => handleFieldChange(subFd.slug, lang, val)}
+                    disabled={disabled || !!(subFd.type_config as Record<string, unknown>)?.default_current_user}
+                    lang={lang}
+                    entityChildren={item.saved?.children}
+                    nodeId={item.id}
+                    onEntityRefresh={onEntityRefresh}
+                  />
+                ))}
+                {subMsgs.length > 0 && <PolicyMessageList messages={subMsgs} />}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── SubmodelEditor ────────────────────────────────────────────────────────────
+
+function SubmodelEditorComponent({ fd, existingChildren, existingValue, disabled, uiLang, onChange, subFieldSeverities, subFieldMessages, resetKey, onEntityRefresh }: {
+  fd: FieldDefinitionOut
+  existingChildren: unknown[]
+  existingValue: unknown
+  disabled: boolean
+  uiLang: string
+  onChange: (ops: SubmodelOp[] | { op: string; fields?: Record<string, unknown> } | null) => void
+  subFieldSeverities?: Record<string, string>
+  subFieldMessages?: Record<string, PolicyMessage[]>
+  resetKey?: number
+  onEntityRefresh?: (policyMessages?: PolicyMessage[]) => void | Promise<void>
+}) {
+  const isList = fd.data_type === 'submodel_list'
+  const subConfig = fd.submodel_config as ConfigVersionOut | null | undefined
+  const subFields = subConfig?.fields ?? []
+  const subLanguages = (subConfig?.languages ?? []).map(l => l.code)
+  if (subLanguages.length === 0) subLanguages.push('')
+
+  // Always keep the latest onChange in a ref so handlers never capture a stale closure
+  const onChangeRef = useRef(onChange)
+  useEffect(() => { onChangeRef.current = onChange })
+
+  // For submodel_list: manage a list of LocalChild items
+  const toItems = (children: unknown[]): LocalChild[] =>
+    (children as ChildNode[]).map(c => ({ key: c.id, id: c.id, dirty: {}, saved: c, deleted: false }))
+
+  const [items, setItems] = useState<LocalChild[]>(() => toItems(existingChildren))
+  const nextKeyRef = useRef(0)
+
+  // Sync when the server refreshes the entity.
+  // Only relevant for submodel_list; the submodel_select branch manages its own
+  // pending state below and must NOT emit a list-shaped [] op (which would be
+  // written into the single FK column and rejected as "not a valid UUID").
+  const prevServerIds = useRef(new Set((existingChildren as ChildNode[]).map(c => c.id)))
+  useEffect(() => {
+    if (!isList) return
+    const incoming = existingChildren as ChildNode[]
+    const incomingIds = new Set(incoming.map(c => c.id))
+    const sameIds =
+      incomingIds.size === prevServerIds.current.size &&
+      [...incomingIds].every(id => prevServerIds.current.has(id))
+    if (!sameIds) {
+      prevServerIds.current = incomingIds
+      // Reset to server state — clears any pending-new items that were saved
+      setItems(toItems(incoming))
+      // After a server refresh there are no pending local ops
+      onChangeRef.current([])
+    } else {
+      // IDs are the same but server data may have changed (e.g. after a child-node
+      // workflow transition). Update the saved snapshot for each existing item so
+      // field values (including workflow state badges) reflect the new server state,
+      // while preserving any in-progress dirty edits.
+      setItems(prev => prev.map(item => {
+        if (!item.id) return item
+        const fresh = incoming.find(c => c.id === item.id)
+        return fresh ? { ...item, saved: fresh } : item
+      }))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingChildren])
+
+
+  // Helpers that mutate items AND immediately propagate ops — no useEffect lag
+  function applyItemChange(newItems: LocalChild[]) {
+    setItems(newItems)
+    const ops = buildOps(newItems)
+    onChangeRef.current(ops.length > 0 ? ops : [])
+  }
+
+  function addItem() {
+    const key = `_new_${nextKeyRef.current++}`
+    applyItemChange([...items, { key, id: null, dirty: {}, saved: null, deleted: false }])
+  }
+
+  function updateItem(key: string, dirty: Record<string, unknown>) {
+    applyItemChange(items.map(it => it.key === key ? { ...it, dirty, deleted: false } : it))
+  }
+
+  function deleteItem(key: string) {
+    applyItemChange(
+      items
+        .map(it => {
+          if (it.key !== key) return it
+          if (!it.id) return { ...it, deleted: true }
+          return { ...it, deleted: true, dirty: {} }
+        })
+        .filter(it => !(it.deleted && !it.id))
+    )
+  }
+
+  // For submodel_select: the current op to send (or null = no change)
+  const selectNodeId = typeof existingValue === 'string' ? existingValue : null
+  const ownedChild = (existingChildren as ChildNode[]).find(c => c.id === selectNodeId) ?? null
+
+  const [selectDirty, setSelectDirty] = useState<Record<string, unknown>>({})
+  const [selectActiveLang, setSelectActiveLang] = useState(subLanguages[0] ?? '')
+  const [selectExpanded, setSelectExpanded] = useState(false)
+  // pendingNew = user clicked "Create", form shown optimistically before save
+  const [pendingNew, setPendingNew] = useState(false)
+  // pendingRemoval = user clicked Delete/Clear; hide the form before the save round-trip
+  const [pendingRemoval, setPendingRemoval] = useState(false)
+
+  // When the entity refreshes after save, clear the pending state
+  const prevSelectNodeId = useRef(selectNodeId)
+  useEffect(() => {
+    if (selectNodeId !== prevSelectNodeId.current) {
+      if (pendingNew && selectNodeId) {
+        setPendingNew(false)
+        setSelectDirty({})
+      }
+      // FK cleared by the server → drop the optimistic removal flag
+      if (!selectNodeId) setPendingRemoval(false)
+    }
+    prevSelectNodeId.current = selectNodeId
+  }, [selectNodeId, pendingNew])
+
+  // Reset local UI state when the parent discards all changes.
+  // We only reset local state here — the parent already cleared its own dirty map.
+  const prevResetKey = useRef(resetKey)
+  useEffect(() => {
+    if (resetKey === prevResetKey.current) return
+    prevResetKey.current = resetKey
+    if (isList) {
+      setItems(toItems(existingChildren as ChildNode[]))
+    } else {
+      setSelectDirty({})
+      setPendingNew(false)
+      setPendingRemoval(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey])
+
+  // ── Resolve user/group display names for preview fields ──────────────────
+  const [previewNameMap, setPreviewNameMap] = useState<Record<string, string>>({})
+
+  const previewUserGroupFields = useMemo(
+    () => subFields.filter(f => f.is_preview && (
+      f.data_type === 'user_select' || f.data_type === 'user_select_multi' ||
+      f.data_type === 'group_select' || f.data_type === 'group_select_multi'
+    )),
+    [subFields],
+  )
+
+  useEffect(() => {
+    if (previewUserGroupFields.length === 0) return
+
+    const userIds = new Set<string>()
+    const groupIds = new Set<string>()
+
+    function collect(values: Array<{ field_slug: string; language: string; value: unknown }>, dirty: Record<string, unknown>) {
+      for (const fd of previewUserGroupFields) {
+        const val = fd.slug in dirty
+          ? dirty[fd.slug]
+          : values.find(v => v.field_slug === fd.slug && v.language === '')?.value
+        const ids = Array.isArray(val) ? (val as unknown[]) : (val != null ? [val] : [])
+        const isUser = fd.data_type === 'user_select' || fd.data_type === 'user_select_multi'
+        for (const id of ids) {
+          const key = String(id)
+          if (!(key in previewNameMap)) {
+            if (isUser) userIds.add(key)
+            else groupIds.add(key)
+          }
+        }
+      }
+    }
+
+    if (isList) {
+      for (const item of items) collect(item.saved?.field_values ?? [], item.dirty)
+    } else {
+      collect(ownedChild?.field_values ?? [], selectDirty)
+    }
+
+    if (userIds.size === 0 && groupIds.size === 0) return
+
+    if (userIds.size > 0) {
+      udmSearchUsers('').then(users => {
+        setPreviewNameMap(prev => {
+          const next = { ...prev }
+          for (const u of users) if (userIds.has(u.id)) next[u.id] = u.display_name
+          return next
+        })
+      }).catch(() => {})
+    }
+    if (groupIds.size > 0) {
+      udmSearchGroups('').then(groups => {
+        setPreviewNameMap(prev => {
+          const next = { ...prev }
+          for (const g of groups) if (groupIds.has(String(g.id))) next[String(g.id)] = g.name
+          return next
+        })
+      }).catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isList ? items.map(it => it.key).join(',') : selectNodeId,
+    previewUserGroupFields,
+  ])
+
+  // ── submodel_list UI ──
+  if (isList) {
+    const visible = items.filter(it => !(it.deleted && !it.id))
+
+    return (
+      <div>
+        {visible.length === 0 && (
+          <div style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', marginBottom: '0.5rem' }}>No items yet.</div>
+        )}
+        {visible.map(item => (
+          <SubmodelChildCard
+            key={item.key}
+            item={item}
+            subFields={subFields}
+            subLanguages={subLanguages}
+            uiLang={uiLang}
+            disabled={disabled}
+            onChange={dirty => updateItem(item.key, dirty)}
+            onDelete={() => deleteItem(item.key)}
+            subFieldSeverities={subFieldSeverities}
+            subFieldMessages={subFieldMessages}
+            nameMap={previewNameMap}
+            onEntityRefresh={onEntityRefresh}
+          />
+        ))}
+        {!disabled && (
+          <button type="button"
+            style={{ fontSize: '0.82rem', padding: '0.3rem 0.75rem', border: '1px dashed #aaa', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#555', marginTop: '0.25rem' }}
+            onClick={addItem}>
+            + Add item
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  // ── submodel_select UI ──
+  function handleCreate() {
+    setPendingNew(true)
+    setPendingRemoval(false)
+    setSelectDirty({})
+    setSelectExpanded(true)
+    onChange({ op: 'create', fields: {} })
+  }
+
+  function handleCancelPending() {
+    setPendingNew(false)
+    setSelectDirty({})
+    onChange(null)
+  }
+
+  function handleDelete() {
+    setPendingRemoval(true)
+    setSelectExpanded(false)
+    onChange({ op: 'delete' })
+  }
+
+  function handleClear() {
+    setPendingRemoval(true)
+    setSelectExpanded(false)
+    onChange(null)
+  }
+
+  function handleSelectFieldChange(slug: string, lang: string, val: unknown) {
+    const subFd = subFields.find(f => f.slug === slug)
+    let updated: Record<string, unknown>
+    if (subFd?.is_localized) {
+      const existing = (typeof selectDirty[slug] === 'object' && selectDirty[slug] !== null)
+        ? selectDirty[slug] as Record<string, unknown>
+        : subLanguages.reduce((acc, l) => {
+            const fv = ownedChild?.field_values.find(v => v.field_slug === slug && v.language === l)
+            acc[l] = fv?.value ?? null
+            return acc
+          }, {} as Record<string, unknown>)
+      updated = { ...selectDirty, [slug]: { ...existing, [lang]: val } }
+    } else {
+      updated = { ...selectDirty, [slug]: val }
+    }
+    setSelectDirty(updated)
+    if (pendingNew) {
+      // still creating — carry the fields along with the create op
+      onChange({ op: 'create', fields: updated })
+    } else if (ownedChild) {
+      // submodel_select expects a single dict op, never a list (that is the
+      // submodel_list shape and would be written into the FK column).
+      onChange({ op: 'update', fields: updated })
+    }
+  }
+
+  // Show the form when: pending new creation, OR already has a saved/owned child.
+  // An optimistic delete/clear hides it immediately.
+  const showForm = !pendingRemoval && (pendingNew || ownedChild !== null || selectNodeId !== null)
+
+  return (
+    <div style={{ border: '1px solid #e0e0e0', borderRadius: '6px', padding: '0.75rem', background: '#fafafa' }}>
+      {!showForm && (
+        <div>
+          <div style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', marginBottom: '0.5rem' }}>No submodel selected.</div>
+          {!disabled && subConfig && (
+            <button type="button"
+              style={{ fontSize: '0.82rem', padding: '0.3rem 0.75rem', border: '1px dashed #aaa', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#555' }}
+              onClick={handleCreate}>
+              + Create new submodel
+            </button>
+          )}
+          {!disabled && !subConfig && (
+            <div style={{ fontSize: '0.82rem', color: '#dc2626' }}>No submodel config assigned to this field.</div>
+          )}
+        </div>
+      )}
+
+      {showForm && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <span style={{ fontSize: '0.82rem', fontFamily: 'monospace', color: '#555' }}>
+              {pendingNew ? 'New (unsaved)' : buildPreviewLabel(
+                subFields,
+                ownedChild?.field_values ?? [],
+                selectDirty,
+                uiLang,
+                `${selectNodeId?.slice(0, 8)}…`,
+                previewNameMap,
+              )}
+            </span>
+            <div style={{ display: 'flex', gap: '0.4rem' }}>
+              {!disabled && (
+                <>
+                  {!pendingNew && (
+                    <button type="button"
+                      style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', background: '#fff' }}
+                      onClick={() => setSelectExpanded(e => !e)}>
+                      {selectExpanded ? 'Collapse' : 'Edit fields'}
+                    </button>
+                  )}
+                  {pendingNew ? (
+                    <button type="button"
+                      style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #aaa', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#666' }}
+                      onClick={handleCancelPending}>
+                      Cancel
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button"
+                        style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #dc2626', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#dc2626' }}
+                        onClick={handleDelete}>
+                        Delete
+                      </button>
+                      <button type="button"
+                        style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: '1px solid #aaa', borderRadius: '4px', cursor: 'pointer', background: '#fff', color: '#666' }}
+                        onClick={handleClear}>
+                        Clear
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {(pendingNew || selectExpanded) && subFields.length > 0 && (
+            <div style={{ borderTop: '1px solid #e8e8e8', paddingTop: '0.5rem' }}>
+              {subLanguages.length > 1 && (
+                <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.5rem' }}>
+                  {subLanguages.map(l => (
+                    <button key={l} type="button"
+                      style={{ padding: '0.2rem 0.5rem', border: '1px solid #ccc', borderRadius: '4px 4px 0 0', cursor: 'pointer', fontSize: '0.78rem', background: selectActiveLang === l ? '#0066cc' : '#fff', color: selectActiveLang === l ? '#fff' : '#555' }}
+                      onClick={() => setSelectActiveLang(l)}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {subFields.map(subFd => {
+                const subLabel = getLang(subFd.label as Record<string, string>, uiLang) || subFd.slug
+                const langs = subFd.is_localized ? subLanguages.filter(Boolean) : ['']
+                const sev = subFieldSeverities?.[subFd.slug]
+                const subColor = subFieldColor(sev)
+                const subMsgs = subFieldMessages?.[subFd.slug] ?? []
+                return (
+                  <div key={subFd.slug} style={{
+                    marginBottom: '0.6rem',
+                    ...(sev ? { outline: `2px solid ${subColor}`, borderRadius: '4px', padding: '0.25rem' } : {}),
+                  }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: sev ? subColor : '#444', marginBottom: '0.2rem' }}>
+                      {subLabel} <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#999' }}>({subFd.data_type})</span>
+                    </div>
+                    {langs.map(lang => (
+                      <FieldInput
+                        key={lang || 'nolang'}
+                        fd={subFd}
+                        value={
+                          selectDirty[subFd.slug] !== undefined
+                            ? (subFd.is_localized
+                                ? (selectDirty[subFd.slug] as Record<string, unknown>)?.[lang]
+                                : selectDirty[subFd.slug])
+                            : (ownedChild?.field_values.find(v => v.field_slug === subFd.slug && v.language === lang)?.value ?? null)
+                        }
+                        onChange={val => handleSelectFieldChange(subFd.slug, lang, val)}
+                        disabled={disabled}
+                        lang={lang}
+                        entityChildren={ownedChild?.children}
+                        nodeId={ownedChild?.id}
+                        onEntityRefresh={onEntityRefresh}
+                      />
+                    ))}
+                    {subMsgs.length > 0 && <PolicyMessageList messages={subMsgs} />}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {!pendingNew && selectExpanded && !ownedChild && (
+            <div style={{ fontSize: '0.82rem', color: '#888', fontStyle: 'italic', paddingTop: '0.5rem', borderTop: '1px solid #e8e8e8' }}>
+              Referenced submodel is not directly owned by this entity — field editing not available here.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── FieldInputProps adapter ───────────────────────────────────────────────────
+// SubmodelEditor wraps SubmodelEditorComponent to match the FieldInputProps interface.
+
+function SubmodelEditorAdapter({ fd, value, onChange, disabled, lang = 'en', entityChildren, subFieldSeverities, subFieldMessages, resetKey, onEntityRefresh }: FieldInputProps) {
+  return (
+    <SubmodelEditorComponent
+      fd={fd}
+      existingChildren={(entityChildren?.[fd.slug] ?? []) as unknown[]}
+      existingValue={value}
+      disabled={disabled}
+      uiLang={lang || 'en'}
+      onChange={onChange as (ops: unknown) => void}
+      subFieldSeverities={subFieldSeverities}
+      subFieldMessages={subFieldMessages}
+      resetKey={resetKey}
+      onEntityRefresh={onEntityRefresh}
+    />
+  )
+}
+
+fieldEditorRegistry.register(['submodel_list', 'submodel_select'], SubmodelEditorAdapter)
