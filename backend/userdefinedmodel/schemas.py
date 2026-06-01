@@ -96,6 +96,7 @@ class SelectTypeConfig(Schema):
 
 class UserGroupTypeConfig(Schema):
     limit_to_group_ids: Optional[list[int]] = Field(None, max_length=_MAX_GROUP_IDS)
+    default_current_user: bool = False
     model_config = {"extra": "forbid"}
 
 
@@ -298,6 +299,7 @@ class WorkflowDefinitionOut(Schema):
     initial_state: Optional[str]
     states: list[WorkflowStateOut]
     transitions: list[WorkflowTransitionOut]
+    virtual_node_positions: dict[str, Any] = Field(default_factory=dict)
 
 
 class WorkflowCreateIn(Schema):
@@ -305,6 +307,8 @@ class WorkflowCreateIn(Schema):
     description: Annotated[str, Field(max_length=_MAX_DESCRIPTION_LEN)] = ""
     states: list[WorkflowStateIn] = Field(..., min_length=1, max_length=_MAX_STATES)
     transitions: list[WorkflowTransitionIn] = Field(default_factory=list, max_length=_MAX_TRANSITIONS)
+    migrations: list[StateMigrationIn] = Field(default_factory=list)
+    virtual_node_positions: dict[str, Any] = Field(default_factory=dict)
     model_config = {"extra": "forbid"}
 
     @field_validator("states")
@@ -327,6 +331,7 @@ class WorkflowUpdateIn(Schema):
     states: Optional[list[WorkflowStateIn]] = Field(None, max_length=_MAX_STATES)
     transitions: Optional[list[WorkflowTransitionIn]] = Field(None, max_length=_MAX_TRANSITIONS)
     migrations: list[StateMigrationIn] = Field(default_factory=list)
+    virtual_node_positions: dict[str, Any] = Field(default_factory=dict)
     model_config = {"extra": "forbid"}
 
 # ─── ConfigVersion schemas ────────────────────────────────────────────────────
@@ -492,10 +497,27 @@ class MigrationPreviewOut(Schema):
     field_previews: list[MigrationPreviewFieldOut]
 
 
+class SubmodelMigrationIn(Schema):
+    """Field mappings for child nodes under a single SUBMODEL_* field when the submodel version changed."""
+    source_parent_field_slug: Slug
+    target_submodel_version_id: uuid.UUID
+    field_mappings: list[MigrationFieldMappingIn] = Field(default_factory=list, max_length=_MAX_MAPPING_ENTRIES)
+    model_config = {"extra": "forbid"}
+
+
+class WorkflowFieldStateMappingIn(Schema):
+    """Explicit state name overrides for a single workflow field during bulk migration."""
+    field_slug: Slug
+    state_mappings: list[StateMigrationIn] = Field(default_factory=list, max_length=_MAX_STATES)
+    model_config = {"extra": "forbid"}
+
+
 class BulkMigrationCreateIn(Schema):
     source_version_id: uuid.UUID; target_version_id: uuid.UUID
     user_defined_model_type_filter_id: Optional[uuid.UUID] = None
     field_mappings: list[MigrationFieldMappingIn] = Field(..., max_length=_MAX_MAPPING_ENTRIES)
+    submodel_mappings: list[SubmodelMigrationIn] = Field(default_factory=list, max_length=_MAX_FIELDS)
+    workflow_state_mappings: list[WorkflowFieldStateMappingIn] = Field(default_factory=list, max_length=_MAX_FIELDS)
     model_config = {"extra": "forbid"}
 
 

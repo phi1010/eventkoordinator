@@ -54,6 +54,9 @@ from userdefinedmodel.models.migration import (
     MigrationFieldMapping,
     BulkMigrationPlan,
     BulkMigrationFieldMapping,
+    BulkMigrationSubmodelMapping,
+    BulkMigrationSubmodelFieldMapping,
+    BulkMigrationWorkflowStateMapping,
 )
 
 __all__ = [
@@ -106,4 +109,7 @@ __all__ = [
     "MigrationFieldMapping",
     "BulkMigrationPlan",
     "BulkMigrationFieldMapping",
+    "BulkMigrationSubmodelMapping",
+    "BulkMigrationSubmodelFieldMapping",
+    "BulkMigrationWorkflowStateMapping",
 ]

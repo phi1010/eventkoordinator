@@ -211,14 +211,16 @@ function wfToReactFlow(wf: WorkflowDefinitionOut): { nodes: AnyWfNode[]; edges: 
     if (t.from_state === null && !t.from_undefined_only) {
       // From Any
       if (!hasFromAny) {
-        nodes.push({ id: ID_FROM_ANY, type: 'fromAny', position: { x: minX - 200, y: midY - 40 }, data: {} })
+        const saved = (wf.virtual_node_positions as Record<string, { x: number; y: number } | undefined>)?.['fromAny']
+        nodes.push({ id: ID_FROM_ANY, type: 'fromAny', position: saved ?? { x: minX - 200, y: midY - 40 }, data: {} })
         hasFromAny = true
       }
       edges.push({ ...edgeBase, id: t.name, source: ID_FROM_ANY, target: t.to_state, sourceHandle: t.source_handle || null, targetHandle: t.target_handle || null })
     } else if (t.from_state === null && t.from_undefined_only) {
       // From Undefined
       if (!hasFromUndefined) {
-        nodes.push({ id: ID_FROM_UNDEFINED, type: 'fromUndefined', position: { x: minX - 200, y: midY + 40 }, data: {} })
+        const saved = (wf.virtual_node_positions as Record<string, { x: number; y: number } | undefined>)?.['fromUndefined']
+        nodes.push({ id: ID_FROM_UNDEFINED, type: 'fromUndefined', position: saved ?? { x: minX - 200, y: midY + 40 }, data: {} })
         hasFromUndefined = true
       }
       edges.push({ ...edgeBase, id: t.name, source: ID_FROM_UNDEFINED, target: t.to_state, sourceHandle: t.source_handle || null, targetHandle: t.target_handle || null })
@@ -300,6 +302,13 @@ function reactFlowToWf(
     })
     .filter(Boolean)
 
+  const virtual_node_positions: Record<string, { x: number; y: number }> = {}
+  for (const n of nodes) {
+    if (n.type === 'fromAny' || n.type === 'fromUndefined') {
+      virtual_node_positions[n.type] = { x: n.position.x, y: n.position.y }
+    }
+  }
+
   return {
     name,
     description,
@@ -318,6 +327,7 @@ function reactFlowToWf(
     }),
     transitions,
     migrations,
+    virtual_node_positions,
   }
 }
 

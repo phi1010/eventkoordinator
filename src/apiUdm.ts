@@ -276,6 +276,8 @@ export type MigrationExecuteIn = components['schemas']['MigrationExecuteIn']
 export type MigrationAction = components['schemas']['MigrationAction']
 export type BulkMigrationCreateIn = components['schemas']['BulkMigrationCreateIn']
 export type BulkMigrationOut = components['schemas']['BulkMigrationOut']
+export type SubmodelMigrationIn = components['schemas']['SubmodelMigrationIn']
+export type WorkflowFieldStateMappingIn = components['schemas']['WorkflowFieldStateMappingIn']
 export type PolicyEvalOut = components['schemas']['PolicyEvalOut']
 
 // Version list item returned by list_config_versions (content?: never in schema but backend returns JSON)

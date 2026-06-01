@@ -625,6 +625,8 @@ export interface components {
              * Format: uuid
              */
             source_version_id: string;
+            /** Submodel Mappings */
+            submodel_mappings?: components["schemas"]["SubmodelMigrationIn"][];
             /**
              * Target Version Id
              * Format: uuid
@@ -632,6 +634,8 @@ export interface components {
             target_version_id: string;
             /** User Defined Model Type Filter Id */
             user_defined_model_type_filter_id?: string | null;
+            /** Workflow State Mappings */
+            workflow_state_mappings?: components["schemas"]["WorkflowFieldStateMappingIn"][];
         };
         /** BulkMigrationOut */
         BulkMigrationOut: {
@@ -795,8 +799,6 @@ export interface components {
              * @default []
              */
             editable_fields: string[];
-            /** Editors */
-            editors: components["schemas"]["UserRefOut"][];
             /** Field Values */
             field_values: components["schemas"]["FieldValueOut"][];
             /**
@@ -808,7 +810,6 @@ export interface components {
             overflow_data: {
                 [key: string]: unknown;
             };
-            owner: components["schemas"]["UserRefOut"] | null;
             /**
              * Policy Messages
              * @default []
@@ -948,6 +949,11 @@ export interface components {
             field_label?: string | null;
             /** Field Slug */
             field_slug?: string | null;
+            /**
+             * Language
+             * @default
+             */
+            language: string;
             /** New File Name */
             new_file_name?: string | null;
             /** New File Url */
@@ -1061,6 +1067,13 @@ export interface components {
         };
         /** PolicyEvalOut */
         PolicyEvalOut: {
+            /**
+             * Coverage
+             * @default []
+             */
+            coverage: {
+                [key: string]: unknown;
+            }[];
             /** Error */
             error?: string | null;
             /** Input Document */
@@ -1075,14 +1088,11 @@ export interface components {
             policies: {
                 [key: string]: string;
             }[];
-            /** Prints — stdout lines from Rego print() calls */
-            prints?: string[];
-            /** Coverage — per-file {path, covered, not_covered} line arrays */
-            coverage?: {
-                path: string;
-                covered: number[];
-                not_covered: number[];
-            }[];
+            /**
+             * Prints
+             * @default []
+             */
+            prints: string[];
         };
         /** PolicyOut */
         PolicyOut: {
@@ -1119,8 +1129,27 @@ export interface components {
             /** To State */
             to_state: string;
         };
+        /**
+         * SubmodelMigrationIn
+         * @description Field mappings for child nodes under a single SUBMODEL_* field when the submodel version changed.
+         */
+        SubmodelMigrationIn: {
+            /** Field Mappings */
+            field_mappings?: components["schemas"]["MigrationFieldMappingIn"][];
+            /** Source Parent Field Slug */
+            source_parent_field_slug: string;
+            /**
+             * Target Submodel Version Id
+             * Format: uuid
+             */
+            target_submodel_version_id: string;
+        };
         /** TransitionIn */
         TransitionIn: {
+            /** Changed Fields */
+            changed_fields?: {
+                [key: string]: unknown;
+            };
             /** Field */
             field: string;
             /** Transition */
@@ -1177,12 +1206,18 @@ export interface components {
              * @default
              */
             description: string;
+            /** Migrations */
+            migrations?: components["schemas"]["StateMigrationIn"][];
             /** Name */
             name: string;
             /** States */
             states: components["schemas"]["WorkflowStateIn"][];
             /** Transitions */
             transitions?: components["schemas"]["WorkflowTransitionIn"][];
+            /** Virtual Node Positions */
+            virtual_node_positions?: {
+                [key: string]: unknown;
+            };
         };
         /** WorkflowDefinitionOut */
         WorkflowDefinitionOut: {
@@ -1201,6 +1236,20 @@ export interface components {
             states: components["schemas"]["WorkflowStateOut"][];
             /** Transitions */
             transitions: components["schemas"]["WorkflowTransitionOut"][];
+            /** Virtual Node Positions */
+            virtual_node_positions?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * WorkflowFieldStateMappingIn
+         * @description Explicit state name overrides for a single workflow field during bulk migration.
+         */
+        WorkflowFieldStateMappingIn: {
+            /** Field Slug */
+            field_slug: string;
+            /** State Mappings */
+            state_mappings?: components["schemas"]["StateMigrationIn"][];
         };
         /** WorkflowStateIn */
         WorkflowStateIn: {
@@ -1225,6 +1274,8 @@ export interface components {
              * @default 0
              */
             position_y: number;
+            /** Previous Name */
+            previous_name?: string | null;
         };
         /** WorkflowStateOut */
         WorkflowStateOut: {
@@ -1300,6 +1351,10 @@ export interface components {
             states?: components["schemas"]["WorkflowStateIn"][] | null;
             /** Transitions */
             transitions?: components["schemas"]["WorkflowTransitionIn"][] | null;
+            /** Virtual Node Positions */
+            virtual_node_positions?: {
+                [key: string]: unknown;
+            };
         };
     };
     responses: never;

@@ -54,6 +54,19 @@ def run_bulk_migration(plan_id: str) -> None:
         mappings = list(plan.field_mappings.select_related("source_field", "target_field").all())
         tgt_version = plan.target_version
 
+        # Build workflow state override lookup: {field_slug: {from_state: to_state}}
+        workflow_state_overrides: dict[str, dict[str, str]] = {}
+        for wsm in plan.workflow_state_mappings.all():
+            workflow_state_overrides.setdefault(wsm.field_slug, {})[wsm.from_state] = wsm.to_state
+
+        # Load submodel mappings with their child field mappings
+        submodel_mappings = list(
+            plan.submodel_mappings
+            .select_related("source_parent_field", "target_submodel_version")
+            .prefetch_related("field_mappings__source_field", "field_mappings__target_field")
+            .all()
+        )
+
         for entity_id in entity_ids:
             try:
                 with transaction.atomic():
@@ -75,37 +88,18 @@ def run_bulk_migration(plan_id: str) -> None:
                         executed_by=None,
                     )
 
-                    overflow = {}
+                    _apply_field_mappings_to_node(
+                        entity, mappings, tgt_version, workflow_state_overrides,
+                        audit_migration=migration,
+                    )
 
-                    for bm in mappings:
-                        src_field = bm.source_field
-                        fv = entity.field_values.filter(field=src_field).first()
-                        if fv is None:
-                            continue
-
-                        MigrationFieldMapping.objects.create(
-                            migration=migration, source_field=src_field,
-                            action=bm.action, target_field=bm.target_field,
-                        )
-
-                        if bm.action == "map" and bm.target_field:
-                            val = _resolve_migration_value(fv, bm.target_field)
-                            if val is not None:
-                                new_fv, _ = FieldValue.objects.get_or_create(
-                                    node=entity, field=bm.target_field, language=fv.language
-                                )
-                                new_fv.set_value(val, field=bm.target_field)
-                                new_fv.save()
-                        elif bm.action == "overflow":
-                            overflow[src_field.slug] = str(fv.get_value())
-
-                    if overflow:
-                        entity.overflow_data = {**entity.overflow_data, **overflow}
-
-                    entity.config_version = tgt_version
-                    entity.validate_for_save()
-                    entity.save(update_fields=["config_version", "overflow_data"])
-                    entity.materialize_defaults()
+                    # Migrate child nodes for each submodel mapping
+                    for sm in submodel_mappings:
+                        children = list(entity.children.filter(parent_field=sm.source_parent_field))
+                        for child in children:
+                            _apply_field_mappings_to_node(
+                                child, list(sm.field_mappings.all()), sm.target_submodel_version, {},
+                            )
 
                     migration.executed_at = now()
                     migration.save(update_fields=["executed_at"])
@@ -137,8 +131,54 @@ def execute_bulk_migration(self, plan_id: str):
     run_bulk_migration(plan_id)
 
 
-def _resolve_migration_value(src_fv, tgt_field):
-    """Return a value suitable for set_value(val, field=tgt_field), or None to skip."""
+def _apply_field_mappings_to_node(node, mappings, target_version, workflow_state_overrides, *, audit_migration=None):
+    """Apply a list of field mappings to a node, update its config_version, validate, and materialize defaults.
+
+    mappings: iterable of objects with .source_field, .action, .target_field attributes.
+    workflow_state_overrides: {field_slug: {from_state: to_state}} for workflow fields.
+    audit_migration: if set, creates MigrationFieldMapping audit rows on it.
+    """
+    from userdefinedmodel.models import FieldValue, MigrationFieldMapping
+
+    overflow = {}
+    for bm in mappings:
+        src_field = bm.source_field
+        fv = node.field_values.filter(field=src_field).first()
+        if fv is None:
+            continue
+
+        if audit_migration:
+            MigrationFieldMapping.objects.create(
+                migration=audit_migration, source_field=src_field,
+                action=bm.action, target_field=bm.target_field,
+            )
+
+        if bm.action == "map" and bm.target_field:
+            overrides = workflow_state_overrides.get(src_field.slug, {}) if workflow_state_overrides else {}
+            val = _resolve_migration_value(fv, bm.target_field, state_overrides=overrides)
+            if val is not None:
+                new_fv, _ = FieldValue.objects.get_or_create(
+                    node=node, field=bm.target_field, language=fv.language
+                )
+                new_fv.set_value(val, field=bm.target_field)
+                new_fv.save()
+        elif bm.action == "overflow":
+            overflow[src_field.slug] = str(fv.get_value())
+
+    if overflow:
+        node.overflow_data = {**node.overflow_data, **overflow}
+
+    node.config_version = target_version
+    node.validate_for_save()
+    node.save(update_fields=["config_version", "overflow_data"])
+    node.materialize_defaults()
+
+
+def _resolve_migration_value(src_fv, tgt_field, *, state_overrides=None):
+    """Return a value suitable for set_value(val, field=tgt_field), or None to skip.
+
+    state_overrides: {from_state_name: to_state_name} for workflow field remapping.
+    """
     from userdefinedmodel.models.config import FieldDefinition
     val = src_fv.get_value()
     if val is None:
@@ -146,9 +186,12 @@ def _resolve_migration_value(src_fv, tgt_field):
     if tgt_field.data_type == FieldDefinition.DataType.WORKFLOW:
         if not tgt_field.workflow_definition_id or not isinstance(val, str):
             return None
+        target_state_name = val
+        if state_overrides:
+            target_state_name = state_overrides.get(val, val)
         from userdefinedmodel.models import WorkflowState
         state = WorkflowState.objects.filter(
-            workflow_id=tgt_field.workflow_definition_id, name=val
+            workflow_id=tgt_field.workflow_definition_id, name=target_state_name
         ).first()
         return state
     return val

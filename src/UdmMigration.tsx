@@ -22,6 +22,25 @@ import {
   type BulkMigrationOut,
 } from './apiUdm'
 
+// Per-submodel-field migration state
+interface SubmodelSectionState {
+  sourceVersionId: string
+  targetVersionId: string
+  rows: MappingRow[]
+  targetFields: FieldDefinitionOut[]
+  mapping: MappingState
+}
+type SubmodelMappingsState = Record<string, SubmodelSectionState>
+
+// Per-workflow-field state mapping
+interface WorkflowSectionState {
+  fieldSlug: string
+  sourceStates: string[]
+  targetStates: string[]
+  mapping: Record<string, string>
+}
+type WorkflowMappingsState = Record<string, WorkflowSectionState>
+
 // ── Shared types & helpers ──────────────────────────────────────────────────────
 
 // Source-data-type → target-data-type pairs the backend treats as a safe map.
@@ -285,6 +304,58 @@ export function MigrationAssistant({ entityId, targetTypeId, sourceConfig, onMig
   )
 }
 
+// ── Workflow state mapping table ────────────────────────────────────────────────
+
+interface WorkflowStateMappingTableProps {
+  section: WorkflowSectionState
+  onChange: (next: WorkflowSectionState) => void
+  disabled?: boolean
+}
+
+function WorkflowStateMappingTable({ section, onChange, disabled }: WorkflowStateMappingTableProps) {
+  const { sourceStates, targetStates, mapping } = section
+
+  function setStateMapping(fromState: string, toState: string) {
+    onChange({ ...section, mapping: { ...mapping, [fromState]: toState } })
+  }
+
+  if (sourceStates.length === 0) {
+    return <div style={{ color: '#888', fontStyle: 'italic', fontSize: '0.85rem' }}>Source workflow has no states.</div>
+  }
+
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <thead>
+        <tr>
+          <th style={th}>Source state</th>
+          <th style={th}>Maps to</th>
+        </tr>
+      </thead>
+      <tbody>
+        {sourceStates.map(fromState => {
+          const toState = mapping[fromState] ?? ''
+          return (
+            <tr key={fromState}>
+              <td style={td}>
+                <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{fromState}</span>
+              </td>
+              <td style={td}>
+                <select style={{ ...ctrl, borderColor: toState ? '#ccc' : '#f59e0b' }} value={toState} disabled={disabled}
+                  onChange={e => setStateMapping(fromState, e.target.value)}>
+                  <option value="">— keep as-is (same name) —</option>
+                  {targetStates.map(ts => (
+                    <option key={ts} value={ts}>{ts}</option>
+                  ))}
+                </select>
+              </td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  )
+}
+
 // ── Bulk migration (admin) ──────────────────────────────────────────────────────
 
 const adminBtn: React.CSSProperties = {
@@ -320,6 +391,9 @@ export function BulkMigrationTab() {
   const [mapping, setMapping] = useState<MappingState>({})
   const [affected, setAffected] = useState<number | null>(null)
 
+  const [submodelMappings, setSubmodelMappings] = useState<SubmodelMappingsState>({})
+  const [workflowMappings, setWorkflowMappings] = useState<WorkflowMappingsState>({})
+
   const [errors, setErrors] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [plan, setPlan] = useState<BulkMigrationOut | null>(null)
@@ -335,6 +409,7 @@ export function BulkMigrationTab() {
     setConfigId(id)
     setSourceId(''); setTargetId(''); setVersions([])
     setRows([]); setMapping({}); setAffected(null); setPlan(null)
+    setSubmodelMappings({}); setWorkflowMappings({})
     if (!id) return
     try {
       setVersions(await udmListConfigVersions(id))
@@ -349,6 +424,7 @@ export function BulkMigrationTab() {
     setLoading(true)
     setErrors([])
     setPlan(null)
+    setSubmodelMappings({}); setWorkflowMappings({})
     try {
       const [src, tgt, prev] = await Promise.all([
         udmGetConfigVersion(sourceId),
@@ -366,6 +442,56 @@ export function BulkMigrationTab() {
       setTargetFields(tgt.fields)
       setMapping(suggested)
       setAffected(prev.affected_entity_count)
+
+      // Build submodel mapping sections: only when submodel config version changed
+      const newSubmodelMappings: SubmodelMappingsState = {}
+      for (const sf of src.fields) {
+        const tf = tgtBySlug.get(sf.slug)
+        if (!tf) continue
+        if ((sf.data_type === 'submodel_select' || sf.data_type === 'submodel_list') &&
+            sf.submodel_config && tf.submodel_config &&
+            sf.submodel_config.version_id !== tf.submodel_config.version_id) {
+          const subSuggested = suggestMappings(sf.submodel_config.fields, tf.submodel_config.fields)
+          const subTgtBySlug = new Map(tf.submodel_config.fields.map(f => [f.slug, f]))
+          newSubmodelMappings[sf.slug] = {
+            sourceVersionId: sf.submodel_config.version_id,
+            targetVersionId: tf.submodel_config.version_id,
+            rows: sf.submodel_config.fields.map(ssf => {
+              const t2 = subTgtBySlug.get(ssf.slug)
+              const conflict = t2 && !isCompatible(ssf.data_type, t2.data_type)
+                ? `Incompatible: ${ssf.data_type} → ${t2.data_type}` : null
+              return { sourceSlug: ssf.slug, sourceDataType: ssf.data_type, conflictReason: conflict }
+            }),
+            targetFields: tf.submodel_config.fields,
+            mapping: subSuggested,
+          }
+        }
+      }
+      setSubmodelMappings(newSubmodelMappings)
+
+      // Build workflow state mapping sections: always when a workflow field is mapped
+      const newWorkflowMappings: WorkflowMappingsState = {}
+      for (const sf of src.fields) {
+        const tf = tgtBySlug.get(sf.slug)
+        if (!tf) continue
+        if (sf.data_type === 'workflow' && tf.data_type === 'workflow' &&
+            sf.workflow_definition && tf.workflow_definition) {
+          const sourceStates = sf.workflow_definition.states.map(s => s.name)
+          const targetStates = tf.workflow_definition.states.map(s => s.name)
+          const targetStateSet = new Set(targetStates)
+          const stateMapping: Record<string, string> = {}
+          for (const s of sourceStates) {
+            stateMapping[s] = targetStateSet.has(s) ? s : ''
+          }
+          newWorkflowMappings[sf.slug] = {
+            fieldSlug: sf.slug,
+            sourceStates,
+            targetStates,
+            mapping: stateMapping,
+          }
+        }
+      }
+      setWorkflowMappings(newWorkflowMappings)
     } catch (e) {
       setErrors(e instanceof UdmApiError ? e.allMessages : [e instanceof Error ? e.message : 'Preview failed'])
     } finally {
@@ -393,14 +519,41 @@ export function BulkMigrationTab() {
 
   async function createAndRun() {
     if (!mappingsValid(mapping)) { setErrors(['Every "Map to field" row needs a target field.']); return }
+    const invalidSubmodel = Object.entries(submodelMappings)
+      .filter(([slug]) => mapping[slug]?.action === 'map')
+      .find(([, sec]) => !mappingsValid(sec.mapping))
+    if (invalidSubmodel) {
+      setErrors([`Every "Map to field" row in submodel field "${invalidSubmodel[0]}" needs a target field.`])
+      return
+    }
     setLoading(true)
     setErrors([])
     try {
+      const submodelPayload = Object.entries(submodelMappings)
+        .filter(([slug]) => mapping[slug]?.action === 'map')
+        .map(([slug, sec]) => ({
+          source_parent_field_slug: slug,
+          target_submodel_version_id: sec.targetVersionId,
+          field_mappings: toPayload(sec.mapping),
+        }))
+
+      const workflowPayload = Object.entries(workflowMappings)
+        .filter(([slug]) => mapping[slug]?.action === 'map')
+        .map(([, sec]) => ({
+          field_slug: sec.fieldSlug,
+          state_mappings: Object.entries(sec.mapping)
+            .filter(([, toState]) => toState !== '')
+            .map(([fromState, toState]) => ({ from_state: fromState, to_state: toState })),
+        }))
+        .filter(wm => wm.state_mappings.length > 0)
+
       const created = await udmCreateBulkMigration({
         source_version_id: sourceId,
         target_version_id: targetId,
         user_defined_model_type_filter_id: typeFilterId || null,
         field_mappings: toPayload(mapping),
+        submodel_mappings: submodelPayload,
+        workflow_state_mappings: workflowPayload,
       })
       setPlan(created)
       await udmExecuteBulkMigration(created.id)
@@ -473,28 +626,71 @@ export function BulkMigrationTab() {
       </div>
 
       {affected !== null && (
-        <div style={section}>
-          <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
-            Field mapping
-            <span style={{ fontWeight: 400, color: '#666', marginLeft: '0.5rem' }}>
-              {affected} entit{affected === 1 ? 'y' : 'ies'} will be migrated
-            </span>
-          </div>
-          <FieldMappingTable rows={rows} targetFields={targetFields} value={mapping} onChange={setMapping} disabled={polling} />
-          <div style={{ marginTop: '0.9rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <button type="button" style={{ ...adminBtn, background: '#16a34a' }}
-              onClick={() => void createAndRun()}
-              disabled={loading || polling || affected === 0 || !mappingsValid(mapping)}>
-              {polling ? 'Running…' : `Migrate ${affected} entit${affected === 1 ? 'y' : 'ies'}`}
-            </button>
-            {plan && (
-              <span style={{ fontSize: '0.85rem', color: '#555' }}>
-                Status: <strong>{plan.status}</strong> · {plan.done_entities} done · {plan.failed_entities} failed
-                {plan.total_entities ? ` / ${plan.total_entities}` : ''}
+        <>
+          <div style={section}>
+            <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+              Field mapping
+              <span style={{ fontWeight: 400, color: '#666', marginLeft: '0.5rem' }}>
+                {affected} entit{affected === 1 ? 'y' : 'ies'} will be migrated
               </span>
-            )}
+            </div>
+            <FieldMappingTable rows={rows} targetFields={targetFields} value={mapping} onChange={setMapping} disabled={polling} />
           </div>
-        </div>
+
+          {Object.entries(submodelMappings)
+            .filter(([slug]) => mapping[slug]?.action === 'map')
+            .map(([slug, sec]) => (
+              <div key={slug} style={section}>
+                <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+                  Submodel field mapping: <span style={{ fontFamily: 'monospace' }}>{slug}</span>
+                  <span style={{ fontWeight: 400, color: '#666', marginLeft: '0.5rem', fontSize: '0.85rem' }}>
+                    submodel config version changed — map child node fields
+                  </span>
+                </div>
+                <FieldMappingTable
+                  rows={sec.rows}
+                  targetFields={sec.targetFields}
+                  value={sec.mapping}
+                  onChange={nextMapping => setSubmodelMappings(prev => ({ ...prev, [slug]: { ...prev[slug], mapping: nextMapping } }))}
+                  disabled={polling}
+                />
+              </div>
+            ))}
+
+          {Object.entries(workflowMappings)
+            .filter(([slug]) => mapping[slug]?.action === 'map')
+            .map(([slug, sec]) => (
+              <div key={slug} style={section}>
+                <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+                  Workflow state mapping: <span style={{ fontFamily: 'monospace' }}>{slug}</span>
+                  <span style={{ fontWeight: 400, color: '#666', marginLeft: '0.5rem', fontSize: '0.85rem' }}>
+                    override how entity states are remapped; leave "keep as-is" for same-named states
+                  </span>
+                </div>
+                <WorkflowStateMappingTable
+                  section={sec}
+                  onChange={nextSec => setWorkflowMappings(prev => ({ ...prev, [slug]: nextSec }))}
+                  disabled={polling}
+                />
+              </div>
+            ))}
+
+          <div style={section}>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <button type="button" style={{ ...adminBtn, background: '#16a34a' }}
+                onClick={() => void createAndRun()}
+                disabled={loading || polling || affected === 0 || !mappingsValid(mapping)}>
+                {polling ? 'Running…' : `Migrate ${affected} entit${affected === 1 ? 'y' : 'ies'}`}
+              </button>
+              {plan && (
+                <span style={{ fontSize: '0.85rem', color: '#555' }}>
+                  Status: <strong>{plan.status}</strong> · {plan.done_entities} done · {plan.failed_entities} failed
+                  {plan.total_entities ? ` / ${plan.total_entities}` : ''}
+                </span>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

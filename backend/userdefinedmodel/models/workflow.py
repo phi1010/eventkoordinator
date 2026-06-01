@@ -7,6 +7,7 @@ from userdefinedmodel.basemodels import MetaBase, PolymorphicMetaBase
 class WorkflowDefinition(MetaBase):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
+    virtual_node_positions = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return self.name

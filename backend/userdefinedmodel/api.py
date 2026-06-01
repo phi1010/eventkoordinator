@@ -146,6 +146,7 @@ def _serialize_workflow(wf) -> WorkflowDefinitionOut:
         initial_state=initial.name if initial else None,
         states=states,
         transitions=transitions,
+        virtual_node_positions=wf.virtual_node_positions or {},
     )
 
 
@@ -716,7 +717,10 @@ def create_workflow(request, payload: WorkflowCreateIn):
     if denied := _require_perms(request, "userdefinedmodel.add_fielddefinition"):
         return denied
     with transaction.atomic():
-        wf = WorkflowDefinition.objects.create(name=payload.name, description=payload.description)
+        wf = WorkflowDefinition.objects.create(
+            name=payload.name, description=payload.description,
+            virtual_node_positions=payload.virtual_node_positions,
+        )
         state_map = {}
         for state_in in payload.states:
             state = WorkflowState.objects.create(
@@ -774,6 +778,7 @@ def update_workflow(request, workflow_id: uuid.UUID, payload: WorkflowUpdateIn):
             wf.name = payload.name
         if payload.description is not None:
             wf.description = payload.description
+        wf.virtual_node_positions = payload.virtual_node_positions
         wf.save()
         if payload.states is not None:
             from userdefinedmodel.models.node import FieldValue
@@ -1666,7 +1671,12 @@ def bulk_migration_preview(
 
 @api.post("/bulk-migrations/", response={201: BulkMigrationOut}, auth=django_auth)
 def create_bulk_migration(request, payload: BulkMigrationCreateIn):
-    from userdefinedmodel.models import ConfigVersion, UserDefinedModelType, BulkMigrationPlan, BulkMigrationFieldMapping
+    from userdefinedmodel.models import (
+        ConfigVersion, UserDefinedModelType,
+        BulkMigrationPlan, BulkMigrationFieldMapping,
+        BulkMigrationSubmodelMapping, BulkMigrationSubmodelFieldMapping,
+        BulkMigrationWorkflowStateMapping,
+    )
     if denied := _require_perms(request, "userdefinedmodel.add_bulkmigrationplan"):
         return denied
     try:
@@ -1688,7 +1698,7 @@ def create_bulk_migration(request, payload: BulkMigrationCreateIn):
             user_defined_model_type_filter=type_filter,
             created_by=request.user,
         )
-        src_fields = {f.slug: f for f in src.field_definitions.all()}
+        src_fields = {f.slug: f for f in src.field_definitions.select_related("submodel_config").all()}
         tgt_fields = {f.slug: f for f in tgt.field_definitions.all()}
         for mapping in payload.field_mappings:
             src_field = src_fields.get(mapping.source_field_slug)
@@ -1697,6 +1707,43 @@ def create_bulk_migration(request, payload: BulkMigrationCreateIn):
                     plan=plan, source_field=src_field,
                     action=mapping.action.value,
                     target_field=tgt_fields.get(mapping.target_field_slug) if mapping.target_field_slug else None,
+                )
+
+        for sm in payload.submodel_mappings:
+            src_field = src_fields.get(sm.source_parent_field_slug)
+            if not src_field or not src_field.submodel_config:
+                return JsonResponse(
+                    {"detail": f"Source submodel field '{sm.source_parent_field_slug}' not found or has no submodel config"},
+                    status=400,
+                )
+            try:
+                tgt_submodel_version = ConfigVersion.objects.get(id=sm.target_submodel_version_id)
+            except ConfigVersion.DoesNotExist:
+                return JsonResponse({"detail": "Target submodel version not found"}, status=404)
+            submodel_mapping = BulkMigrationSubmodelMapping.objects.create(
+                plan=plan,
+                source_parent_field=src_field,
+                target_submodel_version=tgt_submodel_version,
+            )
+            src_sub_fields = {f.slug: f for f in src_field.submodel_config.field_definitions.all()}
+            tgt_sub_fields = {f.slug: f for f in tgt_submodel_version.field_definitions.all()}
+            for fm in sm.field_mappings:
+                sub_src = src_sub_fields.get(fm.source_field_slug)
+                if sub_src:
+                    BulkMigrationSubmodelFieldMapping.objects.create(
+                        submodel_mapping=submodel_mapping,
+                        source_field=sub_src,
+                        action=fm.action.value,
+                        target_field=tgt_sub_fields.get(fm.target_field_slug) if fm.target_field_slug else None,
+                    )
+
+        for wm in payload.workflow_state_mappings:
+            for state_mapping in wm.state_mappings:
+                BulkMigrationWorkflowStateMapping.objects.create(
+                    plan=plan,
+                    field_slug=wm.field_slug,
+                    from_state=state_mapping.from_state,
+                    to_state=state_mapping.to_state,
                 )
 
     return 201, BulkMigrationOut(
