@@ -206,10 +206,10 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
       borderRadius: '6px', marginBottom: '0.5rem', background: item.deleted ? '#fef2f2' : '#fafafa',
       ...(hasHighlightedFields ? { boxShadow: '0 0 0 2px rgba(220,38,38,0.15)' } : {}),
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem' }}>
-        {(expanded || item.deleted) && (
+      <div style={{ display: 'flex', justifyContent: item.deleted ? 'space-between' : 'flex-end', alignItems: 'center', padding: '0.5rem 0.75rem' }}>
+        {item.deleted && (
           <span style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#555' }}>
-            {label}{hasChanges && !item.deleted ? ' *' : ''}{item.deleted ? ' (will be deleted)' : ''}
+            {label} (will be deleted)
           </span>
         )}
         <div style={{ display: 'flex', gap: '0.4rem' }}>
@@ -616,19 +616,7 @@ function SubmodelEditorComponent({ fd, existingChildren, existingValue, disabled
 
       {showForm && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            {(pendingNew || selectExpanded || !ownedChild) && (
-              <span style={{ fontSize: '0.82rem', fontFamily: 'monospace', color: '#555' }}>
-                {pendingNew ? 'New (unsaved)' : buildPreviewLabel(
-                  subFields,
-                  ownedChild?.field_values ?? [],
-                  selectDirty,
-                  uiLang,
-                  `${selectNodeId?.slice(0, 8)}…`,
-                  previewNameMap,
-                )}
-              </span>
-            )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '0.5rem' }}>
             <div style={{ display: 'flex', gap: '0.4rem' }}>
               {!disabled && (
                 <>

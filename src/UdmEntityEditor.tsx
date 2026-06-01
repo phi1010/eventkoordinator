@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { Tooltip } from 'primereact/tooltip'
 import {
   udmGetEntity,
   udmGetConfigVersion,
@@ -41,6 +42,42 @@ function getAllLangValues(entity: EntityOut, slug: string): Record<string, unkno
 
 const SEVERITY_ORDER = ['info', 'warning', 'error', 'critical']
 
+const SEVERITY_ICON: Record<string, string> = {
+  critical: 'pi-times-circle',
+  error:    'pi-times-circle',
+  warning:  'pi-exclamation-circle',
+  info:     'pi-info-circle',
+}
+
+const SEVERITY_CLASS: Record<string, string> = {
+  critical: styles.severityIconCritical,
+  error:    styles.severityIconError,
+  warning:  styles.severityIconWarning,
+  info:     styles.severityIconInfo,
+}
+
+interface SeverityIndicatorProps {
+  severity: string
+  messages: PolicyMessage[]
+  fieldSlug: string
+}
+
+function SeverityIndicator({ severity, messages, fieldSlug }: SeverityIndicatorProps) {
+  const iconClass = SEVERITY_ICON[severity] ?? 'pi-info-circle'
+  const colorClass = SEVERITY_CLASS[severity] ?? styles.severityIconInfo
+  const targetId = `udm-sev-${fieldSlug.replace(/[^a-z0-9]/gi, '-')}`
+  return (
+    <>
+      <Tooltip target={`#${targetId}`} position="right">
+        <ul style={{ margin: 0, padding: '0 0 0 1rem', fontSize: '0.8rem', maxWidth: '260px' }}>
+          {messages.map((m, i) => <li key={i}>{m.text}</li>)}
+        </ul>
+      </Tooltip>
+      <i id={targetId} className={`pi ${iconClass} ${styles.severityIcon} ${colorClass}`} />
+    </>
+  )
+}
+
 // ── Workflow field widget ─────────────────────────────────────────────────────
 
 interface WorkflowFieldWidgetProps {
@@ -50,9 +87,11 @@ interface WorkflowFieldWidgetProps {
   onTransition: (fieldSlug: string, transitionName: string) => Promise<void>
   transitioning: boolean
   messages?: PolicyMessage[]
+  severity?: string
+  compact?: boolean
 }
 
-function WorkflowFieldWidget({ fd, entity, uiLang, onTransition, transitioning, messages }: WorkflowFieldWidgetProps) {
+function WorkflowFieldWidget({ fd, entity, uiLang, onTransition, transitioning, messages, severity, compact }: WorkflowFieldWidgetProps) {
   const wfDef = (fd as FieldDefinitionOut & { workflow_definition?: WorkflowDefinitionOut | null }).workflow_definition
   const fv = entity.field_values.find(v => v.field_slug === fd.slug)
   const currentStateName = (fv?.value as string | null) ?? null
@@ -71,6 +110,53 @@ function WorkflowFieldWidget({ fd, entity, uiLang, onTransition, transitioning, 
     if (t.from_state !== null) return t.from_state === currentStateName
     return true // from_state null, not from_undefined_only → always available
   })
+
+  if (compact) {
+    const compactHighlight = (() => {
+      if (!severity) return ''
+      if (severity === 'error' || severity === 'critical') return styles.fieldGroupCompactError
+      if (severity === 'warning') return styles.fieldGroupCompactWarning
+      return styles.fieldGroupCompactInfo
+    })()
+    return (
+      <div className={`${styles.fieldGroupCompact} ${compactHighlight}`}>
+        <div className={styles.compactHeader}>
+          {severity && messages && messages.length > 0 && (
+            <SeverityIndicator severity={severity} messages={messages} fieldSlug={fd.slug} />
+          )}
+          <span className={styles.compactLabel}>{label}</span>
+        </div>
+        {helpText && <div className={styles.compactHelp}>{helpText}</div>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <span style={{
+            display: 'inline-block',
+            padding: '0.15rem 0.5rem',
+            borderRadius: '4px',
+            fontSize: '0.82rem',
+            fontWeight: 600,
+            background: currentStateName ? '#dbeafe' : '#f1f5f9',
+            color: currentStateName ? '#1d4ed8' : '#64748b',
+            border: '1px solid',
+            borderColor: currentStateName ? '#93c5fd' : '#cbd5e1',
+          }}>
+            {stateLabel ?? '(no state)'}
+          </span>
+          {availableTransitions.map(t => {
+            const tLabel = getLang(t.label as Record<string, string>, uiLang) || t.name
+            return (
+              <button key={t.name} type="button" className={styles.transitionBtn} disabled={transitioning}
+                onClick={() => void onTransition(fd.slug, t.name)}>
+                {tLabel}
+              </button>
+            )
+          })}
+          {availableTransitions.length === 0 && (
+            <span style={{ fontSize: '0.78rem', color: '#aaa', fontStyle: 'italic' }}>No transitions available</span>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.fieldGroup}>
@@ -141,16 +227,17 @@ interface FieldRowProps {
   transitioning: boolean
   resetKey?: number
   onEntityRefresh?: (policyMessages?: PolicyMessage[]) => void | Promise<void>
+  compact?: boolean
 }
 
-function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, severity, messages, subFieldSeverities, subFieldMessages, onTransition, transitioning, resetKey, onEntityRefresh }: FieldRowProps) {
+function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, severity, messages, subFieldSeverities, subFieldMessages, onTransition, transitioning, resetKey, onEntityRefresh, compact }: FieldRowProps) {
   const [activeLang, setActiveLang] = useState(languages[0] ?? '')
   const isDirty = fd.slug in dirty
   const isSubmodel = fd.data_type === 'submodel_list' || fd.data_type === 'submodel_select'
 
   // Workflow fields are fully managed by WorkflowFieldWidget — no dirty/value editing
   if (fd.data_type === 'workflow') {
-    return <WorkflowFieldWidget fd={fd} entity={entity} uiLang={uiLang} onTransition={onTransition} transitioning={transitioning} messages={messages} />
+    return <WorkflowFieldWidget fd={fd} entity={entity} uiLang={uiLang} onTransition={onTransition} transitioning={transitioning} messages={messages} severity={severity} compact={compact} />
   }
   const label = getLang(fd.label as Record<string, string>, uiLang) || fd.slug
   const helpText = getLang(fd.help_text as Record<string, string>, uiLang)
@@ -197,6 +284,57 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
     if (severity === 'warning') return styles.fieldGroupWarning
     return styles.fieldGroupInfo
   })()
+
+  if (compact) {
+    const compactHighlight = (() => {
+      if (severity === 'error' || severity === 'critical') return styles.fieldGroupCompactError
+      if (fieldIsDirty) return styles.fieldGroupCompactDirty
+      if (severity === 'warning') return styles.fieldGroupCompactWarning
+      if (severity === 'info') return styles.fieldGroupCompactInfo
+      return ''
+    })()
+    const hasMessages = messages && messages.length > 0
+    return (
+      <div className={`${styles.fieldGroupCompact} ${compactHighlight}`}>
+        <div className={styles.compactHeader}>
+          {severity && hasMessages && (
+            <SeverityIndicator severity={severity} messages={messages!} fieldSlug={fd.slug} />
+          )}
+          <span className={styles.compactLabel}>{label}</span>
+          {(isDirty && !isSubmodel) && (
+            <button type="button" className={styles.resetBtn} style={{ marginLeft: 'auto', fontSize: '0.72rem' }}
+              onClick={() => onReset(fd.slug)}>
+              Reset
+            </button>
+          )}
+        </div>
+        {helpText && <div className={styles.compactHelp}>{helpText}</div>}
+        {!isSubmodel && fd.is_localized && languages.length > 1 && (
+          <div className={styles.langTabs} style={{ marginBottom: '0.2rem' }}>
+            {languages.map(l => (
+              <button key={l} type="button"
+                className={`${styles.langTab} ${activeLang === l ? styles.langTabActive : ''}`}
+                onClick={() => setActiveLang(l)}>
+                {l}
+              </button>
+            ))}
+          </div>
+        )}
+        {isSubmodel ? (
+          <FieldInput fd={fd} value={getFieldValue(entity, fd.slug, '')} onChange={val => handleChange('', val)}
+            disabled={!editable} lang={uiLang} entityChildren={entity.children as Record<string, unknown[]>}
+            subFieldSeverities={subFieldSeverities} subFieldMessages={subFieldMessages}
+            resetKey={resetKey} onEntityRefresh={onEntityRefresh} />
+        ) : fd.is_localized ? (
+          <FieldInput fd={fd} value={getVal(activeLang)} onChange={val => handleChange(activeLang, val)}
+            disabled={!editable} lang={activeLang} />
+        ) : (
+          <FieldInput fd={fd} value={getVal()} onChange={val => handleChange('', val)} disabled={!editable} />
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className={`${styles.fieldGroup} ${highlightClass}`}>
       <div className={styles.fieldHeader}>
@@ -394,6 +532,7 @@ export function UdmEntityEditor() {
   const [showHistory, setShowHistory] = useState(false)
   const [policyMessages, setPolicyMessages] = useState<PolicyMessage[]>([])
   const [transitionPopup, setTransitionPopup] = useState<PolicyMessage[]>([])
+  const [compact, setCompact] = useState(false)
 
   const fieldSeverities = useMemo(() => {
     const out: Record<string, string> = {}
@@ -657,7 +796,7 @@ export function UdmEntityEditor() {
         </div>
       )}
 
-      <div className={styles.form}>
+      <div className={compact ? styles.formCompact : styles.form}>
         {fields.map(fd => (
           <FieldRow
             key={fd.slug}
@@ -676,6 +815,7 @@ export function UdmEntityEditor() {
             onTransition={handleTransition}
             transitioning={transitioning}
             resetKey={discardCount}
+            compact={compact}
             onEntityRefresh={async (msgs) => {
               await load()
               const globalMsgs = (msgs ?? []).filter((m: PolicyMessage) => !m.highlight_fields?.length)
@@ -689,7 +829,13 @@ export function UdmEntityEditor() {
         <div style={{ fontSize: '0.875rem', color: '#888' }}>
           {dirtyCount > 0 ? `${dirtyCount} unsaved change${dirtyCount > 1 ? 's' : ''}` : 'No changes'}
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button type="button"
+            className={`${styles.compactModeBtn} ${compact ? styles.compactModeBtnActive : ''}`}
+            onClick={() => setCompact(c => !c)}
+            title="Toggle compact view">
+            Compact
+          </button>
           {dirtyCount > 0 && (
             <button type="button" className={`${styles.btn} ${styles.btnSecondary}`}
               onClick={() => { setDirty({}); setDiscardCount(c => c + 1) }}>
