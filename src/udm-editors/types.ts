@@ -15,6 +15,7 @@ export interface FieldInputProps {
   resetKey?: number
   nodeId?: string | null
   onEntityRefresh?: (policyMessages?: PolicyMessage[]) => void | Promise<void>
+  compact?: boolean
 }
 
 export function getLang(map: Record<string, string>, uiLang: string): string {

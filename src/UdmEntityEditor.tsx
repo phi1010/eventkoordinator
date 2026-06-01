@@ -324,7 +324,7 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
           <FieldInput fd={fd} value={getFieldValue(entity, fd.slug, '')} onChange={val => handleChange('', val)}
             disabled={!editable} lang={uiLang} entityChildren={entity.children as Record<string, unknown[]>}
             subFieldSeverities={subFieldSeverities} subFieldMessages={subFieldMessages}
-            resetKey={resetKey} onEntityRefresh={onEntityRefresh} />
+            resetKey={resetKey} onEntityRefresh={onEntityRefresh} compact={compact} />
         ) : fd.is_localized ? (
           <FieldInput fd={fd} value={getVal(activeLang)} onChange={val => handleChange(activeLang, val)}
             disabled={!editable} lang={activeLang} />

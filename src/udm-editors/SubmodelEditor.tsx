@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { Tooltip } from 'primereact/tooltip'
 import {
   udmSearchUsers,
   udmSearchGroups,
@@ -11,6 +12,22 @@ import { PolicyMessageList } from './shared'
 import { FieldInput } from './FieldInput'
 import { FieldPreview } from './FieldPreview'
 import { PreviewTable, type PreviewRow } from './PreviewTable'
+import styles from '../UdmEntityEditor.module.css'
+
+// ── Compact sub-field severity helpers ────────────────────────────────────────
+
+const SUB_SEV_ICON: Record<string, string> = {
+  critical: 'pi-times-circle', error: 'pi-times-circle',
+  warning: 'pi-exclamation-circle', info: 'pi-info-circle',
+}
+const SUB_SEV_CLASS: Record<string, string> = {
+  critical: styles.severityIconError, error: styles.severityIconError,
+  warning: styles.severityIconWarning, info: styles.severityIconInfo,
+}
+const SUB_SEV_LEFT: Record<string, string> = {
+  critical: styles.fieldGroupCompactError, error: styles.fieldGroupCompactError,
+  warning: styles.fieldGroupCompactWarning, info: styles.fieldGroupCompactInfo,
+}
 
 
 // ── Helpers (SubmodelEditor-local) ────────────────────────────────────────────
@@ -159,9 +176,10 @@ interface SubmodelChildCardProps {
   subFieldMessages?: Record<string, PolicyMessage[]>
   nameMap?: Record<string, string>
   onEntityRefresh?: (policyMessages?: PolicyMessage[]) => void | Promise<void>
+  compact?: boolean
 }
 
-function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, subFieldSeverities, subFieldMessages, nameMap = {}, onEntityRefresh }: SubmodelChildCardProps) {
+function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, subFieldSeverities, subFieldMessages, nameMap = {}, onEntityRefresh, compact }: SubmodelChildCardProps) {
   const hasHighlightedFields = Object.keys(subFieldSeverities ?? {}).length > 0
   const [expanded, setExpanded] = useState(!item.id || hasHighlightedFields)
   const [activeLang, setActiveLang] = useState(subLanguages[0] ?? '')
@@ -272,6 +290,34 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
             const sev = subFieldSeverities?.[subFd.slug]
             const subColor = subFieldColor(sev)
             const subMsgs = subFieldMessages?.[subFd.slug] ?? []
+            if (compact) {
+              const tooltipId = `udm-lst-${item.key.replace(/[^a-z0-9]/gi, '-')}-${subFd.slug.replace(/[^a-z0-9]/gi, '-')}`
+              return (
+                <div key={subFd.slug} className={`${styles.fieldGroupCompact} ${sev ? (SUB_SEV_LEFT[sev] ?? '') : ''}`}>
+                  <div className={styles.compactHeader}>
+                    {sev && subMsgs.length > 0 && (
+                      <>
+                        <Tooltip target={`#${tooltipId}`} position="right">
+                          <ul style={{ margin: 0, padding: '0 0 0 1rem', fontSize: '0.8rem', maxWidth: '260px' }}>
+                            {subMsgs.map((m, i) => <li key={i}>{m.text}</li>)}
+                          </ul>
+                        </Tooltip>
+                        <i id={tooltipId} className={`pi ${SUB_SEV_ICON[sev] ?? 'pi-info-circle'} ${styles.severityIcon} ${SUB_SEV_CLASS[sev] ?? ''}`} />
+                      </>
+                    )}
+                    <span className={styles.compactLabel}>{subLabel}</span>
+                  </div>
+                  {langs.map(lang => (
+                    <FieldInput key={lang || 'nolang'} fd={subFd}
+                      value={getChildFieldValue(item, subFd.slug, lang)}
+                      onChange={val => handleFieldChange(subFd.slug, lang, val)}
+                      disabled={disabled || !!(subFd.type_config as Record<string, unknown>)?.default_current_user}
+                      lang={lang} entityChildren={item.saved?.children} nodeId={item.id}
+                      onEntityRefresh={onEntityRefresh} />
+                  ))}
+                </div>
+              )
+            }
             return (
               <div key={subFd.slug} style={{
                 marginBottom: '0.6rem',
@@ -305,7 +351,7 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
 
 // ── SubmodelEditor ────────────────────────────────────────────────────────────
 
-function SubmodelEditorComponent({ fd, existingChildren, existingValue, disabled, uiLang, onChange, subFieldSeverities, subFieldMessages, resetKey, onEntityRefresh }: {
+function SubmodelEditorComponent({ fd, existingChildren, existingValue, disabled, uiLang, onChange, subFieldSeverities, subFieldMessages, resetKey, onEntityRefresh, compact }: {
   fd: FieldDefinitionOut
   existingChildren: unknown[]
   existingValue: unknown
@@ -316,6 +362,7 @@ function SubmodelEditorComponent({ fd, existingChildren, existingValue, disabled
   subFieldMessages?: Record<string, PolicyMessage[]>
   resetKey?: number
   onEntityRefresh?: (policyMessages?: PolicyMessage[]) => void | Promise<void>
+  compact?: boolean
 }) {
   const isList = fd.data_type === 'submodel_list'
   const subConfig = fd.submodel_config as ConfigVersionOut | null | undefined
@@ -526,6 +573,7 @@ function SubmodelEditorComponent({ fd, existingChildren, existingValue, disabled
             subFieldMessages={subFieldMessages}
             nameMap={previewNameMap}
             onEntityRefresh={onEntityRefresh}
+            compact={compact}
           />
         ))}
         {!disabled && (
@@ -695,6 +743,40 @@ function SubmodelEditorComponent({ fd, existingChildren, existingValue, disabled
                 const sev = subFieldSeverities?.[subFd.slug]
                 const subColor = subFieldColor(sev)
                 const subMsgs = subFieldMessages?.[subFd.slug] ?? []
+                const fieldValue = (lang: string) =>
+                  selectDirty[subFd.slug] !== undefined
+                    ? (subFd.is_localized
+                        ? (selectDirty[subFd.slug] as Record<string, unknown>)?.[lang]
+                        : selectDirty[subFd.slug])
+                    : (ownedChild?.field_values.find(v => v.field_slug === subFd.slug && v.language === lang)?.value ?? null)
+                if (compact) {
+                  const tooltipId = `udm-sel-${fd.slug.replace(/[^a-z0-9]/gi, '-')}-${subFd.slug.replace(/[^a-z0-9]/gi, '-')}`
+                  return (
+                    <div key={subFd.slug} className={`${styles.fieldGroupCompact} ${sev ? (SUB_SEV_LEFT[sev] ?? '') : ''}`}>
+                      <div className={styles.compactHeader}>
+                        {sev && subMsgs.length > 0 && (
+                          <>
+                            <Tooltip target={`#${tooltipId}`} position="right">
+                              <ul style={{ margin: 0, padding: '0 0 0 1rem', fontSize: '0.8rem', maxWidth: '260px' }}>
+                                {subMsgs.map((m, i) => <li key={i}>{m.text}</li>)}
+                              </ul>
+                            </Tooltip>
+                            <i id={tooltipId} className={`pi ${SUB_SEV_ICON[sev] ?? 'pi-info-circle'} ${styles.severityIcon} ${SUB_SEV_CLASS[sev] ?? ''}`} />
+                          </>
+                        )}
+                        <span className={styles.compactLabel}>{subLabel}</span>
+                      </div>
+                      {langs.map(lang => (
+                        <FieldInput key={lang || 'nolang'} fd={subFd}
+                          value={fieldValue(lang)}
+                          onChange={val => handleSelectFieldChange(subFd.slug, lang, val)}
+                          disabled={disabled} lang={lang}
+                          entityChildren={ownedChild?.children} nodeId={ownedChild?.id}
+                          onEntityRefresh={onEntityRefresh} />
+                      ))}
+                    </div>
+                  )
+                }
                 return (
                   <div key={subFd.slug} style={{
                     marginBottom: '0.6rem',
@@ -707,13 +789,7 @@ function SubmodelEditorComponent({ fd, existingChildren, existingValue, disabled
                       <FieldInput
                         key={lang || 'nolang'}
                         fd={subFd}
-                        value={
-                          selectDirty[subFd.slug] !== undefined
-                            ? (subFd.is_localized
-                                ? (selectDirty[subFd.slug] as Record<string, unknown>)?.[lang]
-                                : selectDirty[subFd.slug])
-                            : (ownedChild?.field_values.find(v => v.field_slug === subFd.slug && v.language === lang)?.value ?? null)
-                        }
+                        value={fieldValue(lang)}
                         onChange={val => handleSelectFieldChange(subFd.slug, lang, val)}
                         disabled={disabled}
                         lang={lang}
@@ -743,7 +819,7 @@ function SubmodelEditorComponent({ fd, existingChildren, existingValue, disabled
 // ── FieldInputProps adapter ───────────────────────────────────────────────────
 // SubmodelEditor wraps SubmodelEditorComponent to match the FieldInputProps interface.
 
-function SubmodelEditorAdapter({ fd, value, onChange, disabled, lang = 'en', entityChildren, subFieldSeverities, subFieldMessages, resetKey, onEntityRefresh }: FieldInputProps) {
+function SubmodelEditorAdapter({ fd, value, onChange, disabled, lang = 'en', entityChildren, subFieldSeverities, subFieldMessages, resetKey, onEntityRefresh, compact }: FieldInputProps) {
   return (
     <SubmodelEditorComponent
       fd={fd}
@@ -756,6 +832,7 @@ function SubmodelEditorAdapter({ fd, value, onChange, disabled, lang = 'en', ent
       subFieldMessages={subFieldMessages}
       resetKey={resetKey}
       onEntityRefresh={onEntityRefresh}
+      compact={compact}
     />
   )
 }
