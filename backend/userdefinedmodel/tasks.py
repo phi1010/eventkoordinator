@@ -62,10 +62,16 @@ def run_bulk_migration(plan_id: str) -> None:
         # Load submodel mappings with their child field mappings
         submodel_mappings = list(
             plan.submodel_mappings
-            .select_related("source_parent_field", "target_submodel_version")
+            .select_related("source_parent_field__submodel_config__config", "target_submodel_version")
             .prefetch_related("field_mappings__source_field", "field_mappings__target_field")
             .all()
         )
+
+        # Pre-build target parent field lookup by slug so child parent_field is
+        # updated to the new version's field after migration.
+        tgt_parent_fields_by_slug = {
+            fd.slug: fd for fd in tgt_version.field_definitions.all()
+        }
 
         for entity_id in entity_ids:
             try:
@@ -93,13 +99,28 @@ def run_bulk_migration(plan_id: str) -> None:
                         audit_migration=migration,
                     )
 
-                    # Migrate child nodes for each submodel mapping
+                    # Migrate child nodes for each submodel mapping.
+                    # Match by slug (not FK) so orphaned children whose parent_field
+                    # still points to an older source version are also migrated.
                     for sm in submodel_mappings:
-                        children = list(entity.children.filter(parent_field=sm.source_parent_field))
+                        slug = sm.source_parent_field.slug
+                        target_parent_field = tgt_parent_fields_by_slug.get(slug)
+                        sm_config = sm.source_parent_field.submodel_config
+                        if sm_config is None:
+                            continue
+                        children = list(
+                            entity.children
+                            .filter(parent_field__slug=slug, config_version__config=sm_config.config)
+                            .exclude(config_version=sm.target_submodel_version)
+                        )
+                        child_field_mappings = list(sm.field_mappings.all())
                         for child in children:
                             _apply_field_mappings_to_node(
-                                child, list(sm.field_mappings.all()), sm.target_submodel_version, {},
+                                child, child_field_mappings, sm.target_submodel_version, {},
                             )
+                            if target_parent_field:
+                                child.parent_field = target_parent_field
+                                child.save(update_fields=["parent_field"])
 
                     migration.executed_at = now()
                     migration.save(update_fields=["executed_at"])
@@ -140,6 +161,7 @@ def _apply_field_mappings_to_node(node, mappings, target_version, workflow_state
     """
     from userdefinedmodel.models import FieldValue, MigrationFieldMapping
 
+    old_version = node.config_version
     overflow = {}
     for bm in mappings:
         src_field = bm.source_field
@@ -167,6 +189,10 @@ def _apply_field_mappings_to_node(node, mappings, target_version, workflow_state
 
     if overflow:
         node.overflow_data = {**node.overflow_data, **overflow}
+
+    # Remove stale field values from the old version so they don't pollute
+    # serialization or conflict with values created by materialize_defaults.
+    node.field_values.filter(field__version=old_version).delete()
 
     node.config_version = target_version
     node.validate_for_save()

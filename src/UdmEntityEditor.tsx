@@ -1480,6 +1480,30 @@ function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, 
     )
   }
 
+  if (dt === 'workflow') {
+    const wfDef = (fd as FieldDefinitionOut & { workflow_definition?: WorkflowDefinitionOut | null }).workflow_definition
+    const currentStateName = (value as string | null) ?? null
+    const currentState = wfDef?.states.find(s => s.name === currentStateName) ?? null
+    const stateLabel = currentState
+      ? getLang(currentState.label as Record<string, string>, lang || 'en') || currentStateName
+      : currentStateName
+    return (
+      <span style={{
+        display: 'inline-block',
+        padding: '0.2rem 0.6rem',
+        borderRadius: '4px',
+        fontSize: '0.85rem',
+        fontWeight: 600,
+        background: currentStateName ? '#dbeafe' : '#f1f5f9',
+        color: currentStateName ? '#1d4ed8' : '#64748b',
+        border: '1px solid',
+        borderColor: currentStateName ? '#93c5fd' : '#cbd5e1',
+      }}>
+        {stateLabel ?? '(no state)'}
+      </span>
+    )
+  }
+
   if (dt === 'submodel_list' || dt === 'submodel_select') {
     // value for submodel_list = ops array (from dirty) or ignored (use entityChildren)
     // value for submodel_select = node UUID string or null
