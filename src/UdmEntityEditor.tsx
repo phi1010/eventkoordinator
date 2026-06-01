@@ -120,7 +120,7 @@ interface FieldInputProps {
   nodeId?: string | null
   /** Called after a successful child-node workflow transition so the parent entity
    *  view refreshes to show the new state. */
-  onEntityRefresh?: () => void
+  onEntityRefresh?: () => void | Promise<void>
 }
 
 // ── Submodel editor ───────────────────────────────────────────────────────────
@@ -231,7 +231,7 @@ interface SubmodelChildCardProps {
   subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
   nameMap?: Record<string, string>
-  onEntityRefresh?: () => void
+  onEntityRefresh?: () => void | Promise<void>
 }
 
 function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, subFieldSeverities, subFieldMessages, nameMap = {}, onEntityRefresh }: SubmodelChildCardProps) {
@@ -364,7 +364,7 @@ interface SubmodelEditorProps {
   subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
   resetKey?: number
-  onEntityRefresh?: () => void
+  onEntityRefresh?: () => void | Promise<void>
 }
 
 function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange, subFieldSeverities, subFieldMessages, resetKey, onEntityRefresh }: SubmodelEditorProps) {
@@ -385,7 +385,7 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
   const [items, setItems] = useState<LocalChild[]>(() => toItems(existingChildren))
   const nextKeyRef = useRef(0)
 
-  // Sync when the server refreshes the entity (existingChildren IDs change after save).
+  // Sync when the server refreshes the entity.
   // Only relevant for submodel_list; the submodel_select branch manages its own
   // pending state below and must NOT emit a list-shaped [] op (which would be
   // written into the single FK column and rejected as "not a valid UUID").
@@ -394,15 +394,25 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
     if (!isList) return
     const incoming = existingChildren as ChildNode[]
     const incomingIds = new Set(incoming.map(c => c.id))
-    const same =
+    const sameIds =
       incomingIds.size === prevServerIds.current.size &&
       [...incomingIds].every(id => prevServerIds.current.has(id))
-    if (!same) {
+    if (!sameIds) {
       prevServerIds.current = incomingIds
       // Reset to server state — clears any pending-new items that were saved
       setItems(toItems(incoming))
       // After a server refresh there are no pending local ops
       onChangeRef.current([])
+    } else {
+      // IDs are the same but server data may have changed (e.g. after a child-node
+      // workflow transition). Update the saved snapshot for each existing item so
+      // field values (including workflow state badges) reflect the new server state,
+      // while preserving any in-progress dirty edits.
+      setItems(prev => prev.map(item => {
+        if (!item.id) return item
+        const fresh = incoming.find(c => c.id === item.id)
+        return fresh ? { ...item, saved: fresh } : item
+      }))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingChildren])
@@ -1511,7 +1521,7 @@ function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, 
       setChildTransitioning(true)
       try {
         await udmTransitionEntity(nodeId, fd.slug, transitionName)
-        onEntityRefresh()
+        await onEntityRefresh()
       } finally {
         setChildTransitioning(false)
       }
@@ -1675,7 +1685,7 @@ interface FieldRowProps {
   onTransition: (fieldSlug: string, transitionName: string) => Promise<void>
   transitioning: boolean
   resetKey?: number
-  onEntityRefresh?: () => void
+  onEntityRefresh?: () => void | Promise<void>
 }
 
 function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, severity, messages, subFieldSeverities, subFieldMessages, onTransition, transitioning, resetKey, onEntityRefresh }: FieldRowProps) {
@@ -2152,15 +2162,14 @@ export function UdmEntityEditor() {
     setSuccess(null)
     try {
       const updated = await udmTransitionEntity(resolvedEntityId, fieldSlug, transitionName, dirty)
-      setEntity(updated)
       setDirty({})
-      setPolicyMessages(updated.policy_messages ?? [])
       const globalMsgs = (updated.policy_messages ?? []).filter((m: PolicyMessage) => !m.highlight_fields?.length)
       if (globalMsgs.length > 0) {
         setTransitionPopup(globalMsgs)
       } else {
         setSuccess(`Transition "${transitionName}" applied.`)
       }
+      await load()
     } catch (e) {
       if (e instanceof UdmApiError) {
         const globalMsgs = e.policyMessages.filter(m => !m.highlight_fields?.length)
@@ -2239,7 +2248,7 @@ export function UdmEntityEditor() {
             onTransition={handleTransition}
             transitioning={transitioning}
             resetKey={discardCount}
-            onEntityRefresh={() => void load()}
+            onEntityRefresh={() => load()}
           />
         ))}
       </div>

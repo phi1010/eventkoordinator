@@ -102,13 +102,19 @@ def _policy_allows(entity, user, action: str, **kwargs) -> bool:
 
 
 def _entity_out_for_user(entity, user, policy_messages: list | None = None, view_policy: dict | None = None) -> EntityOut:
+    from userdefinedmodel.models import UserDefinedModelEntity
     from userdefinedmodel.writer import serialize_node
     from userdefinedmodel.engine import evaluate_policy
     data = serialize_node(entity)
     policy = view_policy if view_policy is not None else evaluate_policy(entity, user, "view")
     viewable = policy.get("viewable_fields")   # None = no restriction
     editable = policy.get("editable_fields") or []
-    if viewable is not None:
+    # viewable_fields from the root-entity policy are top-level field slugs (e.g.
+    # "status", "reviews"). Applying them to a child/submodel node's field_values
+    # would filter everything out because the child has different slugs ("vote",
+    # "comment"). Only filter when the node is a root entity.
+    is_root = isinstance(entity, UserDefinedModelEntity)
+    if is_root and viewable is not None:
         allowed = set(viewable)
         data["field_values"] = [fv for fv in data["field_values"] if fv["field_slug"] in allowed]
         data["children"] = {k: v for k, v in data["children"].items() if k in allowed}
