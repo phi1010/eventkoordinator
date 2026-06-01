@@ -139,6 +139,23 @@ allow if {
 	all_reviews_accepted
 }
 
+# Reviewers may cast or change their own vote while the proposal is under review.
+allow if {
+	input.action == "transition"
+	input.field == "vote"
+	input.transition in {"accept", "reject", "revise", "reset"}
+	is_reviewer
+	current_status == "submitted"
+}
+
+# Moderators may also override any review vote (they act as reviewers too).
+allow if {
+	input.action == "transition"
+	input.field == "vote"
+	input.transition in {"accept", "reject", "revise", "reset"}
+	is_moderator
+}
+
 allow if {
 	input.action == "transition"
 	is_superuser_sudo
