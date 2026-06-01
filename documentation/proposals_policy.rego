@@ -299,9 +299,9 @@ error_messages contains msg if {
 # case, avoiding a messages→allow→no_critical_errors→error_messages scheduling
 # cycle that confuses regorus's rule scheduler.
 
-# ── View: overall status label ──
+# ── View/Save/Transition: overall status label ──
 success_messages contains msg if {
-	input.action == "view"
+	input.action in {"view", "save", "transition"}
 	is_owner_or_editor
 	label := object.get(_STATUS_LABEL, current_status, current_status)
 	msg := {
@@ -312,7 +312,7 @@ success_messages contains msg if {
 }
 
 success_messages contains msg if {
-	input.action == "view"
+	input.action in {"view", "save", "transition"}
 	is_moderator
 	current_status != "draft"
 	label := object.get(_STATUS_LABEL, current_status, current_status)
@@ -324,7 +324,7 @@ success_messages contains msg if {
 }
 
 success_messages contains msg if {
-	input.action == "view"
+	input.action in {"view", "save", "transition"}
 	is_reviewer
 	not is_moderator
 	current_status != "draft"
@@ -336,9 +336,9 @@ success_messages contains msg if {
 	}
 }
 
-# ── View: role context ──
+# ── View/Save/Transition: role context ──
 success_messages contains msg if {
-	input.action == "view"
+	input.action in {"view", "save", "transition"}
 	is_owner
 	not is_moderator
 	msg := {
@@ -349,7 +349,7 @@ success_messages contains msg if {
 }
 
 success_messages contains msg if {
-	input.action == "view"
+	input.action in {"view", "save", "transition"}
 	is_editor
 	not is_owner
 	msg := {
@@ -360,7 +360,7 @@ success_messages contains msg if {
 }
 
 success_messages contains msg if {
-	input.action == "view"
+	input.action in {"view", "save", "transition"}
 	is_moderator
 	msg := {
 		"level": "info",
@@ -370,7 +370,7 @@ success_messages contains msg if {
 }
 
 success_messages contains msg if {
-	input.action == "view"
+	input.action in {"view", "save", "transition"}
 	is_reviewer
 	not is_moderator
 	current_status != "draft"
@@ -437,9 +437,9 @@ success_messages contains msg if {
 	}
 }
 
-# ── View: pending reviews summary for moderator ──
+# ── View/Save/Transition: pending reviews summary for moderator ──
 success_messages contains msg if {
-	input.action == "view"
+	input.action in {"view", "save", "transition"}
 	is_moderator
 	current_status == "submitted"
 	pending_count := count([r |
@@ -455,7 +455,7 @@ success_messages contains msg if {
 }
 
 success_messages contains msg if {
-	input.action == "view"
+	input.action in {"view", "save", "transition"}
 	is_moderator
 	current_status == "submitted"
 	all_reviews_accepted
@@ -466,11 +466,11 @@ success_messages contains msg if {
 	}
 }
 
-# ── View + Save: per-transition allow/deny (shown below the transition buttons) ─
+# ── View/Save/Transition: per-transition allow/deny (shown below the transition buttons) ─
 
 # owner/editor in draft: submit is available
 success_messages contains msg if {
-	input.action in {"view", "save"}
+	input.action in {"view", "save", "transition"}
 	is_owner_or_editor
 	current_status == "draft"
 	msg := {
@@ -482,7 +482,7 @@ success_messages contains msg if {
 
 # owner/editor in revise: resubmit is available
 success_messages contains msg if {
-	input.action in {"view", "save"}
+	input.action in {"view", "save", "transition"}
 	is_owner_or_editor
 	current_status == "revise"
 	msg := {
@@ -494,7 +494,7 @@ success_messages contains msg if {
 
 # moderator, submitted, accept allowed
 success_messages contains msg if {
-	input.action in {"view", "save"}
+	input.action in {"view", "save", "transition"}
 	is_moderator
 	current_status == "submitted"
 	all_reviews_accepted
@@ -507,7 +507,7 @@ success_messages contains msg if {
 
 # moderator, submitted, accept blocked — show how many are missing per type
 success_messages contains msg if {
-	input.action in {"view", "save"}
+	input.action in {"view", "save", "transition"}
 	is_moderator
 	current_status == "submitted"
 	not all_reviews_accepted
@@ -522,7 +522,7 @@ success_messages contains msg if {
 
 # moderator, submitted: reject and request-revision are always available
 success_messages contains msg if {
-	input.action in {"view", "save"}
+	input.action in {"view", "save", "transition"}
 	is_moderator
 	current_status == "submitted"
 	msg := {
@@ -534,7 +534,7 @@ success_messages contains msg if {
 
 # moderator, rejected: allow-revision is available
 success_messages contains msg if {
-	input.action in {"view", "save"}
+	input.action in {"view", "save", "transition"}
 	is_moderator
 	current_status == "rejected"
 	msg := {
@@ -546,7 +546,7 @@ success_messages contains msg if {
 
 # reviewer (not moderator, not owner/editor): no transitions available — explain why
 success_messages contains msg if {
-	input.action in {"view", "save"}
+	input.action in {"view", "save", "transition"}
 	is_reviewer
 	not is_moderator
 	not is_owner_or_editor
@@ -605,7 +605,7 @@ success_messages contains msg if {
 	msg := {
 		"level": "info",
 		"text": "Your review has been saved.",
-		"field_slug": "reviews",
+		"field_slug": null,
 	}
 }
 
@@ -617,7 +617,7 @@ success_messages contains msg if {
 	msg := {
 		"level": "info",
 		"text": "Proposal submitted. Moderators will be notified for review.",
-		"field_slug": "status",
+		"field_slug": null,
 	}
 }
 
@@ -628,7 +628,7 @@ success_messages contains msg if {
 	msg := {
 		"level": "info",
 		"text": "Proposal accepted. All requested reviewers approved.",
-		"field_slug": "status",
+		"field_slug": null,
 	}
 }
 
@@ -639,7 +639,7 @@ success_messages contains msg if {
 	msg := {
 		"level": "info",
 		"text": "Proposal rejected. The owner will be notified.",
-		"field_slug": "status",
+		"field_slug": null,
 	}
 }
 
@@ -650,7 +650,7 @@ success_messages contains msg if {
 	msg := {
 		"level": "info",
 		"text": "Revision requested. The owner will be notified to update and resubmit.",
-		"field_slug": "status",
+		"field_slug": null,
 	}
 }
 
@@ -661,7 +661,7 @@ success_messages contains msg if {
 	msg := {
 		"level": "info",
 		"text": "Proposal returned to revision. The owner may update and resubmit.",
-		"field_slug": "status",
+		"field_slug": null,
 	}
 }
 
