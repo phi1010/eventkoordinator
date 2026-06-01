@@ -238,6 +238,7 @@ class WorkflowStateIn(Schema):
     is_initial: bool = False
     position_x: float = 0.0
     position_y: float = 0.0
+    background_color: Annotated[str, Field(max_length=7, pattern=r"^#[0-9a-fA-F]{6}$")] = "#ffffff"
     model_config = {"extra": "forbid"}
 
 
@@ -278,6 +279,8 @@ class WorkflowDefinitionIn(Schema):
 class WorkflowStateOut(Schema):
     name: str; label: dict[str, str]; is_initial: bool
     position_x: float; position_y: float
+    background_color: str = "#ffffff"
+    text_color: str = "#000000"
 
 
 class WorkflowTransitionOut(Schema):

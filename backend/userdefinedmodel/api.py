@@ -21,6 +21,21 @@ from ninja import NinjaAPI, File, UploadedFile
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
+def _wcag_text_color(hex_color: str) -> str:
+    """Return '#ffffff' or '#000000' for maximum WCAG contrast against the given bg."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return "#000000"
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+    def lin(c: int) -> float:
+        v = c / 255
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+    L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+    return "#ffffff" if L < 0.1791 else "#000000"
+
+
 from userdefinedmodel.schemas import (
     BulkMigrationCreateIn,
     BulkMigrationOut,
@@ -128,10 +143,13 @@ def _serialize_workflow(wf) -> WorkflowDefinitionOut:
     states = []
     for state in wf.states.prefetch_related("translations").all():
         label_dict = {t.language: t.label for t in state.translations.all()}
+        bg = state.background_color or "#ffffff"
         states.append(WorkflowStateOut(
             name=state.name, label=label_dict,
             is_initial=state.is_initial,
             position_x=state.position_x, position_y=state.position_y,
+            background_color=bg,
+            text_color=_wcag_text_color(bg),
         ))
     transitions = []
     for trans in wf.transitions.prefetch_related("translations").select_related("from_state", "to_state").all():
@@ -733,6 +751,7 @@ def create_workflow(request, payload: WorkflowCreateIn):
                 workflow=wf, name=state_in.name,
                 is_initial=state_in.is_initial,
                 position_x=state_in.position_x, position_y=state_in.position_y,
+                background_color=state_in.background_color,
             )
             state_map[state_in.name] = state
             for lang, label in state_in.label.items():
@@ -824,6 +843,7 @@ def update_workflow(request, workflow_id: uuid.UUID, payload: WorkflowUpdateIn):
                     state.is_initial = state_in.is_initial
                     state.position_x = state_in.position_x
                     state.position_y = state_in.position_y
+                    state.background_color = state_in.background_color
                     state.save()
                     state.translations.all().delete()
                 else:
@@ -831,6 +851,7 @@ def update_workflow(request, workflow_id: uuid.UUID, payload: WorkflowUpdateIn):
                         workflow=wf, name=state_in.name,
                         is_initial=state_in.is_initial,
                         position_x=state_in.position_x, position_y=state_in.position_y,
+                        background_color=state_in.background_color,
                     )
                 for lang, label in state_in.label.items():
                     WorkflowStateTranslation.objects.create(state=state, language=lang, label=label)

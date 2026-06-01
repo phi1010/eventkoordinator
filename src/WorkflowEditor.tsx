@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ColorPicker, type ColorPickerChangeEvent } from 'primereact/colorpicker'
 import {
   ReactFlow,
   Background,
@@ -28,6 +29,19 @@ import '@xyflow/react/dist/style.css'
 import { getCsrfToken } from './api'
 import styles from './WorkflowEditor.module.css'
 
+// ─── WCAG contrast helper ─────────────────────────────────────────────────────
+
+function wcagTextColor(hex: string): string {
+  const h = hex.replace('#', '')
+  if (h.length !== 6) return '#000000'
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  const lin = (c: number) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+  return L < 0.1791 ? '#ffffff' : '#000000'
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface WfStateData {
@@ -37,6 +51,8 @@ interface WfStateData {
   isInitial: boolean
   usageCount?: number
   isRetiring?: boolean
+  backgroundColor?: string
+  textColor?: string
   [key: string]: unknown
 }
 
@@ -95,6 +111,8 @@ interface WorkflowStateOut {
   is_initial: boolean
   position_x: number
   position_y: number
+  background_color: string
+  text_color: string
 }
 
 interface WorkflowTransitionOut {
@@ -182,6 +200,8 @@ function wfToReactFlow(wf: WorkflowDefinitionOut): { nodes: AnyWfNode[]; edges: 
       labels: { ...s.label },
       name: s.name,
       isInitial: s.is_initial,
+      backgroundColor: s.background_color ?? '#ffffff',
+      textColor: s.text_color ?? '#000000',
     } as Record<string, unknown>,
   }))
 
@@ -323,6 +343,7 @@ function reactFlowToWf(
         is_initial: d.isInitial,
         position_x: n.position.x,
         position_y: n.position.y,
+        background_color: d.backgroundColor ?? '#ffffff',
       }
     }),
     transitions,
@@ -348,11 +369,11 @@ const mkEdge = (id: string, src: string, tgt: string, sh: string, th: string, lb
 
 const PROPOSAL_EXAMPLE: { nodes: AnyWfNode[]; edges: WfEdge[] } = {
   nodes: [
-    { id: 'draft',     type: 'workflowState', position: { x: 60,  y: 220 }, data: { label: 'Draft',     labels: { en: 'Draft'     }, name: 'draft',     isInitial: true  } },
-    { id: 'submitted', type: 'workflowState', position: { x: 380, y: 100 }, data: { label: 'Submitted', labels: { en: 'Submitted' }, name: 'submitted', isInitial: false } },
-    { id: 'revise',    type: 'workflowState', position: { x: 380, y: 340 }, data: { label: 'Revise',    labels: { en: 'Revise'    }, name: 'revise',    isInitial: false } },
-    { id: 'accepted',  type: 'workflowState', position: { x: 700, y: 20  }, data: { label: 'Accepted',  labels: { en: 'Accepted'  }, name: 'accepted',  isInitial: false } },
-    { id: 'rejected',  type: 'workflowState', position: { x: 700, y: 220 }, data: { label: 'Rejected',  labels: { en: 'Rejected'  }, name: 'rejected',  isInitial: false } },
+    { id: 'draft',     type: 'workflowState', position: { x: 60,  y: 220 }, data: { label: 'Draft',     labels: { en: 'Draft'     }, name: 'draft',     isInitial: true,  backgroundColor: '#ffffff', textColor: '#000000' } },
+    { id: 'submitted', type: 'workflowState', position: { x: 380, y: 100 }, data: { label: 'Submitted', labels: { en: 'Submitted' }, name: 'submitted', isInitial: false, backgroundColor: '#ffffff', textColor: '#000000' } },
+    { id: 'revise',    type: 'workflowState', position: { x: 380, y: 340 }, data: { label: 'Revise',    labels: { en: 'Revise'    }, name: 'revise',    isInitial: false, backgroundColor: '#ffffff', textColor: '#000000' } },
+    { id: 'accepted',  type: 'workflowState', position: { x: 700, y: 20  }, data: { label: 'Accepted',  labels: { en: 'Accepted'  }, name: 'accepted',  isInitial: false, backgroundColor: '#ffffff', textColor: '#000000' } },
+    { id: 'rejected',  type: 'workflowState', position: { x: 700, y: 220 }, data: { label: 'Rejected',  labels: { en: 'Rejected'  }, name: 'rejected',  isInitial: false, backgroundColor: '#ffffff', textColor: '#000000' } },
   ],
   edges: [
     mkEdge('submit',           'draft',     'submitted', 'right-top',    'left-top',     'Submit'),
@@ -368,10 +389,12 @@ const PROPOSAL_EXAMPLE: { nodes: AnyWfNode[]; edges: WfEdge[] } = {
 
 function WorkflowStateNode({ data, selected }: NodeProps) {
   const d = data as WfStateData
+  const bg = d.backgroundColor ?? '#ffffff'
+  const fg = d.textColor ?? '#000000'
   return (
     <div
       className={[styles.wfNode, selected ? styles.wfNodeSelected : '', d.isInitial ? styles.wfNodeInitial : ''].join(' ')}
-      style={{ width: NODE_WIDTH, height: NODE_HEIGHT }}
+      style={{ width: NODE_WIDTH, height: NODE_HEIGHT, backgroundColor: bg, color: fg, borderColor: selected ? undefined : (d.isInitial ? undefined : bg === '#ffffff' ? undefined : bg) }}
     >
       <Handle type="source" position={Position.Top}    id="top-left"      style={{ left: '25%' }}  className={styles.handle} />
       <Handle type="source" position={Position.Top}    id="top-center"    style={{ left: '50%' }}  className={styles.handle} />
@@ -384,9 +407,9 @@ function WorkflowStateNode({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Right}  id="right-top"     style={{ top:  '33%' }}  className={styles.handle} />
       <Handle type="source" position={Position.Right}  id="right-bottom"  style={{ top:  '67%' }}  className={styles.handle} />
       <div className={styles.wfNodeContent}>
-        {d.isInitial && <span className={styles.initialBadge}>●</span>}
-        <span className={styles.wfNodeLabel}>{d.label}</span>
-        <span className={styles.wfNodeSlug}>{d.name}</span>
+        {d.isInitial && <span className={styles.initialBadge} style={{ color: d.isInitial && (d.backgroundColor ?? '#ffffff') !== '#ffffff' ? fg : undefined }}>●</span>}
+        <span className={styles.wfNodeLabel} style={{ color: fg }}>{d.label}</span>
+        <span className={styles.wfNodeSlug} style={{ color: fg, opacity: 0.6 }}>{d.name}</span>
       </div>
       {d.isRetiring && <span className={styles.retiringBadge}>RETIRING</span>}
       {d.usageCount !== undefined && (
@@ -633,6 +656,36 @@ function PropertiesPanel({ nodes, edges, selectedNodeIds, selectedEdgeIds, onNod
               <input type="checkbox" checked={d.isInitial} onChange={(e) => onNodeChange(n.id, { isInitial: e.target.checked })} />
               Initial state
             </label>
+            <label className={styles.propsLabel}>
+              Background color
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                <ColorPicker
+                  value={(d.backgroundColor ?? '#ffffff').replace('#', '')}
+                  onChange={(e: ColorPickerChangeEvent) => {
+                    const raw = typeof e.value === 'string' ? e.value : ''
+                    const hex = raw.length === 6 ? `#${raw}` : (d.backgroundColor ?? '#ffffff')
+                    onNodeChange(n.id, { backgroundColor: hex, textColor: wcagTextColor(hex) })
+                  }}
+                  format="hex"
+                  style={{ flexShrink: 0 }}
+                />
+                <input
+                  className={styles.propsInput}
+                  value={d.backgroundColor ?? '#ffffff'}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+                      onNodeChange(n.id, { backgroundColor: val, textColor: wcagTextColor(val) })
+                    } else {
+                      onNodeChange(n.id, { backgroundColor: val })
+                    }
+                  }}
+                  placeholder="#ffffff"
+                  style={{ fontFamily: 'monospace', flex: 1 }}
+                  maxLength={7}
+                />
+              </div>
+            </label>
           </div>
         )
       })}
@@ -854,7 +907,7 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
         id: slug,
         type: 'workflowState',
         position: { x: 80 + nds.filter((n) => n.type === 'workflowState').length * 40, y: 80 },
-        data: { label: 'New State', labels: { [languages[0] ?? 'en']: 'New State' }, name: slug, isInitial: !hasInitial } as Record<string, unknown>,
+        data: { label: 'New State', labels: { [languages[0] ?? 'en']: 'New State' }, name: slug, isInitial: !hasInitial, backgroundColor: '#ffffff', textColor: '#000000' } as Record<string, unknown>,
       },
     ])
   }
@@ -957,6 +1010,8 @@ function EditorInner({ initialNodes, initialEdges, workflowId, workflowName: ini
           name: state.name,
           isInitial: state.is_initial && !hasInitial,
           usageCount: initialStateCounts[state.name] ?? 0,
+          backgroundColor: state.background_color ?? '#ffffff',
+          textColor: state.text_color ?? '#000000',
         },
       },
     ])

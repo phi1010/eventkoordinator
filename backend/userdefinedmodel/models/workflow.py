@@ -19,6 +19,7 @@ class WorkflowState(MetaBase):
     is_initial = models.BooleanField(default=False)
     position_x = models.FloatField(default=0.0)
     position_y = models.FloatField(default=0.0)
+    background_color = models.CharField(max_length=7, default="#ffffff", blank=True)
 
     class Meta:
         constraints = [

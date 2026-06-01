@@ -1291,6 +1291,10 @@ export interface components {
             position_x: number;
             /** Position Y */
             position_y: number;
+            /** Background Color */
+            background_color: string;
+            /** Text Color */
+            text_color: string;
         };
         /** WorkflowTransitionIn */
         WorkflowTransitionIn: {
