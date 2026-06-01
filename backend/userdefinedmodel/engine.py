@@ -326,8 +326,9 @@ def execute_transition(node: "UserDefinedModelEntityNode", field_slug: str, name
             )
     # else: from_state is None and not from_undefined_only → allowed from any state (including undefined)
 
-    # Evaluate policy — pass field slug so Rego can see which workflow is transitioning
-    output = evaluate_policy(node, user, "transition", transition=name, field=field_slug)
+    # Evaluate policy — pass field slug and node id so Rego can see which workflow
+    # is transitioning and (for child nodes) which specific node is affected.
+    output = evaluate_policy(node, user, "transition", transition=name, field=field_slug, node_id=str(node.id))
     if not output["allow"]:
         msgs = output.get("messages") or []
         if msgs:
