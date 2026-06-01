@@ -31,35 +31,45 @@ function WorkflowCellEditor({ fd, value, disabled, lang = '', nodeId, onEntityRe
     }
   }
 
+  const hasBg = currentState && currentState.background_color && currentState.background_color !== '#ffffff'
+  const badgeBg = hasBg ? currentState!.background_color : (currentStateName ? '#f1f5f9' : '#f1f5f9')
+  const badgeFg = hasBg ? currentState!.text_color : (currentStateName ? '#374151' : '#64748b')
+  const badgeBorder = hasBg ? currentState!.background_color : (currentStateName ? '#d1d5db' : '#cbd5e1')
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
       <span style={{
         display: 'inline-block',
-        padding: '0.2rem 0.6rem',
-        borderRadius: '4px',
-        fontSize: '0.85rem',
+        padding: '0.2rem 0.7rem',
+        borderRadius: '999px',
+        fontSize: '0.82rem',
         fontWeight: 600,
-        background: currentStateName ? '#dbeafe' : '#f1f5f9',
-        color: currentStateName ? '#1d4ed8' : '#64748b',
-        border: '1px solid',
-        borderColor: currentStateName ? '#93c5fd' : '#cbd5e1',
+        background: badgeBg,
+        color: badgeFg,
+        border: `1px solid ${badgeBorder}`,
+        letterSpacing: '0.01em',
       }}>
         {stateLabel ?? '(no state)'}
       </span>
-      {nodeId && onEntityRefresh && availableTransitions.map(t => {
-        const tLabel = getLang(t.label as Record<string, string>, lang || 'en') || t.name
-        return (
-          <button
-            key={t.name}
-            type="button"
-            className={styles.transitionBtn}
-            disabled={disabled || childTransitioning}
-            onClick={() => void handleChildTransition(t.name)}
-          >
-            {tLabel}
-          </button>
-        )
-      })}
+      {nodeId && onEntityRefresh && availableTransitions.length > 0 && (
+        <>
+          <span style={{ color: '#111', fontSize: '1.1rem', fontWeight: 700, flexShrink: 0, userSelect: 'none', display: 'flex', alignItems: 'center' }}>→</span>
+          {availableTransitions.map(t => {
+            const tLabel = getLang(t.label as Record<string, string>, lang || 'en') || t.name
+            return (
+              <button
+                key={t.name}
+                type="button"
+                className={styles.transitionBtn}
+                disabled={disabled || childTransitioning}
+                onClick={() => void handleChildTransition(t.name)}
+              >
+                {tLabel}
+              </button>
+            )
+          })}
+        </>
+      )}
     </div>
   )
 }
