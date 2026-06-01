@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Rules
+
+Never use git, not even for git stash.
+
 ## Building
 
 Run `VITE_DJANGO_BASE=true npm run build` to ensure that the build process is aware of the Django base URL. This is crucial for correctly resolving static assets and API endpoints in a Django environment.
