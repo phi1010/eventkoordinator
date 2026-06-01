@@ -9,6 +9,8 @@ import { getLang } from './types'
 import { fieldEditorRegistry } from './registry'
 import { PolicyMessageList } from './shared'
 import { FieldInput } from './FieldInput'
+import { FieldPreview } from './FieldPreview'
+import { PreviewTable, type PreviewRow } from './PreviewTable'
 import styles from '../UdmEntityEditor.module.css'
 
 // ── Helpers (SubmodelEditor-local) ────────────────────────────────────────────
@@ -125,6 +127,24 @@ function buildPreviewLabel(
   return parts.length > 0 ? parts.join(' · ') : fallback
 }
 
+// ── Collapsed preview helper ──────────────────────────────────────────────────
+
+function buildCollapsedRows(
+  subFields: FieldDefinitionOut[],
+  getValue: (fd: FieldDefinitionOut) => unknown,
+  lang: string,
+  entityChildren?: Record<string, unknown[]>,
+): PreviewRow[] {
+  const visible = subFields.filter(f => f.is_preview).length > 0
+    ? subFields.filter(f => f.is_preview)
+    : subFields.slice(0, 4)
+  return visible.map(fd => ({
+    key: fd.slug,
+    label: getLang(fd.label as Record<string, string>, lang) || fd.slug,
+    value: <FieldPreview fd={fd} value={getValue(fd)} lang={lang} entityChildren={entityChildren} />,
+  }))
+}
+
 // ── SubmodelChildCard ─────────────────────────────────────────────────────────
 
 interface SubmodelChildCardProps {
@@ -187,9 +207,11 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
       ...(hasHighlightedFields ? { boxShadow: '0 0 0 2px rgba(220,38,38,0.15)' } : {}),
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem' }}>
-        <span style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#555' }}>
-          {label}{hasChanges && !item.deleted ? ' *' : ''}{item.deleted ? ' (will be deleted)' : ''}
-        </span>
+        {(expanded || item.deleted) && (
+          <span style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#555' }}>
+            {label}{hasChanges && !item.deleted ? ' *' : ''}{item.deleted ? ' (will be deleted)' : ''}
+          </span>
+        )}
         <div style={{ display: 'flex', gap: '0.4rem' }}>
           {!item.deleted && (
             <>
@@ -216,6 +238,20 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
           )}
         </div>
       </div>
+
+      {!expanded && !item.deleted && (() => {
+        const rows = buildCollapsedRows(
+          subFields,
+          fd => getChildFieldValue(item, fd.slug, fd.is_localized ? uiLang : ''),
+          uiLang,
+          item.saved?.children,
+        )
+        return rows.length > 0 ? (
+          <div style={{ padding: '0 0.75rem 0.5rem', borderTop: '1px solid #f3f4f6' }}>
+            <PreviewTable borderless rows={rows} />
+          </div>
+        ) : null
+      })()}
 
       {expanded && !item.deleted && (
         <div style={{ padding: '0.5rem 0.75rem', borderTop: '1px solid #e8e8e8' }}>
@@ -581,16 +617,18 @@ function SubmodelEditorComponent({ fd, existingChildren, existingValue, disabled
       {showForm && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '0.82rem', fontFamily: 'monospace', color: '#555' }}>
-              {pendingNew ? 'New (unsaved)' : buildPreviewLabel(
-                subFields,
-                ownedChild?.field_values ?? [],
-                selectDirty,
-                uiLang,
-                `${selectNodeId?.slice(0, 8)}…`,
-                previewNameMap,
-              )}
-            </span>
+            {(pendingNew || selectExpanded || !ownedChild) && (
+              <span style={{ fontSize: '0.82rem', fontFamily: 'monospace', color: '#555' }}>
+                {pendingNew ? 'New (unsaved)' : buildPreviewLabel(
+                  subFields,
+                  ownedChild?.field_values ?? [],
+                  selectDirty,
+                  uiLang,
+                  `${selectNodeId?.slice(0, 8)}…`,
+                  previewNameMap,
+                )}
+              </span>
+            )}
             <div style={{ display: 'flex', gap: '0.4rem' }}>
               {!disabled && (
                 <>
@@ -625,6 +663,30 @@ function SubmodelEditorComponent({ fd, existingChildren, existingValue, disabled
               )}
             </div>
           </div>
+
+          {!pendingNew && !selectExpanded && ownedChild && (() => {
+            const rows = buildCollapsedRows(
+              subFields,
+              fd => {
+                if (selectDirty[fd.slug] !== undefined) {
+                  const d = selectDirty[fd.slug]
+                  return fd.is_localized && typeof d === 'object' && d !== null
+                    ? (d as Record<string, unknown>)[uiLang] ?? Object.values(d as object)[0]
+                    : d
+                }
+                return ownedChild.field_values.find(v =>
+                  v.field_slug === fd.slug && v.language === (fd.is_localized ? uiLang : '')
+                )?.value ?? ownedChild.field_values.find(v => v.field_slug === fd.slug)?.value ?? null
+              },
+              uiLang,
+              ownedChild.children,
+            )
+            return rows.length > 0 ? (
+              <div style={{ marginTop: '0.5rem', borderTop: '1px solid #f3f4f6', paddingTop: '0.5rem' }}>
+                <PreviewTable borderless rows={rows} />
+              </div>
+            ) : null
+          })()}
 
           {(pendingNew || selectExpanded) && subFields.length > 0 && (
             <div style={{ borderTop: '1px solid #e8e8e8', paddingTop: '0.5rem' }}>
