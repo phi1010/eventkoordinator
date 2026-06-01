@@ -115,6 +115,12 @@ interface FieldInputProps {
   subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
   resetKey?: number
+  /** Child node ID — set when this FieldInput is inside a submodel child card so
+   *  workflow fields can trigger transitions on the correct node. */
+  nodeId?: string | null
+  /** Called after a successful child-node workflow transition so the parent entity
+   *  view refreshes to show the new state. */
+  onEntityRefresh?: () => void
 }
 
 // ── Submodel editor ───────────────────────────────────────────────────────────
@@ -225,9 +231,10 @@ interface SubmodelChildCardProps {
   subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
   nameMap?: Record<string, string>
+  onEntityRefresh?: () => void
 }
 
-function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, subFieldSeverities, subFieldMessages, nameMap = {} }: SubmodelChildCardProps) {
+function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, subFieldSeverities, subFieldMessages, nameMap = {}, onEntityRefresh }: SubmodelChildCardProps) {
   const hasHighlightedFields = Object.keys(subFieldSeverities ?? {}).length > 0
   const [expanded, setExpanded] = useState(!item.id || hasHighlightedFields)
   const [activeLang, setActiveLang] = useState(subLanguages[0] ?? '')
@@ -333,6 +340,8 @@ function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, on
                     disabled={disabled || !!(subFd.type_config as Record<string, unknown>)?.default_current_user}
                     lang={lang}
                     entityChildren={item.saved?.children}
+                    nodeId={item.id}
+                    onEntityRefresh={onEntityRefresh}
                   />
                 ))}
                 {subMsgs.length > 0 && <PolicyMessageList messages={subMsgs} />}
@@ -355,9 +364,10 @@ interface SubmodelEditorProps {
   subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
   resetKey?: number
+  onEntityRefresh?: () => void
 }
 
-function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange, subFieldSeverities, subFieldMessages, resetKey }: SubmodelEditorProps) {
+function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange, subFieldSeverities, subFieldMessages, resetKey, onEntityRefresh }: SubmodelEditorProps) {
   const isList = fd.data_type === 'submodel_list'
   const subConfig = fd.submodel_config as ConfigVersionOut | null | undefined
   const subFields = subConfig?.fields ?? []
@@ -556,6 +566,7 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
             subFieldSeverities={subFieldSeverities}
             subFieldMessages={subFieldMessages}
             nameMap={previewNameMap}
+            onEntityRefresh={onEntityRefresh}
           />
         ))}
         {!disabled && (
@@ -734,6 +745,8 @@ function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang,
                         disabled={disabled}
                         lang={lang}
                         entityChildren={ownedChild?.children}
+                        nodeId={ownedChild?.id}
+                        onEntityRefresh={onEntityRefresh}
                       />
                     ))}
                     {subMsgs.length > 0 && <PolicyMessageList messages={subMsgs} />}
@@ -1313,7 +1326,7 @@ function MarkdownFieldInput({ value, onChange, disabled }: FieldInputProps) {
   return <div ref={containerRef} className={styles.markdownEditor} />
 }
 
-function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, subFieldSeverities, subFieldMessages, resetKey }: FieldInputProps) {
+function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, subFieldSeverities, subFieldMessages, resetKey, nodeId, onEntityRefresh }: FieldInputProps) {
   const dt = fd.data_type
   const tc = fd.type_config as Record<string, unknown>
 
@@ -1487,20 +1500,52 @@ function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, 
     const stateLabel = currentState
       ? getLang(currentState.label as Record<string, string>, lang || 'en') || currentStateName
       : currentStateName
+    const availableTransitions: WorkflowTransitionOut[] = (wfDef?.transitions ?? []).filter(t => {
+      if (t.from_undefined_only) return currentStateName === null
+      if (t.from_state !== null) return t.from_state === currentStateName
+      return true
+    })
+    const [childTransitioning, setChildTransitioning] = useState(false)
+    async function handleChildTransition(transitionName: string) {
+      if (!nodeId || !onEntityRefresh) return
+      setChildTransitioning(true)
+      try {
+        await udmTransitionEntity(nodeId, fd.slug, transitionName)
+        onEntityRefresh()
+      } finally {
+        setChildTransitioning(false)
+      }
+    }
     return (
-      <span style={{
-        display: 'inline-block',
-        padding: '0.2rem 0.6rem',
-        borderRadius: '4px',
-        fontSize: '0.85rem',
-        fontWeight: 600,
-        background: currentStateName ? '#dbeafe' : '#f1f5f9',
-        color: currentStateName ? '#1d4ed8' : '#64748b',
-        border: '1px solid',
-        borderColor: currentStateName ? '#93c5fd' : '#cbd5e1',
-      }}>
-        {stateLabel ?? '(no state)'}
-      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <span style={{
+          display: 'inline-block',
+          padding: '0.2rem 0.6rem',
+          borderRadius: '4px',
+          fontSize: '0.85rem',
+          fontWeight: 600,
+          background: currentStateName ? '#dbeafe' : '#f1f5f9',
+          color: currentStateName ? '#1d4ed8' : '#64748b',
+          border: '1px solid',
+          borderColor: currentStateName ? '#93c5fd' : '#cbd5e1',
+        }}>
+          {stateLabel ?? '(no state)'}
+        </span>
+        {nodeId && onEntityRefresh && availableTransitions.map(t => {
+          const tLabel = getLang(t.label as Record<string, string>, lang || 'en') || t.name
+          return (
+            <button
+              key={t.name}
+              type="button"
+              className={styles.transitionBtn}
+              disabled={disabled || childTransitioning}
+              onClick={() => void handleChildTransition(t.name)}
+            >
+              {tLabel}
+            </button>
+          )
+        })}
+      </div>
     )
   }
 
@@ -1518,6 +1563,7 @@ function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, 
         subFieldSeverities={subFieldSeverities}
         subFieldMessages={subFieldMessages}
         resetKey={resetKey}
+        onEntityRefresh={onEntityRefresh}
       />
     )
   }
@@ -1629,9 +1675,10 @@ interface FieldRowProps {
   onTransition: (fieldSlug: string, transitionName: string) => Promise<void>
   transitioning: boolean
   resetKey?: number
+  onEntityRefresh?: () => void
 }
 
-function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, severity, messages, subFieldSeverities, subFieldMessages, onTransition, transitioning, resetKey }: FieldRowProps) {
+function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, severity, messages, subFieldSeverities, subFieldMessages, onTransition, transitioning, resetKey, onEntityRefresh }: FieldRowProps) {
   const [activeLang, setActiveLang] = useState(languages[0] ?? '')
   const isDirty = fd.slug in dirty
   const isSubmodel = fd.data_type === 'submodel_list' || fd.data_type === 'submodel_select'
@@ -1726,6 +1773,7 @@ function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, ui
           subFieldSeverities={subFieldSeverities}
           subFieldMessages={subFieldMessages}
           resetKey={resetKey}
+          onEntityRefresh={onEntityRefresh}
         />
       ) : fd.is_localized ? (
         <FieldInput
@@ -2191,6 +2239,7 @@ export function UdmEntityEditor() {
             onTransition={handleTransition}
             transitioning={transitioning}
             resetKey={discardCount}
+            onEntityRefresh={() => void load()}
           />
         ))}
       </div>

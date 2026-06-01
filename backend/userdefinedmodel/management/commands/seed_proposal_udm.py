@@ -108,7 +108,48 @@ class Command(BaseCommand):
             return
 
         with transaction.atomic():
-            # ── 1. Review submodel field config ──────────────────────────────
+            # ── 1. Review workflow definition ─────────────────────────────────
+            # Use update_or_create so existing FieldValue references are preserved.
+            review_wf, _ = WorkflowDefinition.objects.update_or_create(
+                name="Review Workflow",
+                defaults={"description": "Review vote lifecycle"},
+            )
+
+            review_states = {}
+            for r_name, r_label, r_initial, r_x, r_y in [
+                ("open",   "Open",   True,  0,   0),
+                ("accept", "Accept", False, 250, 0),
+                ("reject", "Reject", False, 250, 180),
+                ("revise", "Revise", False, 250, 360),
+            ]:
+                s, _ = WorkflowState.objects.update_or_create(
+                    workflow=review_wf, name=r_name,
+                    defaults={"is_initial": r_initial, "position_x": r_x, "position_y": r_y},
+                )
+                WorkflowStateTranslation.objects.update_or_create(
+                    state=s, language="en", defaults={"label": r_label},
+                )
+                review_states[r_name] = s
+
+            review_wf.transitions.all().delete()
+            for r_t_name, r_t_label, r_from_name, r_to_name in [
+                ("accept", "Accept", "open",   "accept"),
+                ("reject", "Reject", "open",   "reject"),
+                ("revise", "Revise", "open",   "revise"),
+                ("reset",  "Reset",  None,     "open"),
+            ]:
+                r_t = WorkflowTransition.objects.create(
+                    workflow=review_wf,
+                    name=r_t_name,
+                    from_state=review_states.get(r_from_name) if r_from_name else None,
+                    from_undefined_only=False,
+                    to_state=review_states[r_to_name],
+                )
+                WorkflowTransitionTranslation.objects.create(
+                    transition=r_t, language="en", label=r_t_label,
+                )
+
+            # ── 2. Review submodel field config ───────────────────────────────
             review_config, _ = FieldConfig.objects.get_or_create(name="Proposal Review")
             ConfigLanguage.objects.get_or_create(
                 config=review_config, code="en",
@@ -128,9 +169,8 @@ class Command(BaseCommand):
                 type_config={"default_current_user": True}, is_preview=True,
             )
             _create_field(
-                review_draft, "vote", FieldDefinition.DataType.SELECT_SINGLE, 1, "Vote",
-                type_config={"choices": ["accept", "request_changes", "reject"]},
-                is_preview=True,
+                review_draft, "vote", FieldDefinition.DataType.WORKFLOW, 1, "Vote",
+                workflow_definition=review_wf, is_preview=True,
             )
             _create_field(
                 review_draft, "comment", FieldDefinition.DataType.TEXT_LONG, 2, "Comment",
@@ -145,7 +185,7 @@ class Command(BaseCommand):
             else:
                 review_published = review_draft
 
-            # ── 2. Workflow definition ────────────────────────────────────────
+            # ── 3. Proposal workflow definition ───────────────────────────────
             # Use update_or_create for states so existing FieldValue references
             # (value_workflow_state FK) are preserved — deleting states would
             # SET_NULL them and corrupt all existing entities.
@@ -192,7 +232,7 @@ class Command(BaseCommand):
                     transition=t, language="en", label=label,
                 )
 
-            # ── 3. Main proposal field config ─────────────────────────────────
+            # ── 4. Main proposal field config ─────────────────────────────────
             proposal_config, _ = FieldConfig.objects.get_or_create(name="Proposal")
             ConfigLanguage.objects.get_or_create(
                 config=proposal_config, code="en",
@@ -239,9 +279,14 @@ class Command(BaseCommand):
             if publish:
                 proposal_draft.publish()
 
-            # ── 3b. Bulk-migrate existing entities to the new published version ─
+            # ── 4b. Bulk-migrate existing entities and repair orphaned submodels ─
             if publish:
                 _migrate_stale_entities(proposal_config, self.stdout)
+                from userdefinedmodel.management.commands.repair_submodel_nodes import Command as RepairCmd
+                repair = RepairCmd()
+                repair.stdout = self.stdout
+                repair.style = self.style
+                repair.handle(dry_run=False)
 
             # ── 4. Rego policy (read from canonical .rego file) ───────────────
             policy_source = _render_policy(moderator_groups, sudo_active)

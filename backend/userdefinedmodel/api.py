@@ -1153,17 +1153,19 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
     from userdefinedmodel.writer import apply_patch
     from userdefinedmodel.engine import PolicyError
 
+    from userdefinedmodel.models import UserDefinedModelEntityNode
+
     if validate_only:
         result = {"valid": True, "policy_messages": [], "errors": {}}
         try:
             with transaction.atomic():
                 _set_lock_timeout_ms(50)
                 try:
-                    entity = (UserDefinedModelEntity.objects
+                    entity = (UserDefinedModelEntityNode.objects
                               .select_for_update(nowait=False, of=("self",))
                               .select_related("config_version")
                               .get(id=entity_id))
-                except UserDefinedModelEntity.DoesNotExist:
+                except UserDefinedModelEntityNode.DoesNotExist:
                     return JsonResponse({"detail": "Not found"}, status=404)
                 except OperationalError:
                     return _http409_concurrent()
@@ -1191,11 +1193,11 @@ def transition_entity(request, entity_id: uuid.UUID, payload: TransitionIn, vali
     try:
         with transaction.atomic():
             try:
-                entity = (UserDefinedModelEntity.objects
+                entity = (UserDefinedModelEntityNode.objects
                           .select_for_update(nowait=True, of=("self",))
                           .select_related("config_version")
                           .get(id=entity_id))
-            except UserDefinedModelEntity.DoesNotExist:
+            except UserDefinedModelEntityNode.DoesNotExist:
                 return JsonResponse({"detail": "Not found"}, status=404)
             except OperationalError:
                 return _http409_concurrent()
