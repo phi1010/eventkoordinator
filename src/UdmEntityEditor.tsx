@@ -120,7 +120,7 @@ interface FieldInputProps {
   nodeId?: string | null
   /** Called after a successful child-node workflow transition so the parent entity
    *  view refreshes to show the new state. */
-  onEntityRefresh?: () => void | Promise<void>
+  onEntityRefresh?: (policyMessages?: PolicyMessage[]) => void | Promise<void>
 }
 
 // ── Submodel editor ───────────────────────────────────────────────────────────
@@ -231,7 +231,7 @@ interface SubmodelChildCardProps {
   subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
   nameMap?: Record<string, string>
-  onEntityRefresh?: () => void | Promise<void>
+  onEntityRefresh?: (policyMessages?: PolicyMessage[]) => void | Promise<void>
 }
 
 function SubmodelChildCard({ item, subFields, subLanguages, uiLang, disabled, onChange, onDelete, subFieldSeverities, subFieldMessages, nameMap = {}, onEntityRefresh }: SubmodelChildCardProps) {
@@ -364,7 +364,7 @@ interface SubmodelEditorProps {
   subFieldSeverities?: Record<string, string>
   subFieldMessages?: Record<string, PolicyMessage[]>
   resetKey?: number
-  onEntityRefresh?: () => void | Promise<void>
+  onEntityRefresh?: (policyMessages?: PolicyMessage[]) => void | Promise<void>
 }
 
 function SubmodelEditor({ fd, existingChildren, existingValue, disabled, uiLang, onChange, subFieldSeverities, subFieldMessages, resetKey, onEntityRefresh }: SubmodelEditorProps) {
@@ -1520,8 +1520,8 @@ function FieldInput({ fd, value, onChange, disabled, lang = '', entityChildren, 
       if (!nodeId || !onEntityRefresh) return
       setChildTransitioning(true)
       try {
-        await udmTransitionEntity(nodeId, fd.slug, transitionName)
-        await onEntityRefresh()
+        const result = await udmTransitionEntity(nodeId, fd.slug, transitionName)
+        await onEntityRefresh(result.policy_messages ?? [])
       } finally {
         setChildTransitioning(false)
       }
@@ -1685,7 +1685,7 @@ interface FieldRowProps {
   onTransition: (fieldSlug: string, transitionName: string) => Promise<void>
   transitioning: boolean
   resetKey?: number
-  onEntityRefresh?: () => void | Promise<void>
+  onEntityRefresh?: (policyMessages?: PolicyMessage[]) => void | Promise<void>
 }
 
 function FieldRow({ fd, entity, dirty, onDirty, onReset, editable, languages, uiLang, severity, messages, subFieldSeverities, subFieldMessages, onTransition, transitioning, resetKey, onEntityRefresh }: FieldRowProps) {
@@ -2248,7 +2248,11 @@ export function UdmEntityEditor() {
             onTransition={handleTransition}
             transitioning={transitioning}
             resetKey={discardCount}
-            onEntityRefresh={() => load()}
+            onEntityRefresh={async (msgs) => {
+              await load()
+              const globalMsgs = (msgs ?? []).filter((m: PolicyMessage) => !m.highlight_fields?.length)
+              if (globalMsgs.length > 0) setTransitionPopup(globalMsgs)
+            }}
           />
         ))}
       </div>
