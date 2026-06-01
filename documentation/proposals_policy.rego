@@ -175,6 +175,23 @@ all_reviews_accepted if {
 	count(requested_group_ids - _accepting_group_ids) == 0
 }
 
+# IDs of users who have cast any non-open vote (i.e., have actually reviewed).
+_voted_user_ids := {r.fields.author.value.id |
+	some r in input.entity.children.reviews
+	r.fields.vote.value != null
+	r.fields.vote.value != "open"
+}
+
+# IDs of requested groups for which at least one member has cast a non-open vote.
+_voted_group_ids := {rg.id |
+	some rg in input.entity.fields["requested-reviewer-groups"].value
+	some member in rg.members
+	some r in input.entity.children.reviews
+	r.fields.author.value.id == member.id
+	r.fields.vote.value != null
+	r.fields.vote.value != "open"
+}
+
 # ─── error_messages ────────────────────────────────────────────────────────────
 # Evaluated before allow; critical-level entries block save/transition.
 
@@ -463,6 +480,60 @@ success_messages contains msg if {
 		"level": "info",
 		"text": "All requested reviewers have voted accept. You may accept this proposal.",
 		"field_slug": "reviews",
+	}
+}
+
+# ── Per-reviewer status breakdown ──
+
+success_messages contains msg if {
+	input.action in {"view", "save", "transition"}
+	is_moderator
+	current_status == "submitted"
+	some u in input.entity.fields["requested-reviewer-users"].value
+	not u.id in _voted_user_ids
+	msg := {
+		"level": "warning",
+		"text": sprintf("Pending review: %v has not yet voted.", [u.username]),
+		"field_slug": "requested-reviewer-users",
+	}
+}
+
+success_messages contains msg if {
+	input.action in {"view", "save", "transition"}
+	is_moderator
+	current_status == "submitted"
+	some u in input.entity.fields["requested-reviewer-users"].value
+	u.id in _voted_user_ids
+	msg := {
+		"level": "info",
+		"text": sprintf("Review submitted: %v has voted.", [u.username]),
+		"field_slug": "requested-reviewer-users",
+	}
+}
+
+success_messages contains msg if {
+	input.action in {"view", "save", "transition"}
+	is_moderator
+	current_status == "submitted"
+	some g in input.entity.fields["requested-reviewer-groups"].value
+	not g.id in _voted_group_ids
+	msg := {
+		"level": "warning",
+		"text": sprintf("Pending review: no member of '%v' has voted yet.", [g.name]),
+		"field_slug": "requested-reviewer-groups",
+	}
+}
+
+success_messages contains msg if {
+	input.action in {"view", "save", "transition"}
+	is_moderator
+	current_status == "submitted"
+	some g in input.entity.fields["requested-reviewer-groups"].value
+	g.id in _voted_group_ids
+	msg := {
+		"level": "info",
+		"text": sprintf("Review submitted: a member of '%v' has voted.", [g.name]),
+		"field_slug": "requested-reviewer-groups",
 	}
 }
 
