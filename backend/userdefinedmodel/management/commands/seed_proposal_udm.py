@@ -133,10 +133,10 @@ class Command(BaseCommand):
 
             review_wf.transitions.all().delete()
             for r_t_name, r_t_label, r_from_name, r_to_name in [
-                ("accept", "Accept", "open",   "accept"),
-                ("reject", "Reject", "open",   "reject"),
-                ("revise", "Revise", "open",   "revise"),
-                ("reset",  "Reset",  None,     "open"),
+                ("accept", "Accept", None, "accept"),
+                ("reject", "Reject", None, "reject"),
+                ("revise", "Revise", None, "revise"),
+                ("reset",  "Reset",  None, "open"),
             ]:
                 r_t = WorkflowTransition.objects.create(
                     workflow=review_wf,
